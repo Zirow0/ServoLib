@@ -1,0 +1,313 @@
+/**
+ * @file motor_pwm_dir_example.c
+ * @brief Приклад використання драйвера двигуна з PWM + DIR керуванням
+ * @author ServoCore Team
+ * @date 2025
+ *
+ * Цей приклад показує як використовувати драйвер мотора для контролерів,
+ * які використовують один PWM канал для швидкості та один GPIO для напрямку.
+ * Підходить для драйверів типу TB6612, DRV8833 в режимі PWM+DIR.
+ */
+
+/* Includes ------------------------------------------------------------------*/
+#include "main.h"
+#include "drv/motor/pwm.h"
+#include "Board/STM32F411/board_config.h"
+
+/* Private defines -----------------------------------------------------------*/
+#define TEST_POWER_LOW      20.0f   // Низька потужність для тестів (%)
+#define TEST_POWER_MEDIUM   50.0f   // Середня потужність (%)
+#define TEST_POWER_HIGH     80.0f   // Висока потужність (%)
+#define TEST_DELAY_MS       2000    // Затримка між тестами (мс)
+
+/* Private variables ---------------------------------------------------------*/
+HWD_PWM_Handle_t pwm_handle;       // PWM канал для швидкості
+PWM_Motor_Driver_t motor;          // Драйвер двигуна
+
+/* Private function prototypes -----------------------------------------------*/
+void Motor_PWM_DIR_Init(void);
+void Motor_Test_Forward(void);
+void Motor_Test_Backward(void);
+void Motor_Test_Ramp_Up(void);
+void Motor_Test_Ramp_Down(void);
+void Motor_Test_Direction_Change(void);
+void Motor_Print_Status(void);
+
+/* Main Example Function -----------------------------------------------------*/
+
+/**
+ * @brief Головна функція прикладу
+ *
+ * Додайте цей код до вашого main.c:
+ *
+ * int main(void)
+ * {
+ *     HAL_Init();
+ *     SystemClock_Config();
+ *     MX_GPIO_Init();
+ *     MX_TIM3_Init();
+ *
+ *     Motor_PWM_DIR_Init();
+ *
+ *     while (1)
+ *     {
+ *         Motor_Example_Loop();
+ *         HAL_Delay(10);
+ *     }
+ * }
+ */
+void Motor_Example_Loop(void)
+{
+    // Тест 1: Рух вперед з різною потужністю
+    Motor_Test_Forward();
+    HAL_Delay(1000);
+
+    // Тест 2: Рух назад з різною потужністю
+    Motor_Test_Backward();
+    HAL_Delay(1000);
+
+    // Тест 3: Плавний розгін
+    Motor_Test_Ramp_Up();
+    HAL_Delay(500);
+
+    // Тест 4: Плавне гальмування
+    Motor_Test_Ramp_Down();
+    HAL_Delay(1000);
+
+    // Тест 5: Зміна напрямку
+    Motor_Test_Direction_Change();
+    HAL_Delay(2000);
+}
+
+/* Private functions ---------------------------------------------------------*/
+
+/**
+ * @brief Ініціалізація драйвера мотора з PWM + DIR керуванням
+ *
+ * Конфігурація:
+ * - PWM канал: PA6 (TIM3 CH1) - швидкість мотора
+ * - DIR GPIO: PA0 - напрямок обертання (HIGH = вперед, LOW = назад)
+ */
+void Motor_PWM_DIR_Init(void)
+{
+    // 1. Конфігурація PWM каналу для швидкості
+    HWD_PWM_Config_t pwm_config = {
+        .frequency = MOTOR_PWM_FREQ,        // 1000 Hz (з board_config.h)
+        .resolution = MOTOR_PWM_PERIOD,     // 999 кроків
+        .channel = HWD_PWM_CHANNEL_1,       // Канал 1
+        .hw_handle = &MOTOR_PWM_TIMER,      // TIM3
+        .hw_channel = MOTOR_PWM_CHANNEL_FWD // TIM_CHANNEL_1
+    };
+
+    // Ініціалізація HWD PWM
+    Servo_Status_t status = HWD_PWM_Init(&pwm_handle, &pwm_config);
+    if (status != SERVO_OK) {
+        // Обробка помилки
+        Error_Handler();
+    }
+
+    // 2. Конфігурація драйвера мотора (PWM + DIR режим)
+    PWM_Motor_Config_t motor_config = {
+        .type = PWM_MOTOR_TYPE_SINGLE_PWM_DIR,  // Один PWM + GPIO для напрямку
+        .pwm_fwd = &pwm_handle,                 // PWM канал для швидкості
+        .pwm_bwd = NULL,                        // Не використовується
+        .gpio_dir = MOTOR_ENABLE_GPIO_PORT,     // GPIOA (з board_config.h)
+        .gpio_pin = MOTOR_ENABLE_PIN            // GPIO_PIN_0
+    };
+
+    // Створення драйвера
+    status = PWM_Motor_Create(&motor, &motor_config);
+    if (status != SERVO_OK) {
+        Error_Handler();
+    }
+
+    // 3. Параметри двигуна
+    Motor_Params_t motor_params = {
+        .type = MOTOR_TYPE_DC_BRUSHED,      // DC мотор з щітками
+        .max_power = 100.0f,                // Максимальна потужність 100%
+        .min_power = 10.0f,                 // Мінімальна потужність 10% для старту
+        .max_current = 2.0f,                // Максимальний струм 2A
+        .max_temperature = 80.0f,           // Максимальна температура 80°C
+        .max_rpm = 6000,                    // Максимальна швидкість 6000 об/хв
+        .invert_direction = false           // false = HIGH для вперед, true = LOW для вперед
+    };
+
+    // Ініціалізація драйвера
+    status = PWM_Motor_Init(&motor, &motor_params);
+    if (status != SERVO_OK) {
+        Error_Handler();
+    }
+}
+
+/**
+ * @brief Тест руху вперед
+ */
+void Motor_Test_Forward(void)
+{
+    // Низька швидкість вперед
+    PWM_Motor_SetPower(&motor, TEST_POWER_LOW);
+    HAL_Delay(TEST_DELAY_MS);
+
+    // Середня швидкість вперед
+    PWM_Motor_SetPower(&motor, TEST_POWER_MEDIUM);
+    HAL_Delay(TEST_DELAY_MS);
+
+    // Висока швидкість вперед
+    PWM_Motor_SetPower(&motor, TEST_POWER_HIGH);
+    HAL_Delay(TEST_DELAY_MS);
+
+    // Зупинка
+    PWM_Motor_Stop(&motor);
+}
+
+/**
+ * @brief Тест руху назад
+ */
+void Motor_Test_Backward(void)
+{
+    // Низька швидкість назад
+    PWM_Motor_SetPower(&motor, -TEST_POWER_LOW);
+    HAL_Delay(TEST_DELAY_MS);
+
+    // Середня швидкість назад
+    PWM_Motor_SetPower(&motor, -TEST_POWER_MEDIUM);
+    HAL_Delay(TEST_DELAY_MS);
+
+    // Висока швидкість назад
+    PWM_Motor_SetPower(&motor, -TEST_POWER_HIGH);
+    HAL_Delay(TEST_DELAY_MS);
+
+    // Зупинка
+    PWM_Motor_Stop(&motor);
+}
+
+/**
+ * @brief Тест плавного розгону
+ */
+void Motor_Test_Ramp_Up(void)
+{
+    // Плавний розгін від 0% до 100% вперед
+    for (float power = 0.0f; power <= 100.0f; power += 5.0f) {
+        PWM_Motor_SetPower(&motor, power);
+        HAL_Delay(100);  // 100 мс на крок
+    }
+}
+
+/**
+ * @brief Тест плавного гальмування
+ */
+void Motor_Test_Ramp_Down(void)
+{
+    // Плавне гальмування від 100% до 0%
+    for (float power = 100.0f; power >= 0.0f; power -= 5.0f) {
+        PWM_Motor_SetPower(&motor, power);
+        HAL_Delay(100);  // 100 мс на крок
+    }
+
+    // Остаточна зупинка
+    PWM_Motor_Stop(&motor);
+}
+
+/**
+ * @brief Тест зміни напрямку
+ */
+void Motor_Test_Direction_Change(void)
+{
+    // Рух вперед
+    PWM_Motor_SetPower(&motor, TEST_POWER_MEDIUM);
+    HAL_Delay(1500);
+
+    // ВАЖЛИВО: Завжди зупиняйте мотор перед зміною напрямку!
+    PWM_Motor_Stop(&motor);
+    HAL_Delay(200);  // Пауза для повної зупинки
+
+    // Рух назад
+    PWM_Motor_SetPower(&motor, -TEST_POWER_MEDIUM);
+    HAL_Delay(1500);
+
+    // Зупинка
+    PWM_Motor_Stop(&motor);
+}
+
+/**
+ * @brief Виведення статусу мотора
+ *
+ * Потребує налаштований UART для printf
+ */
+void Motor_Print_Status(void)
+{
+    Motor_Stats_t stats;
+    Motor_State_t state;
+
+    // Отримання статистики
+    PWM_Motor_GetStats(&motor, &stats);
+    PWM_Motor_GetState(&motor, &state);
+
+    // Виведення інформації
+    printf("\n========== Motor Status ==========\n");
+    printf("State: %d\n", state);
+    printf("Power: %.1f%%\n", stats.current_power);
+    printf("Direction: %s\n",
+           stats.direction == MOTOR_DIRECTION_FORWARD ? "Forward" :
+           stats.direction == MOTOR_DIRECTION_REVERSE ? "Reverse" : "Stopped");
+    printf("Run Time: %lu ms\n", stats.run_time_ms);
+    printf("Total Starts: %lu\n", stats.total_starts);
+    printf("Errors: %lu\n", stats.error_count);
+    printf("==================================\n\n");
+}
+
+/* Advanced Examples ---------------------------------------------------------*/
+
+/**
+ * @brief Приклад з використанням абстрактного інтерфейсу
+ *
+ * Це корисно якщо ви хочете писати код незалежний від типу драйвера
+ */
+void Motor_Interface_Example(void)
+{
+    // Отримання абстрактного інтерфейсу
+    Motor_Interface_t* motor_iface = PWM_Motor_GetInterface(&motor);
+
+    // Використання через інтерфейс
+    Motor_SetPower(motor_iface, 50.0f);
+    HAL_Delay(2000);
+
+    Motor_Stop(motor_iface);
+
+    // Отримання стану
+    Motor_State_t state;
+    Motor_GetState(motor_iface, &state);
+}
+
+/**
+ * @brief Приклад обробки помилок
+ */
+void Motor_Error_Handling_Example(void)
+{
+    Servo_Status_t status;
+
+    // Спроба встановити потужність
+    status = PWM_Motor_SetPower(&motor, 75.0f);
+
+    // Перевірка результату
+    if (status != SERVO_OK) {
+        // Обробка помилки
+        switch (status) {
+            case SERVO_ERROR:
+                printf("Motor error occurred!\n");
+                break;
+            case SERVO_INVALID:
+                printf("Invalid motor configuration!\n");
+                break;
+            case SERVO_TIMEOUT:
+                printf("Motor timeout!\n");
+                break;
+            default:
+                printf("Unknown error!\n");
+                break;
+        }
+
+        // Аварійна зупинка
+        PWM_Motor_EmergencyStop(&motor);
+    }
+}
