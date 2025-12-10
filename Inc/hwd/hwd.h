@@ -20,6 +20,7 @@ extern "C" {
 #include "./hwd_i2c.h"
 #include "./hwd_timer.h"
 #include "./hwd_gpio.h"
+#include "./hwd_udp.h"  /**< Додано для емуляції */
 
 /* Exported types ------------------------------------------------------------*/
 
@@ -31,6 +32,7 @@ typedef struct {
     bool i2c_initialized;    /**< I2C ініціалізовано */
     bool timer_initialized;  /**< Timer ініціалізовано */
     bool gpio_initialized;   /**< GPIO ініціалізовано */
+    bool udp_initialized;    /**< UDP ініціалізовано (для емуляції) */
 } HWD_Status_t;
 
 /* Exported functions --------------------------------------------------------*/
