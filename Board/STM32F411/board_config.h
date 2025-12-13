@@ -147,13 +147,22 @@ extern UART_HandleTypeDef huart1;
 
 /* System Configuration ------------------------------------------------------*/
 
-/** @brief Частота системного таймера (Hz) */
+/**
+ * @brief Частота системного таймера (Hz)
+ * @note Платформо-специфічне значення для STM32F411
+ */
 #define SYSTEM_CORE_CLOCK            100000000U  /* 100 MHz */
 
-/** @brief Частота APB1 шини (для TIM3) */
+/**
+ * @brief Частота APB1 шини (для TIM3)
+ * @note Використовується для розрахунку prescaler таймерів
+ */
 #define APB1_TIMER_CLOCK             100000000U  /* 100 MHz */
 
-/** @brief Частота APB2 шини */
+/**
+ * @brief Частота APB2 шини
+ * @note Використовується для розрахунку prescaler таймерів
+ */
 #define APB2_TIMER_CLOCK             100000000U  /* 100 MHz */
 
 /* Exported functions --------------------------------------------------------*/
