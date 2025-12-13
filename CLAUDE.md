@@ -25,27 +25,46 @@ This library integrates with STM32CubeIDE projects:
 
 3. Build through STM32CubeIDE (Project → Build Project)
 
-### PC Emulation Build
+### PC Emulation Build (CMake - Recommended)
 For emulation on PC (requires mathematical model running separately):
 
-**Compile:**
+**Option 1: Using build script (Windows MinGW):**
 ```bash
-gcc -o emulator \
-  Emulator/main.c \
-  Emulator/udp_client.c \
-  Src/**/*.c \
-  Src/drv/**/*.c \
-  Board/PC_Emulation/*.c \
-  -IInc \
-  -IBoard/PC_Emulation \
-  -DUSE_REAL_HARDWARE=0 \
-  -lws2_32  # On Windows for UDP sockets
+cd Emulator
+build.bat
+```
+
+**Option 2: CMake manually:**
+```bash
+cd Emulator
+mkdir build && cd build
+cmake -G "MinGW Makefiles" ..    # Windows MinGW
+# or
+cmake ..                          # Linux/Unix
+mingw32-make -j4                  # Windows
+# or
+make -j4                          # Linux
 ```
 
 **Run:**
 ```bash
-./emulator
+./ServoLib_Emulator.exe    # Windows
+./ServoLib_Emulator        # Linux
 ```
+
+**Build variants:**
+```bash
+# Release (optimized)
+cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release ..
+
+# Debug (with symbols)
+cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Debug ..
+
+# Run through CMake
+mingw32-make run
+```
+
+See `Emulator/BUILD.md` for detailed build instructions and troubleshooting.
 
 ### Testing
 No automated test suite currently exists. Testing is done:
@@ -394,8 +413,11 @@ Servo_State_t state = Servo_GetState(&servo);
 - `Doc/BRAKE_DRIVER.md` - Brake system documentation
 - `Doc/AEAT-9922_DRIVER_GUIDE.md` - AEAT-9922 encoder guide
 - `Emulator/README.md` - Emulation system overview
+- `Emulator/BUILD.md` - **CMake build instructions for emulator**
 - `Emulator/ARCHITECTURE.md` - UDP protocol architecture
 - `Emulator/UDP_PROTOCOL.md` - UDP message format details
+- `Emulator/TESTING.md` - Testing procedures
+- `Templates/config_user_template.h` - **Configuration template with examples**
 - `Examples/` - Usage examples for motors and sensors
 
 ## Git Workflow
