@@ -44,7 +44,7 @@ uint32_t HWD_Timer_GetMicros(void)
     return (GetSystemTimeMs() - start_time_ms) * 1000;
 }
 
-Servo_Status_t HWD_Timer_DelayMs(uint32_t ms)
+void HWD_Timer_DelayMs(uint32_t ms)
 {
 #ifdef _WIN32
     Sleep(ms);
@@ -52,14 +52,13 @@ Servo_Status_t HWD_Timer_DelayMs(uint32_t ms)
     struct timespec ts = {ms / 1000, (ms % 1000) * 1000000};
     nanosleep(&ts, NULL);
 #endif
-    return SERVO_OK;
 }
 
-Servo_Status_t HWD_Timer_DelayUs(uint32_t us)
+void HWD_Timer_DelayUs(uint32_t us)
 {
     // Для емуляції використовуємо мілісекундну точність
     uint32_t ms = (us + 999) / 1000; // Округлення вгору
-    return HWD_Timer_DelayMs(ms);
+    HWD_Timer_DelayMs(ms);
 }
 
 /* Private functions ---------------------------------------------------------*/

@@ -9,8 +9,8 @@
  */
 
 /* Includes ------------------------------------------------------------------*/
-#include "sensor_udp.h"
-#include "../../Emulator/udp_client.h"
+#include "../../../Inc/drv/sensor/sensor_udp.h"
+#include "../../../Emulator/udp_client.h"
 #include <stdio.h>
 #include <string.h>
 

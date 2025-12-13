@@ -9,7 +9,12 @@
  */
 
 /* Includes ------------------------------------------------------------------*/
-#include "brake_udp.h"
+#include "board_config.h"
+
+/* Компілювати цей файл тільки для UDP емуляції */
+#ifdef USE_BRAKE_UDP
+
+#include "../../Inc/drv/brake/brake_udp.h"
 #include "../../Emulator/udp_client.h"
 #include <stdio.h>
 #include <string.h>
@@ -199,6 +204,8 @@ static Servo_Status_t Brake_UDP_SendCommand(Brake_UDP_Driver_t* brake)
     if (!brake) {
         return SERVO_ERROR_NULL_PTR;
     }
-    
+
     return UDP_Client_SendBrakeCommand(brake->cmd.engaged);
 }
+
+#endif /* USE_BRAKE_UDP */

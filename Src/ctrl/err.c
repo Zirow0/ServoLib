@@ -35,7 +35,15 @@ static const char* GetErrorDescription(Servo_Error_t error)
 }
 
 /* Private function prototypes -----------------------------------------------*/
-extern uint32_t HAL_GetTick(void);
+#ifdef PC_EMULATION
+    // Mock implementation for PC Emulation
+    #include <windows.h>
+    uint32_t HAL_GetTick(void) {
+        return (uint32_t)GetTickCount();
+    }
+#else
+    extern uint32_t HAL_GetTick(void);
+#endif
 
 /* Exported functions --------------------------------------------------------*/
 

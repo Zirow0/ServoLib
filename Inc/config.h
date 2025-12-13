@@ -114,9 +114,12 @@ extern "C" {
     #warning "MOTOR_MAX_TEMPERATURE exceeds ABSOLUTE_MAX_TEMP - verify your hardware specifications"
 #endif
 
-#if DEFAULT_MAX_VELOCITY > ABSOLUTE_MAX_VELOCITY
-    #warning "DEFAULT_MAX_VELOCITY exceeds ABSOLUTE_MAX_VELOCITY - this may cause issues"
-#endif
+/* Note: Cannot use #if with floating-point constants in preprocessor
+ * Runtime validation should be used instead for float comparisons
+ */
+// #if DEFAULT_MAX_VELOCITY > ABSOLUTE_MAX_VELOCITY
+//     #warning "DEFAULT_MAX_VELOCITY exceeds ABSOLUTE_MAX_VELOCITY - this may cause issues"
+// #endif
 
 /* =============================================================================
  * Інформаційні повідомлення компіляції

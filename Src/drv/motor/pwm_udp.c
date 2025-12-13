@@ -9,8 +9,13 @@
  */
 
 /* Includes ------------------------------------------------------------------*/
-#include "pwm_udp.h"
-#include "../../Emulator/udp_client.h"
+#include "board_config.h"
+
+/* Компілювати цей файл тільки для UDP емуляції */
+#ifdef USE_MOTOR_PWM_UDP
+
+#include "../../../Inc/drv/motor/pwm_udp.h"
+#include "../../../Emulator/udp_client.h"
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
@@ -231,6 +236,8 @@ static Servo_Status_t PWM_Motor_UDP_SendCommand(PWM_Motor_UDP_Driver_t* driver)
     if (!driver) {
         return SERVO_ERROR_NULL_PTR;
     }
-    
+
     return UDP_Client_SendMotorCommand(driver->cmd.power);
 }
+
+#endif /* USE_MOTOR_PWM_UDP */

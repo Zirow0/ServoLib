@@ -25,6 +25,8 @@ add_compile_options(
     -g                     # Символи для налагодження
     -DUSE_REAL_HARDWARE=0  # Емуляція, не реальне залізо
     -DPC_EMULATION=1       # PC емуляція
+    -DUSE_BRAKE_UDP=1      # Використовувати UDP гальма для емуляції
+    -DUSE_MOTOR_PWM_UDP=1  # Використовувати UDP PWM двигун для емуляції
 )
 
 # Визначення шляхів до заголовочних файлів
@@ -46,10 +48,19 @@ file(GLOB_RECURSE SERVOLIB_SOURCES
     ${SERVOLIB_ROOT}/Src/*.c
     ${SERVOLIB_ROOT}/Src/ctrl/*.c
     ${SERVOLIB_ROOT}/Src/drv/*.c
-    ${SERVOLIB_ROOT}/Src/hwd/*.c
     ${SERVOLIB_ROOT}/Src/iface/*.c
     ${SERVOLIB_ROOT}/Src/util/*.c
+    ${SERVOLIB_ROOT}/Src/hwd/*.c
+    ${SERVOLIB_ROOT}/Src/drv/brake/brake.c  # Додати brake.c для можливості виключення
 )
+
+# Виключення файлів, що мають замінники в Board/PC_Emulation
+list(FILTER SERVOLIB_SOURCES EXCLUDE REGEX ".*hwd_gpio\\.c$")
+list(FILTER SERVOLIB_SOURCES EXCLUDE REGEX ".*hwd_pwm\\.c$")
+list(FILTER SERVOLIB_SOURCES EXCLUDE REGEX ".*hwd_timer\\.c$")
+list(FILTER SERVOLIB_SOURCES EXCLUDE REGEX ".*hwd_udp\\.c$")
+# Виключення brake.c оскільки використовується brake_udp.c для емуляції
+list(FILTER SERVOLIB_SOURCES EXCLUDE REGEX ".*drv/brake/brake\\.c$")
 
 # Збір всіх .c файлів з платформи PC_Emulation
 file(GLOB BOARD_SOURCES
@@ -60,6 +71,7 @@ file(GLOB BOARD_SOURCES
 set(EMULATOR_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/main.c
     ${CMAKE_CURRENT_SOURCE_DIR}/udp_client.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/brake_mock.c
 )
 
 # Виключення файлів, специфічних для STM32 (якщо такі є)

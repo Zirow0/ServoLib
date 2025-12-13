@@ -16,8 +16,8 @@ extern "C" {
 #endif
 
 /* Includes ------------------------------------------------------------------*/
-#include "../core.h"
-#include "../hwd/hwd_udp.h"
+#include "../../core.h"
+#include "../../hwd/hwd_udp.h"
 
 /* Exported types ------------------------------------------------------------*/
 

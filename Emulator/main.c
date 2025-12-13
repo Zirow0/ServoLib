@@ -14,9 +14,13 @@
 #include <stdbool.h>
 #include <time.h>
 
+#ifdef _WIN32
+    #include <windows.h>
+#endif
+
 #include "../Inc/core.h"
 #include "../Inc/config.h"
-#include "../Board/PC_Emulation/board.h"
+#include "../Board/PC_Emulation/board_config.h"
 #include "../Inc/ctrl/servo.h"
 #include "../Inc/drv/motor/pwm_udp.h"
 #include "../Inc/drv/brake/brake_udp.h"
@@ -37,7 +41,7 @@ static uint32_t start_time_ms = 0;
 static uint32_t last_update_ms = 0;
 
 /* Private function prototypes -----------------------------------------------*/
-static uint32_t GetTickCount(void);
+static uint32_t GetTickCountCustom(void);
 static void InitializeSystem(void);
 static void RunMainLoop(void);
 static void CleanupSystem(void);
@@ -71,18 +75,24 @@ int main(void)
  *
  * @return uint32_t Час в мілісекундах від початку епохи
  */
-static uint32_t GetTickCount(void)
+static uint32_t GetTickCountCustom(void)
 {
-    static time_t start_time = 0;
-    struct timespec ts;
+    #ifdef _WIN32
+        // Windows implementation using GetTickCount
+        return (uint32_t)GetTickCount();
+    #else
+        // POSIX implementation using clock_gettime
+        static time_t start_time = 0;
+        struct timespec ts;
 
-    clock_gettime(CLOCK_MONOTONIC, &ts);
+        clock_gettime(CLOCK_MONOTONIC, &ts);
 
-    if (start_time == 0) {
-        start_time = ts.tv_sec;
-    }
+        if (start_time == 0) {
+            start_time = ts.tv_sec;
+        }
 
-    return (uint32_t)((ts.tv_sec - start_time) * 1000 + ts.tv_nsec / 1000000);
+        return (uint32_t)((ts.tv_sec - start_time) * 1000 + ts.tv_nsec / 10000);
+    #endif
 }
 
 /**
@@ -172,17 +182,29 @@ static void InitializeSystem(void)
             .invert_direction = false
         },
         .pid_params = {
-            .kp = 1.0f,
-            .ki = 0.1f,
-            .kd = 0.01f,
-            .output_min = -100.0f,
-            .output_max = 100.0f
+            .Kp = 1.0f,
+            .Ki = 0.1f,
+            .Kd = 0.01f,
+            .out_min = -100.0f,
+            .out_max = 10.0f,
+            .sample_time = 0.001f,  // 1ms sample time
+            .direction = PID_DIRECTION_DIRECT
         },
         .safety_config = {
-            .position_limits_enabled = true,
-            .velocity_limit = 200.0f,
-            .current_limit = 2000.0f,
-            .watchdog_timeout_ms = 1000
+            .min_position = 0.0f,
+            .max_position = 360.0f,
+            .enable_position_limits = true,
+            .max_velocity = 200.0f,
+            .enable_velocity_limit = true,
+            .max_acceleration = 360.0f,
+            .enable_acceleration_limit = true,
+            .max_current = 2000,
+            .current_timeout_ms = 100,
+            .enable_current_protection = true,
+            .watchdog_timeout_ms = 1000,
+            .enable_watchdog = true,
+            .max_temperature = 85,
+            .enable_thermal_protection = false
         },
         .traj_params = {
             .max_velocity = 180.0f,
@@ -199,14 +221,11 @@ static void InitializeSystem(void)
     Brake_UDP_Update(&brake_driver);
     PWM_Motor_UDP_Update(&motor_driver);
 
-    // Для повної емуляції створимо інтерфейси для сервоприводу
-    // Потрібно створити тимчасові інтерфейси або використовувати функції для отримання інтерфейсів
-    Servo_Interface_t servo_interface;
-
     // Ініціалізація сервоприводу з усіма компонентами
+    // For the emulator, we can pass NULL for the brake driver since we handle brake control differently
     status = Servo_InitWithBrake(&servo_controller, &servo_config,
-                                 &motor_driver.interface,
-                                 &brake_driver.driver);
+                                 (Motor_Interface_t*)&motor_driver,
+                                 NULL);  // For emulator, we don't use the traditional brake interface
     if (status != SERVO_OK) {
         printf("ERROR: Servo controller initialization failed (status: %d)\n", status);
         exit(1);
@@ -215,7 +234,7 @@ static void InitializeSystem(void)
     // Встановлення тестової цілі
     Servo_SetPosition(&servo_controller, 180.0f);
 
-    start_time_ms = GetTickCount();
+    start_time_ms = GetTickCountCustom();
     last_update_ms = start_time_ms;
 
     printf("System initialized successfully\n");
@@ -232,7 +251,7 @@ static void RunMainLoop(void)
     uint32_t simulation_time_s = 0;
 
     while (simulation_time_s < MAX_SIMULATION_TIME_S) {
-        current_time = GetTickCount();
+        current_time = GetTickCountCustom();
 
         // Перевірка періоду оновлення
         if (current_time - last_update_ms >= SERVO_UPDATE_PERIOD_MS) {
@@ -278,8 +297,12 @@ static void RunMainLoop(void)
         simulation_time_s = (current_time - start_time_ms) / 1000;
 
         // Мала затримка для зменшення використання CPU
-        struct timespec ts = {0, 100000};  // 100 мікросекунд
-        nanosleep(&ts, NULL);
+        #ifdef _WIN32
+            Sleep(1);  // Sleep for 1ms on Windows
+        #else
+            struct timespec ts = {0, 1000000};  // 1 millisecond (1,000,000 ns)
+            nanosleep(&ts, NULL);
+        #endif
     }
 
     printf("Main loop completed after %u seconds\n", simulation_time_s);

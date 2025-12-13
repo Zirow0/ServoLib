@@ -6,9 +6,15 @@
  */
 
 /* Includes ------------------------------------------------------------------*/
+#include "board_config.h"
+
+/* Компілювати цей файл тільки якщо використовується звичайний brake драйвер,
+ * для емуляції використовується brake_udp.c */
+#ifdef USE_BRAKE
+
 #include "drv/brake/brake.h"
 #include "hwd/hwd_gpio.h"
-#include "stm32f4xx_hal.h"
+#include "hwd/hwd_timer.h"
 #include <string.h>
 
 /* Private functions ---------------------------------------------------------*/
@@ -26,10 +32,10 @@ static void Brake_SetGPIO(Brake_Driver_t* brake, bool active)
         state = active ? HWD_GPIO_PIN_RESET : HWD_GPIO_PIN_SET;
     }
 
-    // Використання HAL напряму для простоти
-    HAL_GPIO_WritePin((GPIO_TypeDef*)brake->config.gpio_port,
+    // Використання HWD GPIO для платформонезалежності
+    HWD_GPIO_WritePin(brake->config.gpio_port,
                       brake->config.gpio_pin,
-                      (GPIO_PinState)state);
+                      state);
 }
 
 /**
@@ -37,7 +43,7 @@ static void Brake_SetGPIO(Brake_Driver_t* brake, bool active)
  */
 static uint32_t Brake_GetTimeMs(void)
 {
-    return HAL_GetTick();
+    return HWD_Timer_GetMillis();
 }
 
 /* Exported functions --------------------------------------------------------*/
@@ -192,3 +198,5 @@ Servo_Status_t Brake_EmergencyEngage(Brake_Driver_t* brake)
 
     return SERVO_OK;
 }
+
+#endif /* USE_BRAKE */

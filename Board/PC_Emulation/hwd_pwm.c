@@ -30,17 +30,19 @@ Servo_Status_t HWD_PWM_Init(HWD_PWM_Handle_t* handle, const HWD_PWM_Config_t* co
     
     // Для емуляції на ПК просто зберігаємо конфігурацію
     handle->config = *config;
-    handle->initialized = true;
-    
-    printf("HWD PWM initialized with frequency: %.2f Hz\n", config->frequency);
-    
+    handle->current_duty = 0;
+    handle->mode = HWD_PWM_MODE_FORWARD;
+    handle->is_running = false;
+
+    printf("HWD PWM initialized with frequency: %u Hz\n", config->frequency);
+
     return SERVO_OK;
 }
 
-Servo_Status_t HWD_PWM_SetDuty(HWD_PWM_Handle_t* handle, float duty_cycle)
+Servo_Status_t HWD_PWM_SetDutyPercent(HWD_PWM_Handle_t* handle, float duty_cycle)
 {
-    if (!handle || !handle->initialized) {
-        return SERVO_NOT_INIT;
+    if (!handle) {
+        return SERVO_ERROR_NULL_PTR;
     }
     
     // Обмеження duty cycle в межах [0, 100]
@@ -68,38 +70,38 @@ Servo_Status_t HWD_PWM_SetDuty(HWD_PWM_Handle_t* handle, float duty_cycle)
         return status;
     }
     
-    // Оновлюємо значення в об'єкту
-    handle->duty_cycle = duty_cycle;
-    
+    // Оновлюємо значення в об'єкту (конвертуємо відсотки в абсолютні значення)
+    handle->current_duty = (uint32_t)((duty_cycle / 100.0f) * handle->config.resolution);
+
     return SERVO_OK;
 }
 
 Servo_Status_t HWD_PWM_Start(HWD_PWM_Handle_t* handle)
 {
-    if (!handle || !handle->initialized) {
-        return SERVO_NOT_INIT;
+    if (!handle) {
+        return SERVO_ERROR_NULL_PTR;
     }
-    
+
     // Для емуляції просто встановлюємо активний стан
-    handle->active = true;
-    
+    handle->is_running = true;
+
     return SERVO_OK;
 }
 
 Servo_Status_t HWD_PWM_Stop(HWD_PWM_Handle_t* handle)
 {
-    if (!handle || !handle->initialized) {
-        return SERVO_NOT_INIT;
+    if (!handle) {
+        return SERVO_ERROR_NULL_PTR;
     }
-    
+
     // Зупиняємо PWM, надсилаючи 0% duty cycle
-    Servo_Status_t status = HWD_PWM_SetDuty(handle, 0.0f);
+    Servo_Status_t status = HWD_PWM_SetDutyPercent(handle, 0.0f);
     if (status != SERVO_OK) {
         return status;
     }
-    
-    handle->active = false;
-    
+
+    handle->is_running = false;
+
     return SERVO_OK;
 }
 
@@ -108,12 +110,12 @@ Servo_Status_t HWD_PWM_DeInit(HWD_PWM_Handle_t* handle)
     if (!handle) {
         return SERVO_ERROR_NULL_PTR;
     }
-    
+
     // Зупиняємо PWM перед деініціалізацією
     HWD_PWM_Stop(handle);
-    
-    handle->initialized = false;
-    handle->active = false;
-    
+
+    handle->is_running = false;
+    handle->current_duty = 0;
+
     return SERVO_OK;
 }
