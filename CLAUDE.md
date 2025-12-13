@@ -66,6 +66,17 @@ mingw32-make run
 
 See `Emulator/BUILD.md` for detailed build instructions and troubleshooting.
 
+**Common Build Issues:**
+
+1. **Missing hwd_udp.h** - UDP protocol header is in `Inc/hwd/hwd_udp.h` and contains all UDP message structures
+2. **Include path errors** - Driver .c files use relative paths from `Src/` (e.g., `#include "../../../Inc/drv/motor/pwm_udp.h"`)
+3. **Structure field mismatches** - Check that HWD implementations use correct field names from headers:
+   - `HWD_PWM_Handle_t` uses `is_running`, `current_duty`, not `active`, `initialized`
+   - Use `HWD_PWM_SetDutyPercent()` for float percentages, `HWD_PWM_SetDuty()` for uint32_t raw values
+   - GPIO operations: `HWD_GPIO_WritePinDescriptor()` for descriptors, `HWD_GPIO_WritePin()` for direct port/pin
+4. **Timer functions** - `HWD_Timer_DelayMs/Us` return `void`, not `Servo_Status_t`
+5. **Windows MinGW** - POSIX functions (clock_gettime, nanosleep) not available; use Windows equivalents or HWD abstractions
+
 ### Testing
 No automated test suite currently exists. Testing is done:
 - On real hardware with STM32F411CEU6 (BlackPill)
@@ -230,6 +241,33 @@ Platform Layer (Board/)        ← STM32F411 or PC_Emulation implementations
 - `Board/STM32F411/` - STM32F411 HAL implementations
 - `Board/PC_Emulation/` - PC emulation with UDP communications
 
+### HWD Implementation Patterns
+
+**Critical:** HWD implementations in `Board/` must match the function signatures defined in `Inc/hwd/` headers exactly.
+
+**Common HWD Functions:**
+```c
+// Inc/hwd/hwd_timer.h declares:
+uint32_t HWD_Timer_GetMillis(void);
+uint32_t HWD_Timer_GetMicros(void);
+void HWD_Timer_DelayMs(uint32_t ms);  // Note: void return
+void HWD_Timer_DelayUs(uint32_t us);  // Note: void return
+
+// Inc/hwd/hwd_pwm.h declares:
+Servo_Status_t HWD_PWM_SetDuty(HWD_PWM_Handle_t* handle, uint32_t duty);
+Servo_Status_t HWD_PWM_SetDutyPercent(HWD_PWM_Handle_t* handle, float percent);
+
+// Inc/hwd/hwd_gpio.h declares:
+Servo_Status_t HWD_GPIO_WritePin(void* port, uint16_t pin, HWD_GPIO_PinState_t state);
+Servo_Status_t HWD_GPIO_WritePinDescriptor(const HWD_GPIO_Pin_t* pin, HWD_GPIO_PinState_t state);
+```
+
+**PC_Emulation specifics:**
+- PWM is emulated by sending UDP motor commands with power values
+- GPIO operations are no-ops or simple state tracking
+- Timer functions use Windows `Sleep()` or POSIX `nanosleep()`
+- All sensor/motor/brake data comes from UDP messages
+
 ## UDP Emulation System
 
 The PC emulation system communicates with a mathematical motor model via UDP:
@@ -274,10 +312,49 @@ To port to another STM32 or platform:
 4. Implement HWD functions for your platform (hwd_pwm.c, hwd_i2c.c, etc.)
 5. No changes needed in ctrl/, iface/, or drv/ layers
 
+### Conditional Compilation System
+
+**Driver Selection Macros** (`Board/*/board_config.h`):
+- `USE_MOTOR_PWM` - Enable real PWM motor driver (for STM32)
+- `USE_MOTOR_PWM_UDP` - Enable UDP motor driver (for PC emulation)
+- `USE_BRAKE` - Enable real brake driver (for STM32)
+- `USE_BRAKE_UDP` - Enable UDP brake driver (for PC emulation)
+- `USE_SENSOR_AS5600` - Enable AS5600 I2C encoder
+- `USE_SENSOR_AEAT9922` - Enable AEAT-9922 SPI encoder
+
+**Pattern:**
+```c
+// In board_config.h for STM32F411:
+#define USE_REAL_HARDWARE   1
+#define USE_MOTOR_PWM       1
+#define USE_BRAKE           1
+#undef USE_MOTOR_PWM_UDP
+#undef USE_BRAKE_UDP
+
+// In board_config.h for PC_Emulation:
+#define USE_REAL_HARDWARE   0
+#define USE_MOTOR_PWM_UDP   1
+#define USE_BRAKE_UDP       1
+#undef USE_MOTOR_PWM
+#undef USE_BRAKE
+```
+
+**Driver Implementation:**
+Each driver file uses conditional compilation:
+```c
+#include "board_config.h"
+#ifdef USE_MOTOR_PWM
+// Real hardware implementation
+#endif
+```
+
+This allows CMake to compile all .c files while only building platform-specific code.
+
 ### File Organization
 - Headers in `Inc/` mirror implementations in `Src/`
 - Each driver has separate files for hardware (drv/) vs interface (iface/)
 - UDP variants have `_udp` suffix (e.g., `pwm_udp.c`, `brake_udp.c`)
+- All driver .c files use conditional compilation based on board_config.h macros
 
 ### Error Handling
 - All functions return `Servo_Status_t` enum
