@@ -17,7 +17,9 @@
 #ifdef _WIN32
     #include <winsock2.h>
     #include <ws2tcpip.h>
-    #pragma comment(lib, "ws2_32.lib")
+    #ifdef _MSC_VER
+        #pragma comment(lib, "ws2_32.lib")
+    #endif
     typedef SOCKET socket_t;
 #else
     #include <sys/socket.h>
@@ -47,6 +49,12 @@ static Servo_Status_t CloseWinSock(void);
 
 Servo_Status_t HWD_UDP_Init(const char* server_ip, uint16_t server_port, uint16_t client_port)
 {
+    // Перевірка чи вже ініціалізовано (запобігає повторному bind до того ж порту)
+    if (udp_initialized) {
+        printf("UDP already initialized, skipping re-initialization\n");
+        return SERVO_OK;
+    }
+
     // Використовуємо значення за замовчуванням, якщо не вказані
     if (server_ip == NULL) {
         server_ip = UDP_SERVER_IP;
