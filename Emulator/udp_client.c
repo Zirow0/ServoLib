@@ -19,7 +19,6 @@ static bool client_initialized = false;
 
 /* Private function prototypes -----------------------------------------------*/
 static Servo_Status_t SendUDPMessage(UDP_MsgType_t msg_type, const void* data, uint16_t size);
-static Servo_Status_t ReceiveUDPMessage(UDP_Message_t* msg, uint32_t timeout_ms);
 
 /* Exported functions --------------------------------------------------------*/
 
@@ -213,13 +212,4 @@ static Servo_Status_t SendUDPMessage(UDP_MsgType_t msg_type, const void* data, u
     }
     
     return HWD_UDP_Send(&msg);
-}
-
-static Servo_Status_t ReceiveUDPMessage(UDP_Message_t* msg, uint32_t timeout_ms)
-{
-    if (!msg) {
-        return SERVO_ERROR_NULL_PTR;
-    }
-    
-    return HWD_UDP_Receive(msg, timeout_ms);
 }

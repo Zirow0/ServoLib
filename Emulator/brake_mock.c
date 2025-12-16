@@ -12,7 +12,6 @@
 #include <string.h>
 
 // Глобальний об'єкт гальм для емуляції
-static Brake_Driver_t g_brake_driver_mock;
 static bool g_brake_initialized = false;
 
 Servo_Status_t Brake_Init(Brake_Driver_t* brake, const Brake_Config_t* config)

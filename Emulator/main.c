@@ -28,7 +28,7 @@
 #include "udp_client.h"
 
 /* Private defines -----------------------------------------------------------*/
-#define SERVO_UPDATE_PERIOD_MS    1    // 1000 Hz
+#define SERVO_UPDATE_PERIOD_MS    5    // 200 Hz
 #define MAX_SIMULATION_TIME_S     60   // 60 секунд симуляції
 
 /* Private variables ---------------------------------------------------------*/
@@ -211,7 +211,7 @@ static void InitializeSystem(void)
             .max_acceleration = 360.0f,
             .max_jerk = 1000.0f
         },
-        .update_frequency = 1000.0f,  // 1 кГц
+        .update_frequency = 200.0f,  // 200 Гц
         .enable_brake = true
     };
 
@@ -249,6 +249,8 @@ static void RunMainLoop(void)
 
     uint32_t current_time;
     uint32_t simulation_time_s = 0;
+    static uint32_t heartbeat_counter = 0;  // Лічильник для heartbeat
+    const uint32_t HEARTBEAT_INTERVAL = 200;  // Відправляти кожні 200 циклів (1 секунда при 200Hz)
 
     while (simulation_time_s < MAX_SIMULATION_TIME_S) {
         current_time = GetTickCountCustom();
@@ -273,13 +275,23 @@ static void RunMainLoop(void)
                 printf("WARNING: Brake update failed (status: %d)\n", status);
             }
 
+            // Відправка heartbeat кожну секунду
+            heartbeat_counter++;
+            if (heartbeat_counter >= HEARTBEAT_INTERVAL) {
+                Servo_Status_t ping_status = UDP_Client_Ping();
+                if (ping_status != SERVO_OK) {
+                    printf("WARNING: Heartbeat ping failed (status: %d)\n", ping_status);
+                }
+                heartbeat_counter = 0;
+            }
+
             // Оновлення сервоприводу
             status = Servo_Update(&servo_controller);
             if (status != SERVO_OK) {
                 printf("WARNING: Servo update failed (status: %d)\n", status);
             }
 
-            // Виведення даних кожні 100 ітерацій (кожну 100 мс при 1 кГц)
+            // Виведення даних кожні 100 ітерацій (кожну 100 мс при 20 Гц)
             if ((current_time / 100) > (start_time_ms / 100)) {
                 float position = Servo_GetPosition(&servo_controller);
                 float velocity = Servo_GetVelocity(&servo_controller);
