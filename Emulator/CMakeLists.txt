@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.18)  # OpENer requires 3.18+
 
 # Назва проекту
 project(ServoLib_Emulator C)
@@ -6,6 +6,51 @@ project(ServoLib_Emulator C)
 # Стандарт C99
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
+
+#######################################
+# OpENer Configuration                #
+#######################################
+
+# OpENer options
+option(USE_HWD_EIP "Enable EtherNet/IP support via OpENer" ON)
+
+if(USE_HWD_EIP)
+    message(STATUS "EtherNet/IP support: ENABLED")
+
+    # OpENer platform selection
+    set(OpENer_PLATFORM "MINGW" CACHE STRING "OpENer platform")
+
+    # OpENer device configuration
+    set(OpENer_Device_Config_Vendor_Id 65535 CACHE STRING "Vendor ID (65535 = experimental)")
+    set(OpENer_Device_Config_Device_Type 2 CACHE STRING "Device Type (2 = AC Drive)")
+    set(OpENer_Device_Config_Product_Code 1 CACHE STRING "Product Code")
+    set(OpENer_Device_Config_Device_Name "ServoLib EtherNet/IP" CACHE STRING "Device Name")
+    set(OpENer_Device_Major_Version 1 CACHE STRING "Major version")
+    set(OpENer_Device_Minor_Version 0 CACHE STRING "Minor version")
+
+    # OpENer build options
+    set(OPENER_INSTALL_AS_LIB ON CACHE BOOL "Build OpENer as library")
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build static library")
+    set(OpENer_TRACES ON CACHE BOOL "Enable OpENer traces")
+    set(OPENER_TRACE_LEVEL "INFO" CACHE STRING "Trace level")
+    set(OPENER_ETHERNET_BUFFER_SIZE 512 CACHE STRING "Ethernet buffer size")
+
+    # Add OpENer as subdirectory
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../External/OpENer/source
+                     ${CMAKE_BINARY_DIR}/OpENer_build)
+
+    # Add OpENer include directories
+    set(OPENER_INCLUDES
+        ${CMAKE_CURRENT_SOURCE_DIR}/../External/OpENer/source/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/../External/OpENer/source/src/cip
+        ${CMAKE_CURRENT_SOURCE_DIR}/../External/OpENer/source/src/enet_encap
+        ${CMAKE_CURRENT_SOURCE_DIR}/../External/OpENer/source/src/ports
+        ${CMAKE_CURRENT_SOURCE_DIR}/../External/OpENer/source/src/utils
+        ${CMAKE_BINARY_DIR}/OpENer_build/src/ports
+    )
+else()
+    message(STATUS "EtherNet/IP support: DISABLED (using legacy UDP)")
+endif()
 
 # Опції компіляції для MinGW
 if(MINGW)
@@ -25,9 +70,19 @@ add_compile_options(
     -g                     # Символи для налагодження
     -DUSE_REAL_HARDWARE=0  # Емуляція, не реальне залізо
     -DPC_EMULATION=1       # PC емуляція
-    -DUSE_BRAKE_UDP=1      # Використовувати UDP гальма для емуляції
-    -DUSE_MOTOR_PWM_UDP=1  # Використовувати UDP PWM двигун для емуляції
 )
+
+# Conditional compilation для EtherNet/IP або legacy UDP
+if(USE_HWD_EIP)
+    add_compile_options(-DUSE_HWD_EIP=1)
+    message(STATUS "Using EtherNet/IP communication (OpENer)")
+else()
+    add_compile_options(
+        -DUSE_BRAKE_UDP=1      # Використовувати UDP гальма для емуляції
+        -DUSE_MOTOR_PWM_UDP=1  # Використовувати UDP PWM двигун для емуляції
+    )
+    message(STATUS "Using legacy UDP communication")
+endif()
 
 # Визначення шляхів до заголовочних файлів
 set(SERVOLIB_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/..)
@@ -42,6 +97,11 @@ include_directories(
     ${SERVOLIB_ROOT}/Board/PC_Emulation
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
+
+# Add OpENer includes if enabled
+if(USE_HWD_EIP)
+    include_directories(${OPENER_INCLUDES})
+endif()
 
 # Збір всіх .c файлів з бібліотеки
 file(GLOB_RECURSE SERVOLIB_SOURCES
@@ -88,6 +148,13 @@ add_executable(${PROJECT_NAME}
     ${BOARD_SOURCES}
     ${EMULATOR_SOURCES}
 )
+
+# Підключення бібліотек
+if(USE_HWD_EIP)
+    # Link OpENer library
+    target_link_libraries(${PROJECT_NAME} OpENer)
+    message(STATUS "Linking OpENer library")
+endif()
 
 # Підключення бібліотек для Windows (winsock2)
 if(MINGW)
