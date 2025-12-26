@@ -17,37 +17,40 @@ option(USE_HWD_EIP "Enable EtherNet/IP support via OpENer" ON)
 if(USE_HWD_EIP)
     message(STATUS "EtherNet/IP support: ENABLED")
 
-    # OpENer platform selection
-    set(OpENer_PLATFORM "MINGW" CACHE STRING "OpENer platform")
+    # OpENer source directory
+    set(OPENER_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../External/OpENer/source)
 
-    # OpENer device configuration
-    set(OpENer_Device_Config_Vendor_Id 65535 CACHE STRING "Vendor ID (65535 = experimental)")
-    set(OpENer_Device_Config_Device_Type 2 CACHE STRING "Device Type (2 = AC Drive)")
-    set(OpENer_Device_Config_Product_Code 1 CACHE STRING "Product Code")
-    set(OpENer_Device_Config_Device_Name "ServoLib EtherNet/IP" CACHE STRING "Device Name")
-    set(OpENer_Device_Major_Version 1 CACHE STRING "Major version")
-    set(OpENer_Device_Minor_Version 0 CACHE STRING "Minor version")
-
-    # OpENer build options
-    set(OPENER_INSTALL_AS_LIB ON CACHE BOOL "Build OpENer as library")
-    set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build static library")
-    set(OpENer_TRACES ON CACHE BOOL "Enable OpENer traces")
-    set(OPENER_TRACE_LEVEL "INFO" CACHE STRING "Trace level")
-    set(OPENER_ETHERNET_BUFFER_SIZE 512 CACHE STRING "Ethernet buffer size")
-
-    # Add OpENer as subdirectory
-    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../External/OpENer/source
-                     ${CMAKE_BINARY_DIR}/OpENer_build)
-
-    # Add OpENer include directories
+    # OpENer include directories
     set(OPENER_INCLUDES
-        ${CMAKE_CURRENT_SOURCE_DIR}/../External/OpENer/source/src
-        ${CMAKE_CURRENT_SOURCE_DIR}/../External/OpENer/source/src/cip
-        ${CMAKE_CURRENT_SOURCE_DIR}/../External/OpENer/source/src/enet_encap
-        ${CMAKE_CURRENT_SOURCE_DIR}/../External/OpENer/source/src/ports
-        ${CMAKE_CURRENT_SOURCE_DIR}/../External/OpENer/source/src/utils
-        ${CMAKE_BINARY_DIR}/OpENer_build/src/ports
+        ${OPENER_ROOT}/src
+        ${OPENER_ROOT}/src/cip
+        ${OPENER_ROOT}/src/cip_objects
+        ${OPENER_ROOT}/src/enet_encap
+        ${OPENER_ROOT}/src/ports
+        ${OPENER_ROOT}/src/ports/MINGW
+        ${OPENER_ROOT}/src/ports/MINGW/sample_application
+        ${OPENER_ROOT}/src/utils
     )
+
+    # Collect OpENer source files
+    file(GLOB OPENER_CIP_SOURCES ${OPENER_ROOT}/src/cip/*.c)
+    file(GLOB OPENER_ENCAP_SOURCES ${OPENER_ROOT}/src/enet_encap/*.c)
+    file(GLOB OPENER_UTILS_SOURCES ${OPENER_ROOT}/src/utils/*.c)
+    file(GLOB OPENER_PLATFORM_SOURCES ${OPENER_ROOT}/src/ports/MINGW/*.c)
+    file(GLOB OPENER_NETWORK_SOURCES ${OPENER_ROOT}/src/ports/*.c)
+
+    # Exclude sample application main
+    list(FILTER OPENER_PLATFORM_SOURCES EXCLUDE REGEX ".*main\\.c$")
+
+    set(OPENER_SOURCES
+        ${OPENER_CIP_SOURCES}
+        ${OPENER_ENCAP_SOURCES}
+        ${OPENER_UTILS_SOURCES}
+        ${OPENER_PLATFORM_SOURCES}
+        ${OPENER_NETWORK_SOURCES}
+    )
+
+    message(STATUS "OpENer sources collected: ${OPENER_SOURCES}")
 else()
     message(STATUS "EtherNet/IP support: DISABLED (using legacy UDP)")
 endif()
@@ -143,17 +146,19 @@ message(STATUS "Board sources: ${BOARD_SOURCES}")
 message(STATUS "Emulator sources: ${EMULATOR_SOURCES}")
 
 # Створення виконуваного файлу
-add_executable(${PROJECT_NAME}
-    ${SERVOLIB_SOURCES}
-    ${BOARD_SOURCES}
-    ${EMULATOR_SOURCES}
-)
-
-# Підключення бібліотек
 if(USE_HWD_EIP)
-    # Link OpENer library
-    target_link_libraries(${PROJECT_NAME} OpENer)
-    message(STATUS "Linking OpENer library")
+    add_executable(${PROJECT_NAME}
+        ${SERVOLIB_SOURCES}
+        ${BOARD_SOURCES}
+        ${EMULATOR_SOURCES}
+        ${OPENER_SOURCES}
+    )
+else()
+    add_executable(${PROJECT_NAME}
+        ${SERVOLIB_SOURCES}
+        ${BOARD_SOURCES}
+        ${EMULATOR_SOURCES}
+    )
 endif()
 
 # Підключення бібліотек для Windows (winsock2)
