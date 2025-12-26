@@ -202,9 +202,11 @@ static Servo_Status_t SendUDPMessage(UDP_MsgType_t msg_type, const void* data, u
         return SERVO_INVALID;
     }
     
+    static uint32_t sequence_counter = 0; // Лічильник послідовності
+    
     UDP_Message_t msg = {0};
     msg.msg_type = msg_type;
-    msg.sequence_number = 0; // В емуляції можливо не використовується
+    msg.sequence_number = sequence_counter++; // Використовуємо лічильник послідовності
     msg.payload_size = size;
     
     if (data && size > 0) {

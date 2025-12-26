@@ -250,7 +250,16 @@ static void RunMainLoop(void)
     uint32_t current_time;
     uint32_t simulation_time_s = 0;
     static uint32_t heartbeat_counter = 0;  // Лічильник для heartbeat
-    const uint32_t HEARTBEAT_INTERVAL = 200;  // Відправляти кожні 200 циклів (1 секунда при 200Hz)
+    const uint32_t HEARTBEAT_INTERVAL = 20;  // Відправляти кожні 200 циклів (1 секунда при 200Hz)
+    
+    // Змінні для управління обертанням
+    static uint32_t rotation_start_time = 0;
+    static int rotation_state = 0; // 0 - початкова позиція, 1 - повернуто на +90, 2 - очікування після +90, 3 - повернуто на -90, 4 - очікування після -90
+    const uint32_t WAIT_TIME_MS = 5000; // 5 секунд очікування
+    
+    // Встановлюємо початкову позицію
+    Servo_SetPosition(&servo_controller, 0.0f);
+    rotation_start_time = GetTickCountCustom();
 
     while (simulation_time_s < MAX_SIMULATION_TIME_S) {
         current_time = GetTickCountCustom();
@@ -275,12 +284,66 @@ static void RunMainLoop(void)
                 printf("WARNING: Brake update failed (status: %d)\n", status);
             }
 
+            // Алгоритм обертання двигуна
+            float target_position = Servo_GetPosition(&servo_controller);
+            
+            switch (rotation_state) {
+                case 0: // Початкова позиція (0 градусів)
+                    target_position = 0.0f;
+                    if (current_time - rotation_start_time >= 1000) { // Зачекати 1 секунду перед першим обертанням
+                        Servo_SetPosition(&servo_controller, 90.0f);
+                        rotation_start_time = current_time;
+                        rotation_state = 1;
+                        printf("Rotating to +90 degrees\n");
+                    }
+                    break;
+                    
+                case 1: // Повернуто на +90
+                    target_position = 90.0f;
+                    if (current_time - rotation_start_time >= 1000) { // Дозволити час на досягнення позиції
+                        rotation_state = 2;
+                        rotation_start_time = current_time;
+                        printf("Reached +90 degrees, waiting 5 seconds\n");
+                    }
+                    break;
+                    
+                case 2: // Очікування після +90
+                    target_position = 90.0f;
+                    if (current_time - rotation_start_time >= WAIT_TIME_MS) { // Очікування 5 секунд
+                        Servo_SetPosition(&servo_controller, -90.0f);
+                        rotation_start_time = current_time;
+                        rotation_state = 3;
+                        printf("Rotating to -90 degrees\n");
+                    }
+                    break;
+                    
+                case 3: // Повернуто на -90
+                    target_position = -90.0f;
+                    if (current_time - rotation_start_time >= 1000) { // Дозволити час на досягнення позиції
+                        rotation_state = 4;
+                        rotation_start_time = current_time;
+                        printf("Reached -90 degrees, waiting 5 seconds\n");
+                    }
+                    break;
+                    
+                case 4: // Очікування після -90
+                    target_position = -90.0f;
+                    if (current_time - rotation_start_time >= WAIT_TIME_MS) { // Очікування 5 секунд
+                        Servo_SetPosition(&servo_controller, 0.0f);
+                        rotation_start_time = current_time;
+                        rotation_state = 0;
+                        printf("Returning to 0 degrees, restarting cycle\n");
+                    }
+                    break;
+            }
+
             // Відправка heartbeat кожну секунду
             heartbeat_counter++;
             if (heartbeat_counter >= HEARTBEAT_INTERVAL) {
                 Servo_Status_t ping_status = UDP_Client_Ping();
                 if (ping_status != SERVO_OK) {
-                    printf("WARNING: Heartbeat ping failed (status: %d)\n", ping_status);
+                    // Не виводимо помилку для тестування без мережі
+                    // printf("WARNING: Heartbeat ping failed (status: %d)\n", ping_status);
                 }
                 heartbeat_counter = 0;
             }

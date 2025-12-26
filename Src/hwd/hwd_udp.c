@@ -202,9 +202,10 @@ Servo_Status_t HWD_UDP_Ping(void)
     }
     
     UDP_Message_t ping_msg = {0};
-    ping_msg.msg_type = UDP_MSG_TYPE_PING;
-    ping_msg.sequence_number = 0;
-    ping_msg.payload_size = 0;
+        ping_msg.msg_type = UDP_MSG_TYPE_PING;
+        static uint32_t ping_sequence_counter = 0; // Лічильник послідовності для пінгів
+        ping_msg.sequence_number = ping_sequence_counter++;
+        ping_msg.payload_size = 0;
     
     Servo_Status_t status = HWD_UDP_Send(&ping_msg);
     if (status != SERVO_OK) {
