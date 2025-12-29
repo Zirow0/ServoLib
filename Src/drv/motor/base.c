@@ -32,13 +32,6 @@ Servo_Status_t Motor_Base_Init(Motor_Base_Data_t* base, const Motor_Params_t* pa
     // Копіювання параметрів
     base->params = *params;
 
-    // Ініціалізація захисту за замовчуванням
-    base->prot.max_current = MOTOR_OVERCURRENT_LIMIT;
-    base->prot.max_temperature = MOTOR_MAX_TEMPERATURE;
-    base->prot.stall_timeout_ms = 1000;
-    base->prot.protection_mask = MOTOR_PROTECTION_OVERCURRENT |
-                                 MOTOR_PROTECTION_OVERHEAT;
-
     // Початковий стан
     base->state = MOTOR_STATE_IDLE;
     base->direction = MOTOR_DIR_FORWARD;
@@ -141,34 +134,6 @@ Servo_Status_t Motor_Base_SetPower(Motor_Base_Data_t* base, float power)
     return SERVO_OK;
 }
 
-Servo_Status_t Motor_Base_CheckProtection(Motor_Base_Data_t* base,
-                                          uint32_t current,
-                                          uint32_t temperature)
-{
-    if (base == NULL || !base->is_initialized) {
-        return SERVO_INVALID;
-    }
-
-    // Перевірка струмового захисту
-    if ((base->prot.protection_mask & MOTOR_PROTECTION_OVERCURRENT) &&
-        (current > base->prot.max_current)) {
-        base->last_error = ERR_MOTOR_OVERCURRENT;
-        base->state = MOTOR_STATE_ERROR;
-        base->stats.error_count++;
-        return SERVO_ERROR;
-    }
-
-    // Перевірка температурного захисту
-    if ((base->prot.protection_mask & MOTOR_PROTECTION_OVERHEAT) &&
-        (temperature > base->prot.max_temperature)) {
-        base->last_error = ERR_MOTOR_OVERHEAT;
-        base->state = MOTOR_STATE_ERROR;
-        base->stats.error_count++;
-        return SERVO_ERROR;
-    }
-
-    return SERVO_OK;
-}
 
 Servo_Status_t Motor_Base_ClearError(Motor_Base_Data_t* base)
 {
@@ -208,21 +173,8 @@ Servo_Status_t Motor_Base_GetStats(Motor_Base_Data_t* base, Motor_Stats_t* stats
     stats->total_starts = base->stats.total_starts;
     stats->error_count = base->stats.error_count;
     stats->current_power = base->current_power;
-    stats->current_draw = base->stats.current_draw;
     stats->state = base->state;
     stats->direction = base->direction;
-
-    return SERVO_OK;
-}
-
-Servo_Status_t Motor_Base_ConfigProtection(Motor_Base_Data_t* base,
-                                           const Motor_Protection_Config_t* prot)
-{
-    if (base == NULL || prot == NULL || !base->is_initialized) {
-        return SERVO_INVALID;
-    }
-
-    base->prot = *prot;
 
     return SERVO_OK;
 }
