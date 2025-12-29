@@ -120,6 +120,25 @@ struct Motor_Data {
     Servo_Error_t last_error;        /**< Код останньої помилки */
 };
 
+/**
+ * @brief Структура інтерфейсу двигуна
+ *
+ * Містить Motor_Data_t для загальної логіки та hardware callbacks
+ * для апаратної специфіки. Драйвер надає тільки hardware callbacks.
+ */
+typedef struct Motor_Interface Motor_Interface_t;
+
+struct Motor_Interface {
+    /** @brief Дані двигуна (логіка, стан, статистика) */
+    Motor_Data_t data;
+
+    /** @brief Hardware callbacks від конкретного драйвера */
+    Motor_Hardware_Callbacks_t hw;
+
+    /** @brief Вказівник на конкретну реалізацію драйвера */
+    void* driver_data;
+};
+
 /* Exported functions --------------------------------------------------------*/
 
 /**
@@ -199,25 +218,6 @@ Servo_Status_t Motor_GetStats(Motor_Interface_t* motor, Motor_Stats_t* stats);
  * @return Servo_Status_t Статус виконання
  */
 Servo_Status_t Motor_Update(Motor_Interface_t* motor);
-
-/**
- * @brief Структура інтерфейсу двигуна
- *
- * Містить Motor_Data_t для загальної логіки та hardware callbacks
- * для апаратної специфіки. Драйвер надає тільки hardware callbacks.
- */
-typedef struct Motor_Interface Motor_Interface_t;
-
-struct Motor_Interface {
-    /** @brief Дані двигуна (логіка, стан, статистика) */
-    Motor_Data_t data;
-
-    /** @brief Hardware callbacks від конкретного драйвера */
-    Motor_Hardware_Callbacks_t hw;
-
-    /** @brief Вказівник на конкретну реалізацію драйвера */
-    void* driver_data;
-};
 
 /* Wrapper функції для зручності -------------------------------------------*/
 

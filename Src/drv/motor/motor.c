@@ -12,7 +12,6 @@
 #ifdef USE_MOTOR_PWM
 
 #include "../../../Inc/drv/motor/motor.h"
-#include "../../../Inc/iface/motor.h"
 #include "../../../Inc/config.h"
 #include "../../../Inc/hwd/hwd_timer.h"
 #include <string.h>
@@ -119,7 +118,7 @@ Servo_Status_t Motor_DeInit(Motor_Interface_t* motor)
 
     Motor_Data_t* data = &motor->data;
 
-    if (!base->is_initialized) {
+    if (!data->is_initialized) {
         return SERVO_NOT_INIT;
     }
 
@@ -148,7 +147,7 @@ Servo_Status_t Motor_SetPower(Motor_Interface_t* motor, const Motor_Command_t* c
 
     Motor_Data_t* data = &motor->data;
 
-    if (!base->is_initialized) {
+    if (!data->is_initialized) {
         return SERVO_NOT_INIT;
     }
 
@@ -198,7 +197,7 @@ Servo_Status_t Motor_Stop(Motor_Interface_t* motor)
 
     Motor_Data_t* data = &motor->data;
 
-    if (!base->is_initialized) {
+    if (!data->is_initialized) {
         return SERVO_NOT_INIT;
     }
 
@@ -225,7 +224,7 @@ Servo_Status_t Motor_EmergencyStop(Motor_Interface_t* motor)
 
     Motor_Data_t* data = &motor->data;
 
-    if (!base->is_initialized) {
+    if (!data->is_initialized) {
         return SERVO_NOT_INIT;
     }
 
@@ -253,7 +252,7 @@ Servo_Status_t Motor_GetState(Motor_Interface_t* motor, Motor_State_t* state)
 
     Motor_Data_t* data = &motor->data;
 
-    if (!base->is_initialized) {
+    if (!data->is_initialized) {
         return SERVO_NOT_INIT;
     }
 
@@ -269,7 +268,7 @@ Servo_Status_t Motor_GetStats(Motor_Interface_t* motor, Motor_Stats_t* stats)
 
     Motor_Data_t* data = &motor->data;
 
-    if (!base->is_initialized) {
+    if (!data->is_initialized) {
         return SERVO_NOT_INIT;
     }
 
@@ -292,7 +291,7 @@ Servo_Status_t Motor_Update(Motor_Interface_t* motor)
 
     Motor_Data_t* data = &motor->data;
 
-    if (!base->is_initialized) {
+    if (!data->is_initialized) {
         return SERVO_NOT_INIT;
     }
 

@@ -52,7 +52,7 @@ typedef struct {
     Motor_Interface_t interface; /**< Інтерфейс двигуна (містить Motor_Base_Data_t) */
     PWM_Motor_Config_t config;   /**< Конфігурація PWM */
 
-    HWD_GPIO_Pin_t gpio_dir_pin; /**< HWD дескриптор для GPIO напрямку */
+    HWD_GPIO_Pin_t gpio_dir;     /**< HWD дескриптор для GPIO напрямку */
     float current_duty_percent;  /**< Поточний duty cycle (%) */
     bool is_braking;             /**< Прапорець гальмування */
 } PWM_Motor_Driver_t;

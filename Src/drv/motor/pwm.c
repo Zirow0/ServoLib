@@ -51,7 +51,7 @@ static Servo_Status_t ApplySingleChannelPWM(PWM_Motor_Driver_t* driver, float po
             dir_state = HWD_GPIO_PIN_SET;    // Зворотний хід
         }
 
-        HWD_GPIO_WritePinDescriptor(&driver->gpio_dir_pin, dir_state);
+        HWD_GPIO_WritePin(driver->gpio_dir.port, driver->gpio_dir.pin, dir_state);
     }
 
     return SERVO_OK;
@@ -86,6 +86,9 @@ static Servo_Status_t ApplyDualChannelPWM(PWM_Motor_Driver_t* driver, float powe
 }
 
 /* Hardware callbacks --------------------------------------------------------*/
+
+/* Forward declarations */
+static Servo_Status_t PWM_HW_Stop(void* driver_data);
 
 /**
  * @brief Hardware Init - ініціалізація PWM каналів
@@ -223,19 +226,19 @@ Servo_Status_t PWM_Motor_Create(PWM_Motor_Driver_t* driver,
 
     // Ініціалізація GPIO для напрямку (якщо використовується PWM + DIR режим)
     if (config->type == PWM_MOTOR_TYPE_SINGLE_PWM_DIR && config->gpio_dir != NULL) {
-        driver->gpio_dir_pin.port = config->gpio_dir;
-        driver->gpio_dir_pin.pin = (uint16_t)config->gpio_pin;
-        driver->gpio_dir_pin.mode = HWD_GPIO_MODE_OUTPUT;
-        driver->gpio_dir_pin.pull = HWD_GPIO_NOPULL;
+        driver->gpio_dir.port = config->gpio_dir;
+        driver->gpio_dir.pin = (uint16_t)config->gpio_pin;
+        driver->gpio_dir.mode = HWD_GPIO_MODE_OUTPUT;
+        driver->gpio_dir.pull = HWD_GPIO_NOPULL;
 
         // Ініціалізація GPIO піна
-        Servo_Status_t status = HWD_GPIO_InitPin(&driver->gpio_dir_pin);
+        Servo_Status_t status = HWD_GPIO_InitPin(&driver->gpio_dir);
         if (status != SERVO_OK) {
             return status;
         }
 
         // Встановлення початкового стану (прямий хід)
-        HWD_GPIO_WritePinDescriptor(&driver->gpio_dir_pin, HWD_GPIO_PIN_RESET);
+        HWD_GPIO_WritePin(driver->gpio_dir.port, driver->gpio_dir.pin, HWD_GPIO_PIN_RESET);
     }
 
     // Налаштування hardware callbacks

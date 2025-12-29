@@ -16,7 +16,7 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 #include "../core.h"
-#include "../iface/motor.h"
+#include "../drv/motor/motor.h"
 #include "../drv/brake/brake.h"
 #include "pid.h"
 #include "safety.h"
