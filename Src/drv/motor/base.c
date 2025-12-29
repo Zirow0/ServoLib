@@ -6,16 +6,17 @@
  */
 
 /* Includes ------------------------------------------------------------------*/
+#include "board_config.h"
+
+/* Компілювати цей файл для PWM або PWM_UDP драйверів */
+#if defined(USE_MOTOR_PWM) || defined(USE_MOTOR_PWM_UDP)
+
 #include "../../../Inc/drv/motor/base.h"
 #include "../../../Inc/config.h"
+#include "../../../Inc/hwd/hwd_timer.h"
 #include <string.h>
 
 /* Private functions ---------------------------------------------------------*/
-
-/**
- * @brief Отримання поточного часу (має бути реалізовано в HAL)
- */
-extern uint32_t HAL_GetTick(void);
 
 /* Exported functions --------------------------------------------------------*/
 
@@ -46,7 +47,7 @@ Servo_Status_t Motor_Base_Init(Motor_Base_Data_t* base, const Motor_Params_t* pa
     base->emergency_flag = false;
     base->last_error = ERR_NONE;
 
-    base->start_time_ms = HAL_GetTick();
+    base->start_time_ms = HWD_Timer_GetMillis();
     base->last_update_ms = base->start_time_ms;
 
     return SERVO_OK;
@@ -74,7 +75,7 @@ Servo_Status_t Motor_Base_Update(Motor_Base_Data_t* base)
         return SERVO_INVALID;
     }
 
-    uint32_t current_time = HAL_GetTick();
+    uint32_t current_time = HWD_Timer_GetMillis();
     uint32_t delta_time = current_time - base->last_update_ms;
 
     // Оновлення часу роботи
@@ -225,3 +226,5 @@ Servo_Status_t Motor_Base_ConfigProtection(Motor_Base_Data_t* base,
 
     return SERVO_OK;
 }
+
+#endif /* USE_MOTOR_PWM || USE_MOTOR_PWM_UDP */

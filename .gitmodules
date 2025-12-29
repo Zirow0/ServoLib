@@ -1,0 +1,3 @@
+[submodule "External/OpENer"]
+	path = External/OpENer
+	url = https://github.com/EIPStackGroup/OpENer.git

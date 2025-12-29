@@ -59,13 +59,23 @@ typedef struct {
 /* Exported functions --------------------------------------------------------*/
 
 /**
- * @brief Запис значення на GPIO пін
+ * @brief Запис значення на GPIO пін (з портом і піном)
+ *
+ * @param port Вказівник на GPIO порт
+ * @param pin Номер піна
+ * @param state Стан піна (SET/RESET)
+ * @return Servo_Status_t Статус виконання
+ */
+Servo_Status_t HWD_GPIO_WritePin(void* port, uint16_t pin, HWD_GPIO_PinState_t state);
+
+/**
+ * @brief Запис значення на GPIO пін (з дескриптором)
  *
  * @param pin Вказівник на дескриптор піна
  * @param state Стан піна (SET/RESET)
  * @return Servo_Status_t Статус виконання
  */
-Servo_Status_t HWD_GPIO_WritePin(const HWD_GPIO_Pin_t* pin, HWD_GPIO_PinState_t state);
+Servo_Status_t HWD_GPIO_WritePinDescriptor(const HWD_GPIO_Pin_t* pin, HWD_GPIO_PinState_t state);
 
 /**
  * @brief Читання значення з GPIO піна

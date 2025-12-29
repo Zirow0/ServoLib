@@ -7,11 +7,8 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "../../Inc/ctrl/time.h"
+#include "../../Inc/hwd/hwd_timer.h"
 #include <string.h>
-
-/* Private function prototypes -----------------------------------------------*/
-extern uint32_t HAL_GetTick(void);
-extern void HAL_Delay(uint32_t ms);
 
 /* Exported functions --------------------------------------------------------*/
 
@@ -24,7 +21,7 @@ Servo_Status_t Time_InitPeriodicTimer(Periodic_Timer_t* timer, uint32_t period_m
     memset(timer, 0, sizeof(Periodic_Timer_t));
 
     timer->period_ms = period_ms;
-    timer->last_time_ms = HAL_GetTick();
+    timer->last_time_ms = HWD_Timer_GetMillis();
     timer->is_running = true;
 
     return SERVO_OK;
@@ -36,7 +33,7 @@ bool Time_IsElapsed(Periodic_Timer_t* timer)
         return false;
     }
 
-    uint32_t current_time = HAL_GetTick();
+    uint32_t current_time = HWD_Timer_GetMillis();
     uint32_t elapsed = current_time - timer->last_time_ms;
 
     if (elapsed >= timer->period_ms) {
@@ -54,7 +51,7 @@ Servo_Status_t Time_ResetTimer(Periodic_Timer_t* timer)
         return SERVO_INVALID;
     }
 
-    timer->last_time_ms = HAL_GetTick();
+    timer->last_time_ms = HWD_Timer_GetMillis();
     timer->execution_count = 0;
 
     return SERVO_OK;
@@ -66,7 +63,7 @@ float Time_GetActualFrequency(const Periodic_Timer_t* timer)
         return 0.0f;
     }
 
-    uint32_t current_time = HAL_GetTick();
+    uint32_t current_time = HWD_Timer_GetMillis();
     uint32_t total_time = current_time - timer->last_time_ms +
                           (timer->execution_count * timer->period_ms);
 
@@ -162,7 +159,7 @@ Servo_Status_t Time_InitRateLimiter(Rate_Limiter_t* limiter, float max_rate)
     memset(limiter, 0, sizeof(Rate_Limiter_t));
 
     limiter->max_rate = max_rate;
-    limiter->last_time_ms = HAL_GetTick();
+    limiter->last_time_ms = HWD_Timer_GetMillis();
     limiter->is_initialized = true;
 
     return SERVO_OK;
@@ -174,7 +171,7 @@ float Time_ApplyRateLimit(Rate_Limiter_t* limiter, float target)
         return target;
     }
 
-    uint32_t current_time = HAL_GetTick();
+    uint32_t current_time = HWD_Timer_GetMillis();
     float dt = (float)(current_time - limiter->last_time_ms) / 1000.0f;
 
     if (dt <= 0.0f) {
@@ -206,29 +203,22 @@ float Time_ApplyRateLimit(Rate_Limiter_t* limiter, float target)
 
 void Time_DelayMs(uint32_t ms)
 {
-    HAL_Delay(ms);
+    HWD_Timer_DelayMs(ms);
 }
 
 void Time_DelayUs(uint32_t us)
 {
-    uint32_t start = Time_GetMicros();
-    while ((Time_GetMicros() - start) < us) {
-        // Активне очікування
-        __NOP();
-    }
+    HWD_Timer_DelayUs(us);
 }
 
 uint32_t Time_GetMillis(void)
 {
-    return HAL_GetTick();
+    return HWD_Timer_GetMillis();
 }
 
 uint32_t Time_GetMicros(void)
 {
-    // Припускаємо що TIM5 налаштований на 1 MHz (1 мкс на тік)
-    // Потребує що TIM5 був запущений через HAL_TIM_Base_Start(&htim5)
-    extern TIM_HandleTypeDef htim5;
-    return __HAL_TIM_GET_COUNTER(&htim5);
+    return HWD_Timer_GetMicros();
 }
 
 uint32_t Time_FreqToPeriod(float frequency)

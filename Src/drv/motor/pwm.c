@@ -6,6 +6,12 @@
  */
 
 /* Includes ------------------------------------------------------------------*/
+#include "board_config.h"
+
+/* Компілювати цей файл тільки для реального PWM драйвера,
+ * для емуляції використовується pwm_udp.c */
+#ifdef USE_MOTOR_PWM
+
 #include "../../../Inc/drv/motor/pwm.h"
 #include "../../../Inc/config.h"
 #include <string.h>
@@ -61,7 +67,7 @@ static Servo_Status_t ApplySingleChannelPWM(PWM_Motor_Driver_t* driver, float po
             dir_state = HWD_GPIO_PIN_SET;    // Зворотний хід
         }
 
-        HWD_GPIO_WritePin(&driver->gpio_dir_pin, dir_state);
+        HWD_GPIO_WritePinDescriptor(&driver->gpio_dir_pin, dir_state);
     }
 
     return SERVO_OK;
@@ -313,7 +319,7 @@ Servo_Status_t PWM_Motor_Create(PWM_Motor_Driver_t* driver,
         }
 
         // Встановлення початкового стану (прямий хід)
-        HWD_GPIO_WritePin(&driver->gpio_dir_pin, HWD_GPIO_PIN_RESET);
+        HWD_GPIO_WritePinDescriptor(&driver->gpio_dir_pin, HWD_GPIO_PIN_RESET);
     }
 
     // Налаштування інтерфейсу
@@ -387,3 +393,5 @@ Motor_Interface_t* PWM_Motor_GetInterface(PWM_Motor_Driver_t* driver)
     }
     return &driver->interface;
 }
+
+#endif /* USE_MOTOR_PWM */

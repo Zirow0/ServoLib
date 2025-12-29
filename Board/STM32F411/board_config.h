@@ -20,6 +20,16 @@ extern "C" {
 #include "../../Inc/core.h"  /* Використовуємо типи з core.h */
 
 /* Hardware Module Configuration ---------------------------------------------*/
+#define USE_REAL_HARDWARE   1        /**< Використовувати реальне апаратне забезпечення */
+
+/* Вибір драйверів для реального заліза */
+#define USE_MOTOR_PWM       1        /**< Використовувати реальний PWM драйвер */
+#define USE_BRAKE           1        /**< Використовувати реальний brake драйвер */
+
+/* Вимкнути UDP драйвери */
+#undef USE_MOTOR_PWM_UDP             /**< Не використовувати UDP драйвер двигуна */
+#undef USE_BRAKE_UDP                 /**< Не використовувати UDP драйвер гальм */
+
 /* #define USE_HWD_I2C */    /* I2C вимкнено - AS5600 не використовується */
 #define USE_HWD_SPI		     /* SPI увімкнено - для AEAT-9922 */
 
@@ -147,13 +157,22 @@ extern UART_HandleTypeDef huart1;
 
 /* System Configuration ------------------------------------------------------*/
 
-/** @brief Частота системного таймера (Hz) */
+/**
+ * @brief Частота системного таймера (Hz)
+ * @note Платформо-специфічне значення для STM32F411
+ */
 #define SYSTEM_CORE_CLOCK            100000000U  /* 100 MHz */
 
-/** @brief Частота APB1 шини (для TIM3) */
+/**
+ * @brief Частота APB1 шини (для TIM3)
+ * @note Використовується для розрахунку prescaler таймерів
+ */
 #define APB1_TIMER_CLOCK             100000000U  /* 100 MHz */
 
-/** @brief Частота APB2 шини */
+/**
+ * @brief Частота APB2 шини
+ * @note Використовується для розрахунку prescaler таймерів
+ */
 #define APB2_TIMER_CLOCK             100000000U  /* 100 MHz */
 
 /* Exported functions --------------------------------------------------------*/
