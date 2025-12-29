@@ -17,51 +17,14 @@
 #include <string.h>
 #include <math.h>
 
-/* Private function prototypes -----------------------------------------------*/
-static Servo_Status_t PWM_Motor_Init_Internal(Motor_Interface_t* self,
-                                               const Motor_Params_t* params);
-static Servo_Status_t PWM_Motor_DeInit_Internal(Motor_Interface_t* self);
-static Servo_Status_t PWM_Motor_SetCommand_Internal(Motor_Interface_t* self,
-                                                     const Motor_Command_t* cmd);
-static Servo_Status_t PWM_Motor_GetState_Internal(Motor_Interface_t* self,
-                                                   Motor_State_t* state);
-static Servo_Status_t PWM_Motor_GetStats_Internal(Motor_Interface_t* self,
-                                                   Motor_Stats_t* stats);
-static Servo_Status_t PWM_Motor_Update_Internal(Motor_Interface_t* self);
-
 /* Private functions ---------------------------------------------------------*/
 
 /**
- * @brief Конвертація драйвера з інтерфейсу
+ * @brief Конвертація вказівника на інтерфейс → драйвер
  */
-static inline PWM_Motor_Driver_t* GetDriver(Motor_Interface_t* self)
+static inline PWM_Motor_Driver_t* GetDriverFromInterface(Motor_Interface_t* iface)
 {
-    return (PWM_Motor_Driver_t*)self->driver_data;
-}
-
-/**
- * @brief Апаратна зупинка PWM (callback для Motor_Base_Stop)
- */
-static Servo_Status_t PWM_HardwareStop(void* driver_data)
-{
-    PWM_Motor_Driver_t* driver = (PWM_Motor_Driver_t*)driver_data;
-    if (driver == NULL) {
-        return SERVO_INVALID;
-    }
-
-    // Встановлення нульової потужності на PWM каналах
-    if (driver->config.pwm_fwd != NULL) {
-        HWD_PWM_SetDutyPercent(driver->config.pwm_fwd, 0.0f);
-    }
-
-    if (driver->config.pwm_bwd != NULL) {
-        HWD_PWM_SetDutyPercent(driver->config.pwm_bwd, 0.0f);
-    }
-
-    driver->current_duty_percent = 0.0f;
-    driver->is_braking = false;
-
-    return SERVO_OK;
+    return (PWM_Motor_Driver_t*)iface->driver_data;
 }
 
 /**
@@ -122,32 +85,28 @@ static Servo_Status_t ApplyDualChannelPWM(PWM_Motor_Driver_t* driver, float powe
     return SERVO_OK;
 }
 
-/* Interface implementation --------------------------------------------------*/
+/* Hardware callbacks --------------------------------------------------------*/
 
-static Servo_Status_t PWM_Motor_Init_Internal(Motor_Interface_t* self,
-                                               const Motor_Params_t* params)
+/**
+ * @brief Hardware Init - ініціалізація PWM каналів
+ */
+static Servo_Status_t PWM_HW_Init(void* driver_data, const Motor_Params_t* params)
 {
-    PWM_Motor_Driver_t* driver = GetDriver(self);
+    PWM_Motor_Driver_t* driver = (PWM_Motor_Driver_t*)driver_data;
     if (driver == NULL) {
         return SERVO_INVALID;
     }
 
-    // Ініціалізація базового драйвера
-    Servo_Status_t status = Motor_Base_Init(&driver->base, params);
-    if (status != SERVO_OK) {
-        return status;
-    }
-
     // Запуск PWM каналів
     if (driver->config.pwm_fwd != NULL) {
-        status = HWD_PWM_Start(driver->config.pwm_fwd);
+        Servo_Status_t status = HWD_PWM_Start(driver->config.pwm_fwd);
         if (status != SERVO_OK) {
             return status;
         }
     }
 
     if (driver->config.pwm_bwd != NULL) {
-        status = HWD_PWM_Start(driver->config.pwm_bwd);
+        Servo_Status_t status = HWD_PWM_Start(driver->config.pwm_bwd);
         if (status != SERVO_OK) {
             return status;
         }
@@ -159,24 +118,28 @@ static Servo_Status_t PWM_Motor_Init_Internal(Motor_Interface_t* self,
     return SERVO_OK;
 }
 
-static Servo_Status_t PWM_Motor_DeInit_Internal(Motor_Interface_t* self)
+/**
+ * @brief Hardware DeInit - деініціалізація PWM каналів
+ */
+static Servo_Status_t PWM_HW_DeInit(void* driver_data)
 {
-    PWM_Motor_Driver_t* driver = GetDriver(self);
+    PWM_Motor_Driver_t* driver = (PWM_Motor_Driver_t*)driver_data;
     if (driver == NULL) {
         return SERVO_INVALID;
     }
 
-    // Зупинка PWM
-    PWM_Motor_Stop_Internal(self);
+    // Зупинка PWM перед деініціалізацією
+    PWM_HW_Stop(driver_data);
 
-    // Деініціалізація базового драйвера
-    return Motor_Base_DeInit(&driver->base);
+    return SERVO_OK;
 }
 
-static Servo_Status_t PWM_Motor_SetCommand_Internal(Motor_Interface_t* self,
-                                                     const Motor_Command_t* cmd)
+/**
+ * @brief Hardware SetCommand - встановлення PWM сигналів
+ */
+static Servo_Status_t PWM_HW_SetCommand(void* driver_data, const Motor_Command_t* cmd, float processed_power)
 {
-    PWM_Motor_Driver_t* driver = GetDriver(self);
+    PWM_Motor_Driver_t* driver = (PWM_Motor_Driver_t*)driver_data;
     if (driver == NULL || cmd == NULL) {
         return SERVO_INVALID;
     }
@@ -186,65 +149,61 @@ static Servo_Status_t PWM_Motor_SetCommand_Internal(Motor_Interface_t* self,
         return SERVO_INVALID;
     }
 
-    float power = cmd->data.dc.power;
-
-    // Оновлення базової логіки
-    Servo_Status_t status = Motor_Base_SetPower(&driver->base, power);
-    if (status != SERVO_OK) {
-        return status;
-    }
-
     // Застосування PWM відповідно до типу керування
+    // processed_power вже оброблена Motor_Base (обмеження, інверсія, мертва зона)
+    Servo_Status_t status;
     switch (driver->config.type) {
         case PWM_MOTOR_TYPE_SINGLE_PWM_DIR:
-            status = ApplySingleChannelPWM(driver, driver->base.current_power);
+            status = ApplySingleChannelPWM(driver, processed_power);
             break;
 
         case PWM_MOTOR_TYPE_DUAL_PWM:
-            status = ApplyDualChannelPWM(driver, driver->base.current_power);
+            status = ApplyDualChannelPWM(driver, processed_power);
             break;
 
         default:
             return SERVO_ERROR;
     }
 
-    driver->current_duty_percent = fabsf(driver->base.current_power);
+    driver->current_duty_percent = fabsf(processed_power);
     driver->is_braking = false;
 
     return status;
 }
 
-static Servo_Status_t PWM_Motor_GetState_Internal(Motor_Interface_t* self,
-                                                   Motor_State_t* state)
+/**
+ * @brief Hardware Stop - зупинка PWM каналів
+ */
+static Servo_Status_t PWM_HW_Stop(void* driver_data)
 {
-    PWM_Motor_Driver_t* driver = GetDriver(self);
-    if (driver == NULL || state == NULL) {
+    PWM_Motor_Driver_t* driver = (PWM_Motor_Driver_t*)driver_data;
+    if (driver == NULL) {
         return SERVO_INVALID;
     }
 
-    *state = driver->base.state;
+    // Встановлення нульової потужності на PWM каналах
+    if (driver->config.pwm_fwd != NULL) {
+        HWD_PWM_SetDutyPercent(driver->config.pwm_fwd, 0.0f);
+    }
+
+    if (driver->config.pwm_bwd != NULL) {
+        HWD_PWM_SetDutyPercent(driver->config.pwm_bwd, 0.0f);
+    }
+
+    driver->current_duty_percent = 0.0f;
+    driver->is_braking = false;
+
     return SERVO_OK;
 }
 
-static Servo_Status_t PWM_Motor_GetStats_Internal(Motor_Interface_t* self,
-                                                   Motor_Stats_t* stats)
+/**
+ * @brief Hardware Update - оновлення апаратури (якщо потрібно)
+ */
+static Servo_Status_t PWM_HW_Update(void* driver_data)
 {
-    PWM_Motor_Driver_t* driver = GetDriver(self);
-    if (driver == NULL) {
-        return SERVO_INVALID;
-    }
-
-    return Motor_Base_GetStats(&driver->base, stats);
-}
-
-static Servo_Status_t PWM_Motor_Update_Internal(Motor_Interface_t* self)
-{
-    PWM_Motor_Driver_t* driver = GetDriver(self);
-    if (driver == NULL) {
-        return SERVO_INVALID;
-    }
-
-    return Motor_Base_Update(&driver->base);
+    // Для PWM драйвера оновлення апаратури не потрібне
+    (void)driver_data;
+    return SERVO_OK;
 }
 
 /* Exported functions --------------------------------------------------------*/
@@ -279,18 +238,15 @@ Servo_Status_t PWM_Motor_Create(PWM_Motor_Driver_t* driver,
         HWD_GPIO_WritePinDescriptor(&driver->gpio_dir_pin, HWD_GPIO_PIN_RESET);
     }
 
-    // Налаштування інтерфейсу
-    driver->interface.init = PWM_Motor_Init_Internal;
-    driver->interface.deinit = PWM_Motor_DeInit_Internal;
-    driver->interface.set_command = PWM_Motor_SetCommand_Internal;
-    driver->interface.stop = Motor_Base_Stop_Wrapper;
-    driver->interface.emergency_stop = Motor_Base_EmergencyStop_Wrapper;
-    driver->interface.get_state = PWM_Motor_GetState_Internal;
-    driver->interface.get_stats = PWM_Motor_GetStats_Internal;
-    driver->interface.update = PWM_Motor_Update_Internal;
+    // Налаштування hardware callbacks
+    driver->interface.hw.init = PWM_HW_Init;
+    driver->interface.hw.deinit = PWM_HW_DeInit;
+    driver->interface.hw.set_command = PWM_HW_SetCommand;
+    driver->interface.hw.stop = PWM_HW_Stop;
+    driver->interface.hw.update = PWM_HW_Update;
+
+    // Прив'язка driver_data до самого себе
     driver->interface.driver_data = driver;
-    driver->interface.base_data = &driver->base;
-    driver->interface.hardware_stop = PWM_HardwareStop;
 
     return SERVO_OK;
 }

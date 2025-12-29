@@ -17,8 +17,7 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 #include "../../core.h"
-#include "../../iface/motor.h"
-#include "./base.h"
+#include "../../drv/motor/motor.h"
 #include "../../hwd/hwd_pwm.h"
 #include "../../hwd/hwd_gpio.h"
 
@@ -45,10 +44,12 @@ typedef struct {
 
 /**
  * @brief Структура PWM драйвера двигуна
+ *
+ * Містить тільки апаратну специфіку (PWM, GPIO).
+ * Вся логіка (стан, потужність, статистика) в Motor_Interface_t.base
  */
 typedef struct {
-    Motor_Interface_t interface; /**< Інтерфейс двигуна */
-    Motor_Base_Data_t base;      /**< Базові дані */
+    Motor_Interface_t interface; /**< Інтерфейс двигуна (містить Motor_Base_Data_t) */
     PWM_Motor_Config_t config;   /**< Конфігурація PWM */
 
     HWD_GPIO_Pin_t gpio_dir_pin; /**< HWD дескриптор для GPIO напрямку */

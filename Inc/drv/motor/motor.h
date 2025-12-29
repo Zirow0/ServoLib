@@ -1,29 +1,29 @@
 /**
  * @file motor.h
- * @brief Абстрактний інтерфейс керування двигуном
+ * @brief Інтерфейс та базова реалізація драйвера двигуна
  * @author ServoCore Team
  * @date 2025
  *
- * Цей файл визначає незалежний від апаратного забезпечення інтерфейс
- * для керування будь-яким типом двигуна (DC, BLDC, stepper, тощо).
+ * Цей файл містить інтерфейс Motor_Interface_t та базову реалізацію
+ * з загальною логікою для всіх типів двигунів (DC, BLDC, Stepper).
  */
 
-#ifndef SERVOCORE_IFACE_MOTOR_H
-#define SERVOCORE_IFACE_MOTOR_H
+#ifndef SERVOCORE_DRV_MOTOR_MOTOR_H
+#define SERVOCORE_DRV_MOTOR_MOTOR_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* Includes ------------------------------------------------------------------*/
-#include "../core.h"
+#include "../../core.h"
 
 /* Exported types ------------------------------------------------------------*/
 
 /**
  * @brief Команда керування двигуном (універсальна)
  */
-typedef struct {
+struct Motor_Command {
     Motor_Type_t type;    /**< Тип команди */
 
     union {
@@ -45,132 +45,108 @@ typedef struct {
             float phase_c;  /**< Фаза C: -100.0 .. +100.0 */
         } bldc;
     } data;
-} Motor_Command_t;
+};
+
+typedef struct Motor_Command Motor_Command_t;
 
 /**
  * @brief Параметри двигуна
  */
-typedef struct {
+struct Motor_Params {
     Motor_Type_t type;           /**< Тип двигуна */
     float max_power;             /**< Максимальна потужність (%) */
     float min_power;             /**< Мінімальна потужність (%) */
     bool invert_direction;       /**< Інвертувати напрямок */
-} Motor_Params_t;
+};
+
+typedef struct Motor_Params Motor_Params_t;
 
 /**
  * @brief Статистика двигуна
  */
-typedef struct {
+struct Motor_Stats {
     uint32_t run_time_ms;        /**< Час роботи (мс) */
     uint32_t total_starts;       /**< Загальна кількість запусків */
     uint32_t error_count;        /**< Кількість помилок */
     float current_power;         /**< Поточна потужність (%) */
     Motor_State_t state;         /**< Поточний стан */
     Motor_Direction_t direction; /**< Напрямок обертання */
-} Motor_Stats_t;
+};
+
+typedef struct Motor_Stats Motor_Stats_t;
 
 /**
- * @brief Структура інтерфейсу двигуна
+ * @brief Hardware callbacks для драйвера мотора
  *
- * Ця структура визначає набір функцій-вказівників для роботи з двигуном.
- * Кожна конкретна реалізація драйвера повинна надати ці функції.
+ * Конкретний драйвер (PWM, BLDC, Stepper) надає ці функції
+ * для керування апаратною частиною.
  */
-typedef struct Motor_Interface Motor_Interface_t;
+typedef struct {
+    /** @brief Ініціалізація апаратури (PWM каналів, GPIO) */
+    Servo_Status_t (*init)(void* driver_data, const Motor_Params_t* params);
 
-struct Motor_Interface {
-    /**
-     * @brief Ініціалізація двигуна
-     * @param self Вказівник на інтерфейс
-     * @param params Параметри двигуна
-     * @return Servo_Status_t Статус виконання
-     */
-    Servo_Status_t (*init)(Motor_Interface_t* self, const Motor_Params_t* params);
+    /** @brief Деініціалізація апаратури */
+    Servo_Status_t (*deinit)(void* driver_data);
 
-    /**
-     * @brief Деініціалізація двигуна
-     * @param self Вказівник на інтерфейс
-     * @return Servo_Status_t Статус виконання
-     */
-    Servo_Status_t (*deinit)(Motor_Interface_t* self);
+    /** @brief Встановлення команди на апаратуру (PWM duty cycle) */
+    Servo_Status_t (*set_command)(void* driver_data, const Motor_Command_t* cmd, float processed_power);
 
-    /**
-     * @brief Встановлення команди керування (універсальна)
-     * @param self Вказівник на інтерфейс
-     * @param cmd Команда керування з union
-     * @return Servo_Status_t Статус виконання
-     */
-    Servo_Status_t (*set_command)(Motor_Interface_t* self, const Motor_Command_t* cmd);
+    /** @brief Зупинка апаратури (PWM = 0) */
+    Servo_Status_t (*stop)(void* driver_data);
 
-    /**
-     * @brief Зупинка двигуна
-     * @param self Вказівник на інтерфейс
-     * @return Servo_Status_t Статус виконання
-     */
-    Servo_Status_t (*stop)(Motor_Interface_t* self);
+    /** @brief Оновлення апаратури (якщо потрібно) */
+    Servo_Status_t (*update)(void* driver_data);
+} Motor_Hardware_Callbacks_t;
 
-    /**
-     * @brief Аварійна зупинка
-     * @param self Вказівник на інтерфейс
-     * @return Servo_Status_t Статус виконання
-     */
-    Servo_Status_t (*emergency_stop)(Motor_Interface_t* self);
+/**
+ * @brief Структура даних двигуна
+ */
+typedef struct Motor_Data Motor_Data_t;
 
-    /**
-     * @brief Отримання стану двигуна
-     * @param self Вказівник на інтерфейс
-     * @param state Вказівник для збереження стану
-     * @return Servo_Status_t Статус виконання
-     */
-    Servo_Status_t (*get_state)(Motor_Interface_t* self, Motor_State_t* state);
+struct Motor_Data {
+    Motor_Params_t params;           /**< Параметри двигуна */
+    Motor_Stats_t stats;             /**< Статистика роботи */
 
-    /**
-     * @brief Отримання статистики
-     * @param self Вказівник на інтерфейс
-     * @param stats Вказівник для збереження статистики
-     * @return Servo_Status_t Статус виконання
-     */
-    Servo_Status_t (*get_stats)(Motor_Interface_t* self, Motor_Stats_t* stats);
+    Motor_State_t state;             /**< Поточний стан */
+    float current_power;             /**< Поточна потужність (%) */
+    Motor_Direction_t direction;     /**< Напрямок обертання */
 
-    /**
-     * @brief Оновлення стану двигуна (викликається періодично)
-     * @param self Вказівник на інтерфейс
-     * @return Servo_Status_t Статус виконання
-     */
-    Servo_Status_t (*update)(Motor_Interface_t* self);
+    uint32_t start_time_ms;          /**< Час останнього запуску */
+    uint32_t last_update_ms;         /**< Час останнього оновлення */
 
-    /** @brief Вказівник на конкретну реалізацію драйвера */
-    void* driver_data;
+    bool is_initialized;             /**< Прапорець ініціалізації */
+    bool emergency_flag;             /**< Прапорець аварійного режиму */
 
-    /** @brief Вказівник на базові дані (для base.c функцій) */
-    void* base_data;
-
-    /** @brief Callback для апаратної зупинки (PWM, GPIO) */
-    Servo_Status_t (*hardware_stop)(void* driver_data);
+    Servo_Error_t last_error;        /**< Код останньої помилки */
 };
 
 /* Exported functions --------------------------------------------------------*/
 
 /**
- * @brief Ініціалізація двигуна
+ * @brief Ініціалізація базового драйвера двигуна
  *
- * @param motor Вказівник на інтерфейс двигуна
+ * Викликає hardware init callback та ініціалізує базові дані.
+ *
+ * @param motor Вказівник на Motor_Interface_t
  * @param params Параметри двигуна
  * @return Servo_Status_t Статус виконання
  */
 Servo_Status_t Motor_Init(Motor_Interface_t* motor, const Motor_Params_t* params);
 
 /**
- * @brief Деініціалізація двигуна
+ * @brief Деініціалізація базового драйвера
  *
- * @param motor Вказівник на інтерфейс двигуна
+ * @param motor Вказівник на Motor_Interface_t
  * @return Servo_Status_t Статус виконання
  */
 Servo_Status_t Motor_DeInit(Motor_Interface_t* motor);
 
 /**
- * @brief Встановлення команди керування (універсальна)
+ * @brief Встановлення команди керування
  *
- * @param motor Вказівник на інтерфейс двигуна
+ * Обробляє команду (обмеження, інверсія), викликає hardware callback.
+ *
+ * @param motor Вказівник на Motor_Interface_t
  * @param cmd Команда керування
  * @return Servo_Status_t Статус виконання
  */
@@ -179,7 +155,9 @@ Servo_Status_t Motor_SetCommand(Motor_Interface_t* motor, const Motor_Command_t*
 /**
  * @brief Зупинка двигуна
  *
- * @param motor Вказівник на інтерфейс двигуна
+ * Викликає hardware stop callback, встановлює стан IDLE.
+ *
+ * @param motor Вказівник на Motor_Interface_t
  * @return Servo_Status_t Статус виконання
  */
 Servo_Status_t Motor_Stop(Motor_Interface_t* motor);
@@ -187,7 +165,9 @@ Servo_Status_t Motor_Stop(Motor_Interface_t* motor);
 /**
  * @brief Аварійна зупинка двигуна
  *
- * @param motor Вказівник на інтерфейс двигуна
+ * Викликає hardware stop callback, встановлює emergency_flag та стан ERROR.
+ *
+ * @param motor Вказівник на Motor_Interface_t
  * @return Servo_Status_t Статус виконання
  */
 Servo_Status_t Motor_EmergencyStop(Motor_Interface_t* motor);
@@ -195,7 +175,7 @@ Servo_Status_t Motor_EmergencyStop(Motor_Interface_t* motor);
 /**
  * @brief Отримання стану двигуна
  *
- * @param motor Вказівник на інтерфейс двигуна
+ * @param motor Вказівник на Motor_Interface_t
  * @param state Вказівник для збереження стану
  * @return Servo_Status_t Статус виконання
  */
@@ -204,7 +184,7 @@ Servo_Status_t Motor_GetState(Motor_Interface_t* motor, Motor_State_t* state);
 /**
  * @brief Отримання статистики двигуна
  *
- * @param motor Вказівник на інтерфейс двигуна
+ * @param motor Вказівник на Motor_Interface_t
  * @param stats Вказівник для збереження статистики
  * @return Servo_Status_t Статус виконання
  */
@@ -213,10 +193,31 @@ Servo_Status_t Motor_GetStats(Motor_Interface_t* motor, Motor_Stats_t* stats);
 /**
  * @brief Оновлення стану двигуна
  *
- * @param motor Вказівник на інтерфейс двигуна
+ * Викликає hardware update callback, оновлює статистику.
+ *
+ * @param motor Вказівник на Motor_Interface_t
  * @return Servo_Status_t Статус виконання
  */
 Servo_Status_t Motor_Update(Motor_Interface_t* motor);
+
+/**
+ * @brief Структура інтерфейсу двигуна
+ *
+ * Містить Motor_Data_t для загальної логіки та hardware callbacks
+ * для апаратної специфіки. Драйвер надає тільки hardware callbacks.
+ */
+typedef struct Motor_Interface Motor_Interface_t;
+
+struct Motor_Interface {
+    /** @brief Дані двигуна (логіка, стан, статистика) */
+    Motor_Data_t data;
+
+    /** @brief Hardware callbacks від конкретного драйвера */
+    Motor_Hardware_Callbacks_t hw;
+
+    /** @brief Вказівник на конкретну реалізацію драйвера */
+    void* driver_data;
+};
 
 /* Wrapper функції для зручності -------------------------------------------*/
 
@@ -282,4 +283,4 @@ static inline Servo_Status_t Motor_SetPower_BLDC(Motor_Interface_t* motor,
 }
 #endif
 
-#endif /* SERVOCORE_IFACE_MOTOR_H */
+#endif /* SERVOCORE_DRV_MOTOR_MOTOR_H */
