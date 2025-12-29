@@ -13,12 +13,14 @@
 
 #include "hwd/hwd_eip_assembly.h"
 #include "hwd/hwd_eip_ds402.h"
+#include "hwd/hwd_timer.h"
 #include <string.h>
 
 /* OpENer includes */
 #include "opener_api.h"
 #include "appcontype.h"
 #include "cipidentity.h"
+#include "generic_networkhandler.h"
 
 /*******************************************************************************
  * PRIVATE VARIABLES
@@ -204,7 +206,7 @@ Servo_Status_t HWD_EIP_Update(HWD_EIP_Handle_t* handle) {
     }
 
     /* Process OpENer network events */
-    if (NetworkHandlerProcessOnce() != kEipStatusOk) {
+    if (NetworkHandlerProcessCyclic() != kEipStatusOk) {
         return SERVO_ERROR;
     }
 

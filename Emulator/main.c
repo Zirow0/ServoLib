@@ -27,6 +27,11 @@
 #include "../Inc/drv/sensor/sensor_udp.h"
 #include "udp_client.h"
 
+/* OpENer includes for EtherNet/IP support */
+#ifdef USE_HWD_EIP
+    #include "opener_api.h"
+#endif
+
 /* Private defines -----------------------------------------------------------*/
 #define SERVO_UPDATE_PERIOD_MS    5    // 200 Hz
 #define MAX_SIMULATION_TIME_S     60   // 60 секунд симуляції
@@ -401,3 +406,15 @@ static void CleanupSystem(void)
 
     printf("System cleanup completed\n");
 }
+
+/**
+ * @brief OpENer callback: Run/Idle state changed
+ * @param run_idle_value Run/Idle flag value (0 = Idle, 1 = Run)
+ * @note This callback is required by OpENer for EtherNet/IP support
+ */
+#ifdef USE_HWD_EIP
+void RunIdleChanged(EipUint32 run_idle_value) {
+    (void)run_idle_value; /* Not used in current implementation */
+    /* TODO: Implement Run/Idle state handling if needed */
+}
+#endif

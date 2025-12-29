@@ -60,8 +60,8 @@ if(MINGW)
     # Додаткові флаги для MinGW
     add_compile_options(-Wall -Wextra -Wpedantic)
 
-    # Бібліотека winsock2 для UDP на Windows
-    set(PLATFORM_LIBS ws2_32)
+    # Бібліотеки для Windows networking
+    set(PLATFORM_LIBS ws2_32 iphlpapi)
 
     # Визначення для Windows
     add_definitions(-D_WIN32_WINNT=0x0601)  # Windows 7+
@@ -78,6 +78,10 @@ add_compile_options(
 # Conditional compilation для EtherNet/IP або legacy UDP
 if(USE_HWD_EIP)
     add_compile_options(-DUSE_HWD_EIP=1)
+    # OpENer buffer size (must match OpENer's default)
+    add_definitions(-DPC_OPENER_ETHERNET_BUFFER_SIZE=512)
+    # OpENer RESTRICT keyword (required for MinGW)
+    add_definitions(-DRESTRICT=__restrict)
     message(STATUS "Using EtherNet/IP communication (OpENer)")
 else()
     add_compile_options(
