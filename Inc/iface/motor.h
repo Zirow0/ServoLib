@@ -140,6 +140,12 @@ struct Motor_Interface {
 
     /** @brief Вказівник на конкретну реалізацію драйвера */
     void* driver_data;
+
+    /** @brief Вказівник на базові дані (для base.c функцій) */
+    void* base_data;
+
+    /** @brief Callback для апаратної зупинки (PWM, GPIO) */
+    Servo_Status_t (*hardware_stop)(void* driver_data);
 };
 
 /* Exported functions --------------------------------------------------------*/

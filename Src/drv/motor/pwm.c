@@ -23,8 +23,6 @@ static Servo_Status_t PWM_Motor_Init_Internal(Motor_Interface_t* self,
 static Servo_Status_t PWM_Motor_DeInit_Internal(Motor_Interface_t* self);
 static Servo_Status_t PWM_Motor_SetCommand_Internal(Motor_Interface_t* self,
                                                      const Motor_Command_t* cmd);
-static Servo_Status_t PWM_Motor_Stop_Internal(Motor_Interface_t* self);
-static Servo_Status_t PWM_Motor_EmergencyStop_Internal(Motor_Interface_t* self);
 static Servo_Status_t PWM_Motor_GetState_Internal(Motor_Interface_t* self,
                                                    Motor_State_t* state);
 static Servo_Status_t PWM_Motor_GetStats_Internal(Motor_Interface_t* self,
@@ -39,6 +37,31 @@ static Servo_Status_t PWM_Motor_Update_Internal(Motor_Interface_t* self);
 static inline PWM_Motor_Driver_t* GetDriver(Motor_Interface_t* self)
 {
     return (PWM_Motor_Driver_t*)self->driver_data;
+}
+
+/**
+ * @brief Апаратна зупинка PWM (callback для Motor_Base_Stop)
+ */
+static Servo_Status_t PWM_HardwareStop(void* driver_data)
+{
+    PWM_Motor_Driver_t* driver = (PWM_Motor_Driver_t*)driver_data;
+    if (driver == NULL) {
+        return SERVO_INVALID;
+    }
+
+    // Встановлення нульової потужності на PWM каналах
+    if (driver->config.pwm_fwd != NULL) {
+        HWD_PWM_SetDutyPercent(driver->config.pwm_fwd, 0.0f);
+    }
+
+    if (driver->config.pwm_bwd != NULL) {
+        HWD_PWM_SetDutyPercent(driver->config.pwm_bwd, 0.0f);
+    }
+
+    driver->current_duty_percent = 0.0f;
+    driver->is_braking = false;
+
+    return SERVO_OK;
 }
 
 /**
@@ -191,49 +214,6 @@ static Servo_Status_t PWM_Motor_SetCommand_Internal(Motor_Interface_t* self,
     return status;
 }
 
-static Servo_Status_t PWM_Motor_Stop_Internal(Motor_Interface_t* self)
-{
-    PWM_Motor_Driver_t* driver = GetDriver(self);
-    if (driver == NULL) {
-        return SERVO_INVALID;
-    }
-
-    // Встановлення нульової потужності
-    if (driver->config.pwm_fwd != NULL) {
-        HWD_PWM_SetDutyPercent(driver->config.pwm_fwd, 0.0f);
-    }
-
-    if (driver->config.pwm_bwd != NULL) {
-        HWD_PWM_SetDutyPercent(driver->config.pwm_bwd, 0.0f);
-    }
-
-    driver->current_duty_percent = 0.0f;
-    driver->is_braking = false;
-
-    // Оновлення базового стану
-    Motor_Base_SetState(&driver->base, MOTOR_STATE_IDLE);
-    driver->base.current_power = 0.0f;
-
-    return SERVO_OK;
-}
-
-static Servo_Status_t PWM_Motor_EmergencyStop_Internal(Motor_Interface_t* self)
-{
-    PWM_Motor_Driver_t* driver = GetDriver(self);
-    if (driver == NULL) {
-        return SERVO_INVALID;
-    }
-
-    // Миттєва зупинка всіх каналів
-    PWM_Motor_Stop_Internal(self);
-
-    // Встановлення аварійного прапорця
-    driver->base.emergency_flag = true;
-    Motor_Base_SetState(&driver->base, MOTOR_STATE_ERROR);
-
-    return SERVO_OK;
-}
-
 static Servo_Status_t PWM_Motor_GetState_Internal(Motor_Interface_t* self,
                                                    Motor_State_t* state)
 {
@@ -303,12 +283,14 @@ Servo_Status_t PWM_Motor_Create(PWM_Motor_Driver_t* driver,
     driver->interface.init = PWM_Motor_Init_Internal;
     driver->interface.deinit = PWM_Motor_DeInit_Internal;
     driver->interface.set_command = PWM_Motor_SetCommand_Internal;
-    driver->interface.stop = PWM_Motor_Stop_Internal;
-    driver->interface.emergency_stop = PWM_Motor_EmergencyStop_Internal;
+    driver->interface.stop = Motor_Base_Stop_Wrapper;
+    driver->interface.emergency_stop = Motor_Base_EmergencyStop_Wrapper;
     driver->interface.get_state = PWM_Motor_GetState_Internal;
     driver->interface.get_stats = PWM_Motor_GetStats_Internal;
     driver->interface.update = PWM_Motor_Update_Internal;
     driver->interface.driver_data = driver;
+    driver->interface.base_data = &driver->base;
+    driver->interface.hardware_stop = PWM_HardwareStop;
 
     return SERVO_OK;
 }

@@ -77,6 +77,35 @@ Servo_Status_t Motor_Base_Update(Motor_Base_Data_t* base);
  */
 Servo_Status_t Motor_Base_SetPower(Motor_Base_Data_t* base, float power);
 
+/**
+ * @brief Зупинка двигуна
+ *
+ * Виконує логіку зупинки: скидання потужності, встановлення стану IDLE.
+ * Драйвер повинен викликати hardware_stop_cb для зупинки апаратури.
+ *
+ * @param base Вказівник на базову структуру
+ * @param hardware_stop_cb Callback для зупинки апаратної частини (PWM, GPIO)
+ * @param driver_data Вказівник на дані драйвера (передається в callback)
+ * @return Servo_Status_t Статус виконання
+ */
+Servo_Status_t Motor_Base_Stop(Motor_Base_Data_t* base,
+                                Servo_Status_t (*hardware_stop_cb)(void*),
+                                void* driver_data);
+
+/**
+ * @brief Аварійна зупинка двигуна
+ *
+ * Виконує аварійну зупинку: викликає hardware_stop_cb, встановлює emergency_flag,
+ * переводить у стан ERROR.
+ *
+ * @param base Вказівник на базову структуру
+ * @param hardware_stop_cb Callback для зупинки апаратної частини (PWM, GPIO)
+ * @param driver_data Вказівник на дані драйвера (передається в callback)
+ * @return Servo_Status_t Статус виконання
+ */
+Servo_Status_t Motor_Base_EmergencyStop(Motor_Base_Data_t* base,
+                                         Servo_Status_t (*hardware_stop_cb)(void*),
+                                         void* driver_data);
 
 /**
  * @brief Скидання помилки
@@ -103,6 +132,28 @@ Servo_Status_t Motor_Base_SetState(Motor_Base_Data_t* base, Motor_State_t state)
  * @return Servo_Status_t Статус виконання
  */
 Servo_Status_t Motor_Base_GetStats(Motor_Base_Data_t* base, Motor_Stats_t* stats);
+
+/**
+ * @brief Wrapper для зупинки через Motor_Interface_t
+ *
+ * Використовується драйверами для реєстрації в interface->stop.
+ * Викликає Motor_Base_Stop() з даними з інтерфейсу.
+ *
+ * @param self Вказівник на Motor_Interface_t
+ * @return Servo_Status_t Статус виконання
+ */
+Servo_Status_t Motor_Base_Stop_Wrapper(Motor_Interface_t* self);
+
+/**
+ * @brief Wrapper для аварійної зупинки через Motor_Interface_t
+ *
+ * Використовується драйверами для реєстрації в interface->emergency_stop.
+ * Викликає Motor_Base_EmergencyStop() з даними з інтерфейсу.
+ *
+ * @param self Вказівник на Motor_Interface_t
+ * @return Servo_Status_t Статус виконання
+ */
+Servo_Status_t Motor_Base_EmergencyStop_Wrapper(Motor_Interface_t* self);
 
 #ifdef __cplusplus
 }

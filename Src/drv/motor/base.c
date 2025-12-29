@@ -18,6 +18,7 @@
 
 /* Private functions ---------------------------------------------------------*/
 
+
 /* Exported functions --------------------------------------------------------*/
 
 Servo_Status_t Motor_Base_Init(Motor_Base_Data_t* base, const Motor_Params_t* params)
@@ -134,6 +135,52 @@ Servo_Status_t Motor_Base_SetPower(Motor_Base_Data_t* base, float power)
     return SERVO_OK;
 }
 
+Servo_Status_t Motor_Base_Stop(Motor_Base_Data_t* base,
+                                Servo_Status_t (*hardware_stop_cb)(void*),
+                                void* driver_data)
+{
+    if (base == NULL || !base->is_initialized) {
+        return SERVO_INVALID;
+    }
+
+    // Викликати апаратну зупинку (PWM, GPIO)
+    if (hardware_stop_cb != NULL) {
+        Servo_Status_t status = hardware_stop_cb(driver_data);
+        if (status != SERVO_OK) {
+            return status;
+        }
+    }
+
+    // Скидання базових даних
+    base->current_power = 0.0f;
+    base->state = MOTOR_STATE_IDLE;
+
+    return SERVO_OK;
+}
+
+Servo_Status_t Motor_Base_EmergencyStop(Motor_Base_Data_t* base,
+                                         Servo_Status_t (*hardware_stop_cb)(void*),
+                                         void* driver_data)
+{
+    if (base == NULL || !base->is_initialized) {
+        return SERVO_INVALID;
+    }
+
+    // Викликати апаратну зупинку (PWM, GPIO)
+    if (hardware_stop_cb != NULL) {
+        Servo_Status_t status = hardware_stop_cb(driver_data);
+        if (status != SERVO_OK) {
+            return status;
+        }
+    }
+
+    // Встановлення аварійного режиму
+    base->current_power = 0.0f;
+    base->emergency_flag = true;
+    base->state = MOTOR_STATE_ERROR;
+
+    return SERVO_OK;
+}
 
 Servo_Status_t Motor_Base_ClearError(Motor_Base_Data_t* base)
 {
@@ -177,6 +224,26 @@ Servo_Status_t Motor_Base_GetStats(Motor_Base_Data_t* base, Motor_Stats_t* stats
     stats->direction = base->direction;
 
     return SERVO_OK;
+}
+
+Servo_Status_t Motor_Base_Stop_Wrapper(Motor_Interface_t* self)
+{
+    if (self == NULL || self->base_data == NULL) {
+        return SERVO_INVALID;
+    }
+
+    Motor_Base_Data_t* base = (Motor_Base_Data_t*)self->base_data;
+    return Motor_Base_Stop(base, self->hardware_stop, self->driver_data);
+}
+
+Servo_Status_t Motor_Base_EmergencyStop_Wrapper(Motor_Interface_t* self)
+{
+    if (self == NULL || self->base_data == NULL) {
+        return SERVO_INVALID;
+    }
+
+    Motor_Base_Data_t* base = (Motor_Base_Data_t*)self->base_data;
+    return Motor_Base_EmergencyStop(base, self->hardware_stop, self->driver_data);
 }
 
 #endif /* USE_MOTOR_PWM || USE_MOTOR_PWM_UDP */
