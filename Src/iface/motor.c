@@ -47,24 +47,17 @@ Servo_Status_t Motor_DeInit(Motor_Interface_t* motor)
     return motor->deinit(motor);
 }
 
-Servo_Status_t Motor_SetPower(Motor_Interface_t* motor, float power)
+Servo_Status_t Motor_SetCommand(Motor_Interface_t* motor, const Motor_Command_t* cmd)
 {
-    if (!Motor_IsValid(motor)) {
+    if (!Motor_IsValid(motor) || cmd == NULL) {
         return SERVO_INVALID;
     }
 
-    if (motor->set_power == NULL) {
+    if (motor->set_command == NULL) {
         return SERVO_ERROR;
     }
 
-    // Обмеження потужності в діапазоні [-100, 100]
-    if (power > 100.0f) {
-        power = 100.0f;
-    } else if (power < -100.0f) {
-        power = -100.0f;
-    }
-
-    return motor->set_power(motor, power);
+    return motor->set_command(motor, cmd);
 }
 
 Servo_Status_t Motor_Stop(Motor_Interface_t* motor)

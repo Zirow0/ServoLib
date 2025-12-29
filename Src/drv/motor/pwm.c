@@ -21,8 +21,8 @@
 static Servo_Status_t PWM_Motor_Init_Internal(Motor_Interface_t* self,
                                                const Motor_Params_t* params);
 static Servo_Status_t PWM_Motor_DeInit_Internal(Motor_Interface_t* self);
-static Servo_Status_t PWM_Motor_SetPower_Internal(Motor_Interface_t* self,
-                                                   float power);
+static Servo_Status_t PWM_Motor_SetCommand_Internal(Motor_Interface_t* self,
+                                                     const Motor_Command_t* cmd);
 static Servo_Status_t PWM_Motor_Stop_Internal(Motor_Interface_t* self);
 static Servo_Status_t PWM_Motor_EmergencyStop_Internal(Motor_Interface_t* self);
 static Servo_Status_t PWM_Motor_SetDirection_Internal(Motor_Interface_t* self,
@@ -152,13 +152,20 @@ static Servo_Status_t PWM_Motor_DeInit_Internal(Motor_Interface_t* self)
     return Motor_Base_DeInit(&driver->base);
 }
 
-static Servo_Status_t PWM_Motor_SetPower_Internal(Motor_Interface_t* self,
-                                                   float power)
+static Servo_Status_t PWM_Motor_SetCommand_Internal(Motor_Interface_t* self,
+                                                     const Motor_Command_t* cmd)
 {
     PWM_Motor_Driver_t* driver = GetDriver(self);
-    if (driver == NULL) {
+    if (driver == NULL || cmd == NULL) {
         return SERVO_INVALID;
     }
+
+    // Перевірка типу команди - DC мотор приймає тільки DC команди
+    if (cmd->type != MOTOR_TYPE_DC_PWM) {
+        return SERVO_INVALID;
+    }
+
+    float power = cmd->data.dc.power;
 
     // Оновлення базової логіки
     Servo_Status_t status = Motor_Base_SetPower(&driver->base, power);
@@ -325,7 +332,7 @@ Servo_Status_t PWM_Motor_Create(PWM_Motor_Driver_t* driver,
     // Налаштування інтерфейсу
     driver->interface.init = PWM_Motor_Init_Internal;
     driver->interface.deinit = PWM_Motor_DeInit_Internal;
-    driver->interface.set_power = PWM_Motor_SetPower_Internal;
+    driver->interface.set_command = PWM_Motor_SetCommand_Internal;
     driver->interface.stop = PWM_Motor_Stop_Internal;
     driver->interface.emergency_stop = PWM_Motor_EmergencyStop_Internal;
     driver->interface.set_direction = PWM_Motor_SetDirection_Internal;
@@ -350,7 +357,7 @@ Servo_Status_t PWM_Motor_DeInit(PWM_Motor_Driver_t* driver)
 
 Servo_Status_t PWM_Motor_SetPower(PWM_Motor_Driver_t* driver, float power)
 {
-    return PWM_Motor_SetPower_Internal(&driver->interface, power);
+    return Motor_SetPower_DC(&driver->interface, power);
 }
 
 Servo_Status_t PWM_Motor_Stop(PWM_Motor_Driver_t* driver)
