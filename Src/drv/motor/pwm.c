@@ -313,47 +313,9 @@ Servo_Status_t PWM_Motor_Create(PWM_Motor_Driver_t* driver,
     return SERVO_OK;
 }
 
-Servo_Status_t PWM_Motor_Init(PWM_Motor_Driver_t* driver,
-                              const Motor_Params_t* params)
-{
-    return PWM_Motor_Init_Internal(&driver->interface, params);
-}
-
-Servo_Status_t PWM_Motor_DeInit(PWM_Motor_Driver_t* driver)
-{
-    return PWM_Motor_DeInit_Internal(&driver->interface);
-}
-
 Servo_Status_t PWM_Motor_SetPower(PWM_Motor_Driver_t* driver, float power)
 {
     return Motor_SetPower_DC(&driver->interface, power);
-}
-
-Servo_Status_t PWM_Motor_Stop(PWM_Motor_Driver_t* driver)
-{
-    return PWM_Motor_Stop_Internal(&driver->interface);
-}
-
-Servo_Status_t PWM_Motor_EmergencyStop(PWM_Motor_Driver_t* driver)
-{
-    return PWM_Motor_EmergencyStop_Internal(&driver->interface);
-}
-
-Servo_Status_t PWM_Motor_GetState(PWM_Motor_Driver_t* driver,
-                                  Motor_State_t* state)
-{
-    return PWM_Motor_GetState_Internal(&driver->interface, state);
-}
-
-Servo_Status_t PWM_Motor_GetStats(PWM_Motor_Driver_t* driver,
-                                  Motor_Stats_t* stats)
-{
-    return PWM_Motor_GetStats_Internal(&driver->interface, stats);
-}
-
-Servo_Status_t PWM_Motor_Update(PWM_Motor_Driver_t* driver)
-{
-    return PWM_Motor_Update_Internal(&driver->interface);
 }
 
 Motor_Interface_t* PWM_Motor_GetInterface(PWM_Motor_Driver_t* driver)

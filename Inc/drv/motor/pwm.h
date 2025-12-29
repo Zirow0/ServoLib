@@ -71,75 +71,16 @@ Servo_Status_t PWM_Motor_Create(PWM_Motor_Driver_t* driver,
                                 const PWM_Motor_Config_t* config);
 
 /**
- * @brief Ініціалізація PWM драйвера
- *
- * @param driver Вказівник на структуру драйвера
- * @param params Параметри двигуна
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t PWM_Motor_Init(PWM_Motor_Driver_t* driver,
-                              const Motor_Params_t* params);
-
-/**
- * @brief Деініціалізація PWM драйвера
- *
- * @param driver Вказівник на структуру драйвера
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t PWM_Motor_DeInit(PWM_Motor_Driver_t* driver);
-
-/**
  * @brief Встановлення потужності PWM двигуна
+ *
+ * Helper функція для зручного встановлення потужності DC мотора.
+ * Використовує Motor_SetPower_DC() для створення команди.
  *
  * @param driver Вказівник на структуру драйвера
  * @param power Потужність (-100.0 до +100.0)
  * @return Servo_Status_t Статус виконання
  */
 Servo_Status_t PWM_Motor_SetPower(PWM_Motor_Driver_t* driver, float power);
-
-/**
- * @brief Зупинка PWM двигуна
- *
- * @param driver Вказівник на структуру драйвера
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t PWM_Motor_Stop(PWM_Motor_Driver_t* driver);
-
-/**
- * @brief Аварійна зупинка PWM двигуна
- *
- * @param driver Вказівник на структуру драйвера
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t PWM_Motor_EmergencyStop(PWM_Motor_Driver_t* driver);
-
-/**
- * @brief Отримання стану двигуна
- *
- * @param driver Вказівник на структуру драйвера
- * @param state Вказівник для збереження стану
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t PWM_Motor_GetState(PWM_Motor_Driver_t* driver,
-                                  Motor_State_t* state);
-
-/**
- * @brief Отримання статистики двигуна
- *
- * @param driver Вказівник на структуру драйвера
- * @param stats Вказівник для збереження статистики
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t PWM_Motor_GetStats(PWM_Motor_Driver_t* driver,
-                                  Motor_Stats_t* stats);
-
-/**
- * @brief Оновлення стану PWM двигуна
- *
- * @param driver Вказівник на структуру драйвера
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t PWM_Motor_Update(PWM_Motor_Driver_t* driver);
 
 /**
  * @brief Отримання інтерфейсу двигуна
