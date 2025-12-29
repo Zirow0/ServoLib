@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-**ServoLib** is a modular, portable C library for controlling DC servo drives on STM32F4 platforms. The library is built on layered architecture principles with complete hardware abstraction, ensuring portability, testability, and scalability. It includes a PC emulation system via UDP for development and testing without hardware.
+**ServoLib** is a modular, portable C library for controlling DC servo drives on STM32F4 platforms. The library is built on layered architecture principles with complete hardware abstraction, ensuring portability, testability, and scalability.
 
 ## Build Commands
 
@@ -25,62 +25,8 @@ This library integrates with STM32CubeIDE projects:
 
 3. Build through STM32CubeIDE (Project → Build Project)
 
-### PC Emulation Build (CMake - Recommended)
-For emulation on PC (requires mathematical model running separately):
-
-**Option 1: Using build script (Windows MinGW):**
-```bash
-cd Emulator
-build.bat
-```
-
-**Option 2: CMake manually:**
-```bash
-cd Emulator
-mkdir build && cd build
-cmake -G "MinGW Makefiles" ..    # Windows MinGW
-# or
-cmake ..                          # Linux/Unix
-mingw32-make -j4                  # Windows
-# or
-make -j4                          # Linux
-```
-
-**Run:**
-```bash
-./ServoLib_Emulator.exe    # Windows
-./ServoLib_Emulator        # Linux
-```
-
-**Build variants:**
-```bash
-# Release (optimized)
-cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release ..
-
-# Debug (with symbols)
-cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Debug ..
-
-# Run through CMake
-mingw32-make run
-```
-
-See `Emulator/BUILD.md` for detailed build instructions and troubleshooting.
-
-**Common Build Issues:**
-
-1. **Missing hwd_udp.h** - UDP protocol header is in `Inc/hwd/hwd_udp.h` and contains all UDP message structures
-2. **Include path errors** - Driver .c files use relative paths from `Src/` (e.g., `#include "../../../Inc/drv/motor/pwm_udp.h"`)
-3. **Structure field mismatches** - Check that HWD implementations use correct field names from headers:
-   - `HWD_PWM_Handle_t` uses `is_running`, `current_duty`, not `active`, `initialized`
-   - Use `HWD_PWM_SetDutyPercent()` for float percentages, `HWD_PWM_SetDuty()` for uint32_t raw values
-   - GPIO operations: `HWD_GPIO_WritePinDescriptor()` for descriptors, `HWD_GPIO_WritePin()` for direct port/pin
-4. **Timer functions** - `HWD_Timer_DelayMs/Us` return `void`, not `Servo_Status_t`
-5. **Windows MinGW** - POSIX functions (clock_gettime, nanosleep) not available; use Windows equivalents or HWD abstractions
-
 ### Testing
-No automated test suite currently exists. Testing is done:
-- On real hardware with STM32F411CEU6 (BlackPill)
-- Via PC emulation with UDP connection to mathematical model
+Testing is done on real hardware with STM32F411CEU6 (BlackPill).
 
 ## Configuration System
 
@@ -199,10 +145,10 @@ Driver Layer (drv/)            ← PWM Motor, AS5600/AEAT-9922, Brake drivers
     ↓
 Hardware Driver Layer (hwd/)   ← PWM, I2C, SPI, GPIO, Timer abstractions
     ↓
-Platform Layer (Board/)        ← STM32F411 or PC_Emulation implementations
+Platform Layer (Board/)        ← STM32F411 implementations
 ```
 
-**Key principle:** Logic layers (ctrl/, iface/, drv/) are completely independent of hardware. Only the `Board/` directory knows about the specific platform (STM32 HAL or PC UDP sockets).
+**Key principle:** Logic layers (ctrl/, iface/, drv/) are completely independent of hardware. Only the `Board/` directory knows about the specific platform (STM32 HAL).
 
 ### Layer Responsibilities
 
@@ -221,13 +167,11 @@ Platform Layer (Board/)        ← STM32F411 or PC_Emulation implementations
 - `brake.h` - Brake interface (release, engage, notify_activity)
 
 **drv/** - Hardware drivers using HWD abstractions:
+- `drv/motor/motor.h` - Base motor driver with common logic
 - `drv/motor/pwm.c` - PWM DC motor driver (dual-channel H-bridge)
-- `drv/motor/pwm_udp.c` - UDP motor driver for PC emulation
 - `drv/sensor/as5600.c` - AS5600 12-bit magnetic encoder (I2C)
 - `drv/sensor/aeat9922.c` - AEAT-9922 18-bit magnetic encoder (SPI)
-- `drv/sensor/sensor_udp.c` - UDP sensor driver for PC emulation
 - `drv/brake/brake.c` - Electronic brake driver with fail-safe logic
-- `drv/brake/brake_udp.c` - UDP brake driver for PC emulation
 
 **hwd/** - Hardware abstraction layer (declarations only):
 - `hwd_pwm.h` - PWM abstraction
@@ -235,11 +179,9 @@ Platform Layer (Board/)        ← STM32F411 or PC_Emulation implementations
 - `hwd_spi.h` - SPI abstraction
 - `hwd_gpio.h` - GPIO abstraction
 - `hwd_timer.h` - Timer abstraction
-- `hwd_udp.h` - UDP abstraction (for PC emulation)
 
 **Board/** - Platform-specific implementations:
 - `Board/STM32F411/` - STM32F411 HAL implementations
-- `Board/PC_Emulation/` - PC emulation with UDP communications
 
 ### HWD Implementation Patterns
 
@@ -261,34 +203,6 @@ Servo_Status_t HWD_PWM_SetDutyPercent(HWD_PWM_Handle_t* handle, float percent);
 Servo_Status_t HWD_GPIO_WritePin(void* port, uint16_t pin, HWD_GPIO_PinState_t state);
 Servo_Status_t HWD_GPIO_WritePinDescriptor(const HWD_GPIO_Pin_t* pin, HWD_GPIO_PinState_t state);
 ```
-
-**PC_Emulation specifics:**
-- PWM is emulated by sending UDP motor commands with power values
-- GPIO operations are no-ops or simple state tracking
-- Timer functions use Windows `Sleep()` or POSIX `nanosleep()`
-- All sensor/motor/brake data comes from UDP messages
-
-## UDP Emulation System
-
-The PC emulation system communicates with a mathematical motor model via UDP:
-
-**Protocol:**
-- Emulator port: 8889 (local)
-- Model server port: 8888
-- Update frequency: 1 kHz (1ms period)
-- Timeout: 100ms
-
-**Message Types:**
-- `UDP_MSG_TYPE_MOTOR_CMD` - Motor command (power -100.0 to +100.0)
-- `UDP_MSG_TYPE_SENSOR_CMD` - Sensor data request
-- `UDP_MSG_TYPE_BRAKE_CMD` - Brake command (engage/release)
-- `UDP_MSG_TYPE_MOTOR_STATE` - Motor state from model
-- `UDP_MSG_TYPE_SENSOR_STATE` - Sensor data from model
-- `UDP_MSG_TYPE_BRAKE_STATE` - Brake state from model
-
-**Configuration:** `Board/PC_Emulation/board_config.h`
-
-The emulation allows full testing of control algorithms without real hardware.
 
 ## Development Guidelines
 
@@ -315,10 +229,8 @@ To port to another STM32 or platform:
 ### Conditional Compilation System
 
 **Driver Selection Macros** (`Board/*/board_config.h`):
-- `USE_MOTOR_PWM` - Enable real PWM motor driver (for STM32)
-- `USE_MOTOR_PWM_UDP` - Enable UDP motor driver (for PC emulation)
-- `USE_BRAKE` - Enable real brake driver (for STM32)
-- `USE_BRAKE_UDP` - Enable UDP brake driver (for PC emulation)
+- `USE_MOTOR_PWM` - Enable PWM motor driver
+- `USE_BRAKE` - Enable brake driver
 - `USE_SENSOR_AS5600` - Enable AS5600 I2C encoder
 - `USE_SENSOR_AEAT9922` - Enable AEAT-9922 SPI encoder
 
@@ -328,15 +240,6 @@ To port to another STM32 or platform:
 #define USE_REAL_HARDWARE   1
 #define USE_MOTOR_PWM       1
 #define USE_BRAKE           1
-#undef USE_MOTOR_PWM_UDP
-#undef USE_BRAKE_UDP
-
-// In board_config.h for PC_Emulation:
-#define USE_REAL_HARDWARE   0
-#define USE_MOTOR_PWM_UDP   1
-#define USE_BRAKE_UDP       1
-#undef USE_MOTOR_PWM
-#undef USE_BRAKE
 ```
 
 **Driver Implementation:**
@@ -344,16 +247,13 @@ Each driver file uses conditional compilation:
 ```c
 #include "board_config.h"
 #ifdef USE_MOTOR_PWM
-// Real hardware implementation
+// Hardware implementation
 #endif
 ```
-
-This allows CMake to compile all .c files while only building platform-specific code.
 
 ### File Organization
 - Headers in `Inc/` mirror implementations in `Src/`
 - Each driver has separate files for hardware (drv/) vs interface (iface/)
-- UDP variants have `_udp` suffix (e.g., `pwm_udp.c`, `brake_udp.c`)
 - All driver .c files use conditional compilation based on board_config.h macros
 
 ### Error Handling
@@ -416,7 +316,7 @@ Servo_Controller_t servo;
 // Configure and initialize motor
 PWM_Motor_Config_t motor_config = { /* ... */ };
 PWM_Motor_Create(&motor, &motor_config);
-PWM_Motor_Init(&motor, &motor_params);
+Motor_Init(&motor.interface, &motor_params);
 
 // Configure servo
 Servo_Config_t servo_config = {
@@ -431,38 +331,6 @@ Servo_Init(&servo, &servo_config, &motor.interface);
 while(1) {
     Servo_Update(&servo);  // Call at 1kHz
     HAL_Delay(1);
-}
-```
-
-### Initializing for PC Emulation
-```c
-#include "drv/motor/pwm_udp.h"
-#include "drv/brake/brake_udp.h"
-#include "drv/sensor/sensor_udp.h"
-
-PWM_Motor_UDP_Driver_t motor;
-Brake_UDP_Driver_t brake;
-Sensor_UDP_Driver_t sensor;
-Servo_Controller_t servo;
-
-// Initialize UDP drivers
-Sensor_UDP_Init(&sensor);
-PWM_Motor_UDP_Init(&motor, &motor_params);
-Brake_UDP_Init(&brake);
-
-// Initialize servo with UDP drivers
-Servo_InitWithBrake(&servo, &servo_config, &motor.interface, &brake.driver);
-
-// Main loop
-while(1) {
-    // Update all UDP drivers first
-    Sensor_UDP_Update(&sensor);
-    PWM_Motor_UDP_Update(&motor);
-    Brake_UDP_Update(&brake);
-
-    // Then update controller
-    Servo_Update(&servo);
-    Sleep(1);  // 1ms for 1kHz
 }
 ```
 
@@ -489,18 +357,14 @@ Servo_State_t state = Servo_GetState(&servo);
 - `Doc/technical_specifications.md` - Complete technical specifications
 - `Doc/BRAKE_DRIVER.md` - Brake system documentation
 - `Doc/AEAT-9922_DRIVER_GUIDE.md` - AEAT-9922 encoder guide
-- `Emulator/README.md` - Emulation system overview
-- `Emulator/BUILD.md` - **CMake build instructions for emulator**
-- `Emulator/ARCHITECTURE.md` - UDP protocol architecture
-- `Emulator/UDP_PROTOCOL.md` - UDP message format details
-- `Emulator/TESTING.md` - Testing procedures
+- `Doc/ARCHITECTURE_PLAN.md` - Motor driver architecture plan
 - `Templates/config_user_template.h` - **Configuration template with examples**
 - `Examples/` - Usage examples for motors and sensors
 
 ## Git Workflow
 
-Main branch: Not specified (currently using `simulation-dev`)
-Development happens on feature branches merged to `simulation-dev`
+Main branch: `master`
+Development happens on feature branches merged to `master`
 
 ## Important Notes
 
