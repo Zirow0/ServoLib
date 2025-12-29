@@ -135,9 +135,9 @@ static Servo_Status_t PWM_HW_DeInit(void* driver_data)
 }
 
 /**
- * @brief Hardware SetCommand - встановлення PWM сигналів
+ * @brief Hardware SetPower - встановлення PWM сигналів
  */
-static Servo_Status_t PWM_HW_SetCommand(void* driver_data, const Motor_Command_t* cmd, float processed_power)
+static Servo_Status_t PWM_HW_SetPower(void* driver_data, const Motor_Command_t* cmd, float processed_power)
 {
     PWM_Motor_Driver_t* driver = (PWM_Motor_Driver_t*)driver_data;
     if (driver == NULL || cmd == NULL) {
@@ -241,7 +241,7 @@ Servo_Status_t PWM_Motor_Create(PWM_Motor_Driver_t* driver,
     // Налаштування hardware callbacks
     driver->interface.hw.init = PWM_HW_Init;
     driver->interface.hw.deinit = PWM_HW_DeInit;
-    driver->interface.hw.set_command = PWM_HW_SetCommand;
+    driver->interface.hw.set_power = PWM_HW_SetPower;
     driver->interface.hw.stop = PWM_HW_Stop;
     driver->interface.hw.update = PWM_HW_Update;
 

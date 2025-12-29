@@ -88,8 +88,8 @@ typedef struct {
     /** @brief Деініціалізація апаратури */
     Servo_Status_t (*deinit)(void* driver_data);
 
-    /** @brief Встановлення команди на апаратуру (PWM duty cycle) */
-    Servo_Status_t (*set_command)(void* driver_data, const Motor_Command_t* cmd, float processed_power);
+    /** @brief Встановлення потужності на апаратуру (PWM duty cycle) */
+    Servo_Status_t (*set_power)(void* driver_data, const Motor_Command_t* cmd, float processed_power);
 
     /** @brief Зупинка апаратури (PWM = 0) */
     Servo_Status_t (*stop)(void* driver_data);
@@ -142,7 +142,7 @@ Servo_Status_t Motor_Init(Motor_Interface_t* motor, const Motor_Params_t* params
 Servo_Status_t Motor_DeInit(Motor_Interface_t* motor);
 
 /**
- * @brief Встановлення команди керування
+ * @brief Встановлення потужності двигуна
  *
  * Обробляє команду (обмеження, інверсія), викликає hardware callback.
  *
@@ -150,7 +150,7 @@ Servo_Status_t Motor_DeInit(Motor_Interface_t* motor);
  * @param cmd Команда керування
  * @return Servo_Status_t Статус виконання
  */
-Servo_Status_t Motor_SetCommand(Motor_Interface_t* motor, const Motor_Command_t* cmd);
+Servo_Status_t Motor_SetPower(Motor_Interface_t* motor, const Motor_Command_t* cmd);
 
 /**
  * @brief Зупинка двигуна
@@ -234,7 +234,7 @@ static inline Servo_Status_t Motor_SetPower_DC(Motor_Interface_t* motor, float p
         .type = MOTOR_TYPE_DC_PWM,
         .data.dc.power = power
     };
-    return Motor_SetCommand(motor, &cmd);
+    return Motor_SetPower(motor, &cmd);
 }
 
 /**
@@ -253,7 +253,7 @@ static inline Servo_Status_t Motor_SetPower_Stepper(Motor_Interface_t* motor,
         .data.stepper.phase_a = phase_a,
         .data.stepper.phase_b = phase_b
     };
-    return Motor_SetCommand(motor, &cmd);
+    return Motor_SetPower(motor, &cmd);
 }
 
 /**
@@ -276,7 +276,7 @@ static inline Servo_Status_t Motor_SetPower_BLDC(Motor_Interface_t* motor,
         .data.bldc.phase_b = phase_b,
         .data.bldc.phase_c = phase_c
     };
-    return Motor_SetCommand(motor, &cmd);
+    return Motor_SetPower(motor, &cmd);
 }
 
 #ifdef __cplusplus

@@ -140,7 +140,7 @@ Servo_Status_t Motor_DeInit(Motor_Interface_t* motor)
     return SERVO_OK;
 }
 
-Servo_Status_t Motor_SetCommand(Motor_Interface_t* motor, const Motor_Command_t* cmd)
+Servo_Status_t Motor_SetPower(Motor_Interface_t* motor, const Motor_Command_t* cmd)
 {
     if (motor == NULL || cmd == NULL) {
         return SERVO_INVALID;
@@ -176,9 +176,9 @@ Servo_Status_t Motor_SetCommand(Motor_Interface_t* motor, const Motor_Command_t*
     // Обробка потужності (обмеження, інверсія, мертва зона)
     float processed_power = ProcessPower(data, power);
 
-    // Викликати hardware set_command callback з обробленою потужністю
-    if (motor->hw.set_command != NULL) {
-        Servo_Status_t status = motor->hw.set_command(motor->driver_data, cmd, processed_power);
+    // Викликати hardware set_power callback з обробленою потужністю
+    if (motor->hw.set_power != NULL) {
+        Servo_Status_t status = motor->hw.set_power(motor->driver_data, cmd, processed_power);
         if (status != SERVO_OK) {
             return status;
         }
