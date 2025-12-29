@@ -16,7 +16,7 @@
  */
 static inline bool Motor_IsValid(const Motor_Interface_t* motor)
 {
-    return (motor != NULL) && (motor->init != NULL);
+    return (motor != NULL);
 }
 
 /* Exported functions --------------------------------------------------------*/
