@@ -61,7 +61,8 @@ typedef struct {
 /**
  * @brief Створення PWM драйвера двигуна
  *
- * Ініціалізує структуру інтерфейсу з функціями PWM драйвера
+ * Ініціалізує структуру інтерфейсу з функціями PWM драйвера.
+ * Після створення використовуйте &driver->interface для доступу до Motor_Interface_t.
  *
  * @param driver Вказівник на структуру драйвера
  * @param config Вказівник на конфігурацію PWM
@@ -69,26 +70,6 @@ typedef struct {
  */
 Servo_Status_t PWM_Motor_Create(PWM_Motor_Driver_t* driver,
                                 const PWM_Motor_Config_t* config);
-
-/**
- * @brief Встановлення потужності PWM двигуна
- *
- * Helper функція для зручного встановлення потужності DC мотора.
- * Використовує Motor_SetPower_DC() для створення команди.
- *
- * @param driver Вказівник на структуру драйвера
- * @param power Потужність (-100.0 до +100.0)
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t PWM_Motor_SetPower(PWM_Motor_Driver_t* driver, float power);
-
-/**
- * @brief Отримання інтерфейсу двигуна
- *
- * @param driver Вказівник на структуру драйвера
- * @return Motor_Interface_t* Вказівник на інтерфейс
- */
-Motor_Interface_t* PWM_Motor_GetInterface(PWM_Motor_Driver_t* driver);
 
 #ifdef __cplusplus
 }

@@ -313,17 +313,4 @@ Servo_Status_t PWM_Motor_Create(PWM_Motor_Driver_t* driver,
     return SERVO_OK;
 }
 
-Servo_Status_t PWM_Motor_SetPower(PWM_Motor_Driver_t* driver, float power)
-{
-    return Motor_SetPower_DC(&driver->interface, power);
-}
-
-Motor_Interface_t* PWM_Motor_GetInterface(PWM_Motor_Driver_t* driver)
-{
-    if (driver == NULL) {
-        return NULL;
-    }
-    return &driver->interface;
-}
-
 #endif /* USE_MOTOR_PWM */
