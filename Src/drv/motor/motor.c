@@ -8,8 +8,8 @@
 /* Includes ------------------------------------------------------------------*/
 #include "board_config.h"
 
-/* Компілювати цей файл для PWM або PWM_UDP драйверів */
-#if defined(USE_MOTOR_PWM) || defined(USE_MOTOR_PWM_UDP)
+/* Компілювати цей файл для PWM драйвера */
+#ifdef USE_MOTOR_PWM
 
 #include "../../../Inc/drv/motor/motor.h"
 #include "../../../Inc/iface/motor.h"
@@ -317,4 +317,4 @@ Servo_Status_t Motor_Update(Motor_Interface_t* motor)
     return SERVO_OK;
 }
 
-#endif /* USE_MOTOR_PWM || USE_MOTOR_PWM_UDP */
+#endif /* USE_MOTOR_PWM */

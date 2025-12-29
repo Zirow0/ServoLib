@@ -22,13 +22,9 @@ extern "C" {
 /* Hardware Module Configuration ---------------------------------------------*/
 #define USE_REAL_HARDWARE   1        /**< Використовувати реальне апаратне забезпечення */
 
-/* Вибір драйверів для реального заліза */
-#define USE_MOTOR_PWM       1        /**< Використовувати реальний PWM драйвер */
-#define USE_BRAKE           1        /**< Використовувати реальний brake драйвер */
-
-/* Вимкнути UDP драйвери */
-#undef USE_MOTOR_PWM_UDP             /**< Не використовувати UDP драйвер двигуна */
-#undef USE_BRAKE_UDP                 /**< Не використовувати UDP драйвер гальм */
+/* Вибір драйверів */
+#define USE_MOTOR_PWM       1        /**< Використовувати PWM драйвер двигуна */
+#define USE_BRAKE           1        /**< Використовувати brake драйвер */
 
 /* #define USE_HWD_I2C */    /* I2C вимкнено - AS5600 не використовується */
 #define USE_HWD_SPI		     /* SPI увімкнено - для AEAT-9922 */
