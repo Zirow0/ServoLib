@@ -87,19 +87,6 @@ Servo_Status_t Motor_EmergencyStop(Motor_Interface_t* motor)
     return motor->emergency_stop(motor);
 }
 
-Servo_Status_t Motor_SetDirection(Motor_Interface_t* motor, Motor_Direction_t direction)
-{
-    if (!Motor_IsValid(motor)) {
-        return SERVO_INVALID;
-    }
-
-    if (motor->set_direction == NULL) {
-        return SERVO_ERROR;
-    }
-
-    return motor->set_direction(motor, direction);
-}
-
 Servo_Status_t Motor_GetState(Motor_Interface_t* motor, Motor_State_t* state)
 {
     if (!Motor_IsValid(motor) || state == NULL) {

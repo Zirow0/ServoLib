@@ -116,14 +116,6 @@ struct Motor_Interface {
     Servo_Status_t (*emergency_stop)(Motor_Interface_t* self);
 
     /**
-     * @brief Встановлення напрямку обертання
-     * @param self Вказівник на інтерфейс
-     * @param direction Напрямок обертання
-     * @return Servo_Status_t Статус виконання
-     */
-    Servo_Status_t (*set_direction)(Motor_Interface_t* self, Motor_Direction_t direction);
-
-    /**
      * @brief Отримання стану двигуна
      * @param self Вказівник на інтерфейс
      * @param state Вказівник для збереження стану
@@ -193,15 +185,6 @@ Servo_Status_t Motor_Stop(Motor_Interface_t* motor);
  * @return Servo_Status_t Статус виконання
  */
 Servo_Status_t Motor_EmergencyStop(Motor_Interface_t* motor);
-
-/**
- * @brief Встановлення напрямку обертання
- *
- * @param motor Вказівник на інтерфейс двигуна
- * @param direction Напрямок обертання
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t Motor_SetDirection(Motor_Interface_t* motor, Motor_Direction_t direction);
 
 /**
  * @brief Отримання стану двигуна

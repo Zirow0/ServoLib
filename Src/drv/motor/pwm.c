@@ -25,8 +25,6 @@ static Servo_Status_t PWM_Motor_SetCommand_Internal(Motor_Interface_t* self,
                                                      const Motor_Command_t* cmd);
 static Servo_Status_t PWM_Motor_Stop_Internal(Motor_Interface_t* self);
 static Servo_Status_t PWM_Motor_EmergencyStop_Internal(Motor_Interface_t* self);
-static Servo_Status_t PWM_Motor_SetDirection_Internal(Motor_Interface_t* self,
-                                                       Motor_Direction_t direction);
 static Servo_Status_t PWM_Motor_GetState_Internal(Motor_Interface_t* self,
                                                    Motor_State_t* state);
 static Servo_Status_t PWM_Motor_GetStats_Internal(Motor_Interface_t* self,
@@ -183,11 +181,6 @@ static Servo_Status_t PWM_Motor_SetCommand_Internal(Motor_Interface_t* self,
             status = ApplyDualChannelPWM(driver, driver->base.current_power);
             break;
 
-        case PWM_MOTOR_TYPE_SIGN_MAGNITUDE:
-            // TODO: Реалізувати sign-magnitude режим
-            status = ApplySingleChannelPWM(driver, driver->base.current_power);
-            break;
-
         default:
             return SERVO_ERROR;
     }
@@ -237,29 +230,6 @@ static Servo_Status_t PWM_Motor_EmergencyStop_Internal(Motor_Interface_t* self)
     // Встановлення аварійного прапорця
     driver->base.emergency_flag = true;
     Motor_Base_SetState(&driver->base, MOTOR_STATE_ERROR);
-
-    return SERVO_OK;
-}
-
-static Servo_Status_t PWM_Motor_SetDirection_Internal(Motor_Interface_t* self,
-                                                       Motor_Direction_t direction)
-{
-    PWM_Motor_Driver_t* driver = GetDriver(self);
-    if (driver == NULL) {
-        return SERVO_INVALID;
-    }
-
-    driver->base.direction = direction;
-
-    // Для гальмування встановлюємо обидва канали в HIGH (короткое замикання)
-    if (direction == MOTOR_DIR_BRAKE) {
-        if (driver->config.pwm_fwd != NULL && driver->config.pwm_bwd != NULL) {
-            HWD_PWM_SetDutyPercent(driver->config.pwm_fwd, 100.0f);
-            HWD_PWM_SetDutyPercent(driver->config.pwm_bwd, 100.0f);
-            driver->is_braking = true;
-            Motor_Base_SetState(&driver->base, MOTOR_STATE_BRAKING);
-        }
-    }
 
     return SERVO_OK;
 }
@@ -335,7 +305,6 @@ Servo_Status_t PWM_Motor_Create(PWM_Motor_Driver_t* driver,
     driver->interface.set_command = PWM_Motor_SetCommand_Internal;
     driver->interface.stop = PWM_Motor_Stop_Internal;
     driver->interface.emergency_stop = PWM_Motor_EmergencyStop_Internal;
-    driver->interface.set_direction = PWM_Motor_SetDirection_Internal;
     driver->interface.get_state = PWM_Motor_GetState_Internal;
     driver->interface.get_stats = PWM_Motor_GetStats_Internal;
     driver->interface.update = PWM_Motor_Update_Internal;
@@ -368,12 +337,6 @@ Servo_Status_t PWM_Motor_Stop(PWM_Motor_Driver_t* driver)
 Servo_Status_t PWM_Motor_EmergencyStop(PWM_Motor_Driver_t* driver)
 {
     return PWM_Motor_EmergencyStop_Internal(&driver->interface);
-}
-
-Servo_Status_t PWM_Motor_SetDirection(PWM_Motor_Driver_t* driver,
-                                      Motor_Direction_t direction)
-{
-    return PWM_Motor_SetDirection_Internal(&driver->interface, direction);
 }
 
 Servo_Status_t PWM_Motor_GetState(PWM_Motor_Driver_t* driver,

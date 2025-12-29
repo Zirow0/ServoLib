@@ -29,9 +29,7 @@ extern "C" {
  */
 typedef enum {
     PWM_MOTOR_TYPE_SINGLE_PWM_DIR = 0,  /**< Один PWM + GPIO напрямок */
-    PWM_MOTOR_TYPE_DUAL_PWM       = 1,  /**< Два PWM каналу (H-bridge) */
-    PWM_MOTOR_DUAL_PWM            = 1,  /**< Два PWM каналу (alias) */
-    PWM_MOTOR_TYPE_SIGN_MAGNITUDE = 2   /**< PWM + знак */
+    PWM_MOTOR_TYPE_DUAL_PWM       = 1   /**< Два PWM каналу (H-bridge) */
 } PWM_Motor_Type_t;
 
 /**
@@ -114,16 +112,6 @@ Servo_Status_t PWM_Motor_Stop(PWM_Motor_Driver_t* driver);
  * @return Servo_Status_t Статус виконання
  */
 Servo_Status_t PWM_Motor_EmergencyStop(PWM_Motor_Driver_t* driver);
-
-/**
- * @brief Встановлення напрямку обертання
- *
- * @param driver Вказівник на структуру драйвера
- * @param direction Напрямок обертання
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t PWM_Motor_SetDirection(PWM_Motor_Driver_t* driver,
-                                      Motor_Direction_t direction);
 
 /**
  * @brief Отримання стану двигуна
