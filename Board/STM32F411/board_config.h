@@ -27,8 +27,9 @@ extern "C" {
 #define USE_BRAKE           1        /**< Використовувати brake драйвер */
 
 /* #define USE_HWD_I2C */    /* I2C вимкнено - AS5600 не використовується */
-#define USE_HWD_SPI		     /* SPI увімкнено - для AEAT-9922 */
+#define USE_HWD_SPI          /* SPI увімкнено - для AEAT-9922 */
 
+#define USE_SENSOR_POSITION  /* Універсальний інтерфейс position sensor */
 #define USE_SENSOR_AEAT9922  /* увімкнено AEAT-9922 */
 
 /* Forward declarations ------------------------------------------------------*/

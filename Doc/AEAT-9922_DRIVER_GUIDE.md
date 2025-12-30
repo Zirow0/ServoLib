@@ -524,10 +524,10 @@ void AEAT9922_IndexPulseCallback(AEAT9922_Driver_t* driver);
 #endif // DRV_AEAT9922_H
 ```
 
-#### `Src/drv/sensor/aeat9922.c`
+#### `Src/drv/position/aeat9922.c`
 
 ```c
-#include "drv/sensor/aeat9922.h"
+#include "drv/position/aeat9922.h"
 #include "hwd/hwd_timer.h"
 #include "util/math.h"
 #include <string.h>
@@ -1004,7 +1004,7 @@ static float aeat9922_position_to_degrees(uint32_t position, AEAT9922_Abs_Resolu
 ### 6.1 Базовий приклад (тільки SPI)
 
 ```c
-#include "drv/sensor/aeat9922.h"
+#include "drv/position/aeat9922.h"
 #include "Board/STM32F411/board_config.h"
 
 // Глобальні змінні
@@ -1086,7 +1086,7 @@ void Encoder_Example_Loop(void)
 ### 6.2 Повний приклад (SPI + інкрементальний вихід)
 
 ```c
-#include "drv/sensor/aeat9922.h"
+#include "drv/position/aeat9922.h"
 #include "Board/STM32F411/board_config.h"
 
 // Глобальні змінні
@@ -1152,7 +1152,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 ```c
 #include "ctrl/servo.h"
 #include "drv/motor/pwm.h"
-#include "drv/sensor/aeat9922.h"
+#include "drv/position/aeat9922.h"
 
 // Глобальні змінні
 Servo_Controller_t servo;

@@ -10,7 +10,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "drv/sensor/aeat9922.h"
+#include "drv/position/aeat9922.h"
 #include "Board/STM32F411/board_config.h"
 #include <stdio.h>
 

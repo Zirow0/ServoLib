@@ -17,7 +17,7 @@
 ### Мінімальний код
 
 ```c
-#include "drv/sensor/aeat9922.h"
+#include "drv/position/aeat9922.h"
 
 extern SPI_HandleTypeDef hspi1;
 AEAT9922_Driver_t encoder;
