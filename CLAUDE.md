@@ -174,10 +174,14 @@ Platform Layer (Board/)        ← STM32F411 implementations
   - Provides hardware callbacks for `Motor_Interface_t`
   - Supports single-channel (PWM+DIR) and dual-channel (H-bridge) modes
   - Create with `PWM_Motor_Create()`, then use `&driver->interface` for motor operations
-- `drv/position/position.h` - **Position sensor interface** (read_angle, get_velocity, calibrate)
-  - Universal interface for all position sensors (magnetic encoders, absolute encoders, etc.)
-  - Contains `Sensor_Interface_t` with callback functions pattern
+- `drv/position/position.h` - **Universal position sensor interface with hardware callbacks**
+  - Contains `Position_Sensor_Interface_t` with base logic (velocity, multi-turn, prediction) and hardware callbacks
+  - Universal interface for all position sensors (magnetic encoders, absolute encoders, SSI, etc.)
+  - Base functions: `Position_Sensor_Init()`, `Position_Sensor_Update()`, `Position_Sensor_GetPosition()`, `Position_Sensor_GetVelocity()`
+  - Advanced features: multi-turn tracking, prediction (extrapolation), zero calibration
 - `drv/position/aeat9922.c` - AEAT-9922 18-bit magnetic encoder (SPI) - **Currently enabled**
+  - Provides hardware callbacks for `Position_Sensor_Interface_t`
+  - Create with `AEAT9922_Create()`, then use `&driver->interface` for sensor operations
 - `drv/position/as5600.c` - AS5600 12-bit magnetic encoder (I2C) - Currently disabled
 - `drv/brake/brake.c` - Electronic brake driver with fail-safe logic
 
@@ -473,6 +477,194 @@ PWM_Motor_Config_t pwm_config = {
     .gpio_pin = GPIO_PIN_8                  // Direction pin
 };
 PWM_Motor_Create(&motor_driver, &pwm_config);
+```
+
+## Position Sensor Architecture (After Refactoring)
+
+### Key Concepts
+
+**Separation of Concerns:**
+- **Position_Sensor_Interface_t** (`drv/position/position.h`) - Universal interface containing:
+  - `Position_Sensor_Data_t data` - Common logic: position, velocity, multi-turn tracking, prediction
+  - `Position_Sensor_HW_Callbacks_t hw` - Hardware-specific callbacks (SPI/I2C read)
+  - `void* driver_data` - Pointer to specific driver (e.g., `AEAT9922_Driver_t`)
+
+- **Specific Driver** (e.g., `AEAT9922_Driver_t` in `drv/position/aeat9922.h`) - Contains:
+  - `Position_Sensor_Interface_t interface` - The universal interface (FIRST field!)
+  - Hardware-specific configuration (SPI config, status registers)
+  - Provides hardware callbacks to the interface
+
+**Hardware Callbacks Pattern:**
+```c
+// AEAT9922 driver provides these callbacks
+Position_Sensor_HW_Callbacks_t hw = {
+    .init = AEAT9922_HW_Init,          // Initialize SPI
+    .deinit = AEAT9922_HW_DeInit,      // Deinitialize
+    .read_raw = AEAT9922_HW_ReadRaw,   // Read raw position (NO conversion!)
+    .calibrate = AEAT9922_HW_Calibrate // Zero calibration
+};
+```
+
+**Key Principle:**
+- **Drivers read ONLY raw data** (e.g., 0-262143 for 18-bit encoder)
+- **position.c does ALL processing:** raw→degrees, velocity calculation, multi-turn tracking, prediction
+
+### Util Modules
+
+**util/derivative.c** - Velocity calculation:
+```c
+float velocity = Derivative_CalculateVelocity(
+    current_angle, last_angle,
+    current_time_us, last_time_us
+);
+```
+
+**util/prediction.c** - Position extrapolation between updates:
+```c
+float predicted = Prediction_GetCurrentPosition(
+    last_position, velocity,
+    last_time_us, current_time_us
+);
+```
+
+### Common Patterns
+
+#### 1. Creating and Initializing AEAT9922 Sensor
+```c
+#include "drv/position/position.h"
+#include "drv/position/aeat9922.h"
+
+AEAT9922_Driver_t encoder_driver;
+
+// Step 1: Create AEAT9922 driver (sets up hardware callbacks)
+AEAT9922_Config_t encoder_config = {
+    .spi_config = { /* SPI settings */ },
+    .msel_port = GPIOA,
+    .msel_pin = GPIO_PIN_4,
+    .abs_resolution = AEAT9922_ABS_RES_18BIT,  // 262144 counts/rev
+    .incremental_cpr = 1024,
+    .interface_mode = AEAT9922_INTERFACE_SPI4_24BIT,
+    .direction_ccw = false,
+    .enable_incremental = false
+};
+AEAT9922_Create(&encoder_driver, &encoder_config);
+
+// Step 2: Initialize position sensor interface (calls hw.init callback)
+Position_Params_t sensor_params = {
+    .type = SENSOR_TYPE_AEAT9922,
+    .resolution_bits = 18,
+    .min_angle = 0.0f,
+    .max_angle = 360.0f,
+    .update_rate = 1000  // 1 kHz
+};
+Position_Sensor_Init(&encoder_driver.interface, &sensor_params);
+
+// Step 3: Use in control loop
+while(1) {
+    // Update sensor (reads raw SPI data, calculates position/velocity/prediction)
+    Position_Sensor_Update(&encoder_driver.interface);
+
+    // Get processed data
+    float position, velocity;
+    Position_Sensor_GetPosition(&encoder_driver.interface, &position);
+    Position_Sensor_GetVelocity(&encoder_driver.interface, &velocity);
+
+    HAL_Delay(1);  // 1 kHz update rate
+}
+```
+
+#### 2. Multi-turn Tracking
+```c
+// Enable multi-turn capability in Create()
+encoder_driver.interface.capabilities = POSITION_CAP_ABSOLUTE | POSITION_CAP_MULTITURN;
+
+// Get absolute position (can be > 360°)
+float abs_position;
+Position_Sensor_GetAbsolutePosition(&encoder_driver.interface, &abs_position);
+// Example: 725.5° means 2 full revolutions + 5.5°
+```
+
+#### 3. Prediction (Extrapolation Between Updates)
+```c
+// Prediction automatically updated in Position_Sensor_Update()
+// Get current predicted position (extrapolated from last measurement)
+float predicted_position;
+Position_Sensor_GetPredictedPosition(&encoder_driver.interface, &predicted_position);
+
+// Useful for high-speed control loops where sensor update rate < control loop rate
+```
+
+#### 4. Zero Calibration
+```c
+// Calibrate current position as zero
+Position_Sensor_Calibrate(&encoder_driver.interface);
+// Calls AEAT9922_HW_Calibrate() → AEAT9922_CalibrateZero()
+
+// Or set arbitrary zero position
+Position_Sensor_SetPosition(&encoder_driver.interface, 0.0f);
+```
+
+### Position Sensor Development Rules
+
+1. **Never modify Position_Sensor_Interface_t directly** - use only through provided functions
+2. **Base logic in position.c** - Conversion, velocity, multi-turn, prediction handled universally
+3. **Hardware specifics in callbacks** - Each driver (AEAT9922, AS5600) provides ONLY hardware operations
+4. **Driver creation pattern:**
+   - Call `AEAT9922_Create()` to set up hardware callbacks
+   - Access interface via `&driver->interface`
+   - Initialize with `Position_Sensor_Init(&driver->interface, params)`
+   - Update regularly with `Position_Sensor_Update(&driver->interface)`
+
+### Adding New Position Sensor Support
+
+To add a new position sensor (e.g., AS5600, SSI encoder):
+
+1. **Create driver file** `drv/position/your_sensor.h` and `drv/position/your_sensor.c`
+2. **Define driver structure:**
+   ```c
+   typedef struct {
+       Position_Sensor_Interface_t interface;  // Universal interface (FIRST!)
+       // Your hardware-specific fields (I2C/SPI handle, status, etc.)
+   } YourSensor_Driver_t;
+   ```
+3. **Implement hardware callbacks:**
+   - `YourSensor_HW_Init()` - Initialize communication (SPI/I2C/SSI)
+   - `YourSensor_HW_ReadRaw()` - Read ONLY raw position value, NO conversion!
+   - `YourSensor_HW_Calibrate()` - Hardware-specific calibration (optional)
+4. **Create factory function:**
+   ```c
+   Servo_Status_t YourSensor_Create(YourSensor_Driver_t* driver, config) {
+       driver->interface.hw.init = YourSensor_HW_Init;
+       driver->interface.hw.read_raw = YourSensor_HW_ReadRaw;
+       driver->interface.capabilities = POSITION_CAP_ABSOLUTE;
+       driver->interface.resolution_bits = 12;  // e.g., AS5600
+       driver->interface.driver_data = driver;
+   }
+   ```
+5. **Use universal interface** - All processing (velocity, multi-turn, prediction) handled by `position.c`
+
+### Data Flow
+
+```
+Application
+    ↓
+Position_Sensor_Update(&sensor->interface)
+    ↓
+position.c calls sensor->hw.read_raw()
+    ↓
+aeat9922.c reads SPI → returns Position_Raw_Data_t { raw_position, timestamp_us, valid }
+    ↓
+position.c processes:
+    - raw → degrees (RawToAngleDegrees)
+    - velocity (Derivative_CalculateVelocity)
+    - multi-turn (UpdateMultiTurn)
+    - prediction (Prediction_GetCurrentPosition)
+    ↓
+Application gets processed data via:
+    - Position_Sensor_GetPosition()
+    - Position_Sensor_GetVelocity()
+    - Position_Sensor_GetAbsolutePosition()
+    - Position_Sensor_GetPredictedPosition()
 ```
 
 ## Documentation Files

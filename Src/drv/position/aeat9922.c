@@ -3,6 +3,9 @@
  * @brief Реалізація драйвера магнітного енкодера AEAT-9922
  * @author ServoCore Team
  * @date 2025
+ *
+ * Hardware Callbacks Pattern: тільки апаратні операції (SPI read/write).
+ * Вся логіка (конвертація raw→degrees, velocity, multi-turn) в position.c.
  */
 
 /* Includes ------------------------------------------------------------------*/
@@ -17,13 +20,12 @@
 
 #include "drv/position/aeat9922.h"
 #include "hwd/hwd_timer.h"
-#include "util/math.h"
 #include "stm32f4xx_hal.h"
 #include <string.h>
 
 /* Private defines -----------------------------------------------------------*/
 
-// Макроси для SPI команд (відповідно до протоколу AEAT-9922)
+// Макроси для SPI команд
 #define AEAT9922_CMD_READ(addr)   (0x40)           // Read command: RW=1 (bit 6)
 #define AEAT9922_CMD_WRITE(addr)  (0x00)           // Write command: RW=0
 
@@ -41,18 +43,200 @@
 
 /* Private function prototypes -----------------------------------------------*/
 
-static float aeat9922_position_to_degrees(uint32_t position,
-                                          AEAT9922_Abs_Resolution_t res);
-
 /**
  * @brief Мікросекундна затримка (приблизна, для SPI timing)
- * @param us Мікросекунди
  */
 static inline void delay_us(uint32_t us)
 {
     // Приблизно 25 циклів на мікросекунду при 100 MHz CPU
     volatile uint32_t cycles = us * 25;
     while (cycles--);
+}
+
+/* Private hardware callbacks ------------------------------------------------*/
+
+/**
+ * @brief Hardware Init Callback
+ */
+static Servo_Status_t AEAT9922_HW_Init(void* driver_data, const Position_Params_t* params)
+{
+    AEAT9922_Driver_t* driver = (AEAT9922_Driver_t*)driver_data;
+    Servo_Status_t status;
+
+    // 1. Встановити MSEL = HIGH для SPI4 режиму
+    HAL_GPIO_WritePin((GPIO_TypeDef*)driver->config.msel_port,
+                      driver->config.msel_pin, GPIO_PIN_SET);
+
+    // 2. Ініціалізація SPI
+    status = HWD_SPI_Init(&driver->spi_handle, &driver->config.spi_config);
+    if (status != SERVO_OK) {
+        return status;
+    }
+
+    // 3. Зачекати Power-Up час (10 ms)
+    HAL_Delay(AEAT9922_POWERUP_TIME_MS);
+
+    // 4. Перевірити статус енкодера
+    status = AEAT9922_ReadStatus(driver);
+    if (status != SERVO_OK) {
+        return status;
+    }
+
+    if (!driver->status.ready) {
+        return SERVO_ERROR;
+    }
+
+    // 5. Розблокувати регістри
+    status = AEAT9922_UnlockRegisters(driver);
+    if (status != SERVO_OK) {
+        return status;
+    }
+
+    // 6. Налаштувати абсолютну роздільність
+    uint8_t config1;
+    status = AEAT9922_ReadRegister(driver, AEAT9922_REG_CONFIG1, &config1);
+    if (status != SERVO_OK) {
+        return status;
+    }
+
+    config1 = (config1 & 0xF0) | (driver->config.abs_resolution & 0x0F);
+
+    // Додати налаштування напрямку
+    if (driver->config.direction_ccw) {
+        config1 |= (1 << 4);  // Біт 4: Direction (CCW count up)
+    } else {
+        config1 &= ~(1 << 4);
+    }
+
+    status = AEAT9922_WriteRegister(driver, AEAT9922_REG_CONFIG1, config1);
+    if (status != SERVO_OK) {
+        return status;
+    }
+
+    // 7. Налаштувати інкрементальну роздільність
+    uint16_t cpr = driver->config.incremental_cpr;
+    if (cpr < 1) cpr = 1;
+    if (cpr > 10000) cpr = 10000;
+
+    uint8_t cpr_high = (cpr >> 8) & 0x3F;
+    uint8_t cpr_low = cpr & 0xFF;
+
+    status = AEAT9922_WriteRegister(driver, AEAT9922_REG_INC_RES_HIGH, cpr_high);
+    if (status != SERVO_OK) {
+        return status;
+    }
+
+    status = AEAT9922_WriteRegister(driver, AEAT9922_REG_INC_RES_LOW, cpr_low);
+    if (status != SERVO_OK) {
+        return status;
+    }
+
+    // 8. Налаштувати PSEL для вибору інтерфейсу SPI4
+    uint8_t config2;
+    status = AEAT9922_ReadRegister(driver, AEAT9922_REG_CONFIG2, &config2);
+    if (status != SERVO_OK) {
+        return status;
+    }
+
+    config2 = (config2 & 0x9F) | ((driver->config.interface_mode & 0x03) << 5);
+    status = AEAT9922_WriteRegister(driver, AEAT9922_REG_CONFIG2, config2);
+    if (status != SERVO_OK) {
+        return status;
+    }
+
+    // 9. Ініціалізувати інкрементальний лічильник (якщо використовується)
+    if (driver->config.enable_incremental && driver->config.encoder_timer_handle != NULL) {
+        TIM_HandleTypeDef* htim = (TIM_HandleTypeDef*)driver->config.encoder_timer_handle;
+        HAL_TIM_Encoder_Start(htim, TIM_CHANNEL_ALL);
+        driver->incremental_count = 0;
+        driver->last_incremental_count = 0;
+    }
+
+    return SERVO_OK;
+}
+
+/**
+ * @brief Hardware DeInit Callback
+ */
+static Servo_Status_t AEAT9922_HW_DeInit(void* driver_data)
+{
+    AEAT9922_Driver_t* driver = (AEAT9922_Driver_t*)driver_data;
+
+    // Зупинити інкрементальний таймер
+    if (driver->config.enable_incremental && driver->config.encoder_timer_handle != NULL) {
+        TIM_HandleTypeDef* htim = (TIM_HandleTypeDef*)driver->config.encoder_timer_handle;
+        HAL_TIM_Encoder_Stop(htim, TIM_CHANNEL_ALL);
+    }
+
+    // Деініціалізувати SPI
+    return HWD_SPI_DeInit(&driver->spi_handle);
+}
+
+/**
+ * @brief Hardware Read Raw Callback (КЛЮЧОВА ФУНКЦІЯ!)
+ *
+ * Читає ТІЛЬКИ сирі дані через SPI, БЕЗ конвертації в градуси.
+ * Конвертацію робить position.c.
+ */
+static Servo_Status_t AEAT9922_HW_ReadRaw(void* driver_data, Position_Raw_Data_t* raw)
+{
+    AEAT9922_Driver_t* driver = (AEAT9922_Driver_t*)driver_data;
+    Servo_Status_t status;
+    uint8_t tx_data[3];
+    uint8_t rx_data[3] = {0};
+
+    // Відправити команду читання позиції (register 0x3F)
+    tx_data[0] = AEAT9922_CMD_READ(AEAT9922_REG_POSITION);  // 0x40
+    tx_data[1] = AEAT9922_REG_POSITION;                     // 0x3F
+    tx_data[2] = 0x00;                                       // Dummy
+
+    HWD_SPI_CS_Low(&driver->spi_handle);
+    delay_us(1);  // t_CSn >= 350ns
+
+    status = HWD_SPI_TransmitReceive(&driver->spi_handle, tx_data, rx_data, 3);
+
+    delay_us(1);  // t_CSf >= 50ns
+    HWD_SPI_CS_High(&driver->spi_handle);
+
+    if (status != SERVO_OK) {
+        driver->error_count++;
+        raw->valid = false;
+        return status;
+    }
+
+    // Розпакувати дані відповідно до протоколу AEAT-9922
+    // Формат 24-біт відповіді: [4_reserved][W][E][18-bit_position]
+    uint32_t position_24bit = ((uint32_t)rx_data[0] << 16) |
+                               ((uint32_t)rx_data[1] << 8) |
+                               rx_data[2];
+
+    // Витягнути позицію (біти [17:0])
+    uint32_t position_18bit = position_24bit & 0x3FFFF;
+
+    // Застосувати маску відповідно до налаштованої роздільності
+    uint32_t resolution_bits = 18 - (uint8_t)driver->config.abs_resolution;
+    uint32_t position_mask = (1U << resolution_bits) - 1;
+    uint32_t raw_position = position_18bit & position_mask;
+
+    // Заповнити структуру Position_Raw_Data_t
+    raw->raw_position = raw_position;
+    raw->timestamp_us = HWD_Timer_GetMicros();
+    raw->has_velocity = false;  // AEAT-9922 НЕ надає готову velocity
+    raw->raw_velocity = 0.0f;
+    raw->valid = true;
+
+    return SERVO_OK;
+}
+
+/**
+ * @brief Hardware Calibrate Callback
+ */
+static Servo_Status_t AEAT9922_HW_Calibrate(void* driver_data)
+{
+    AEAT9922_Driver_t* driver = (AEAT9922_Driver_t*)driver_data;
+
+    // Викликати zero reset (калібрування нульової позиції)
+    return AEAT9922_CalibrateZero(driver);
 }
 
 /* Exported functions --------------------------------------------------------*/
@@ -68,229 +252,18 @@ Servo_Status_t AEAT9922_Create(AEAT9922_Driver_t* driver,
     memset(driver, 0, sizeof(AEAT9922_Driver_t));
     memcpy(&driver->config, config, sizeof(AEAT9922_Config_t));
 
-    // Налаштування Sensor Interface
+    // Прив'язати Hardware Callbacks
+    driver->interface.hw.init = AEAT9922_HW_Init;
+    driver->interface.hw.deinit = AEAT9922_HW_DeInit;
+    driver->interface.hw.read_raw = AEAT9922_HW_ReadRaw;
+    driver->interface.hw.calibrate = AEAT9922_HW_Calibrate;
+    driver->interface.hw.notify_callback = NULL;  // Не використовується
+
+    // Налаштувати метадані інтерфейсу
+    driver->interface.capabilities = POSITION_CAP_ABSOLUTE | POSITION_CAP_MULTITURN;
+    driver->interface.resolution_bits = 18 - (uint8_t)config->abs_resolution;
+    driver->interface.requires_calibration = false;  // Абсолютний енкодер
     driver->interface.driver_data = driver;
-    driver->interface.init = NULL;  // Використовуємо AEAT9922_Init напряму
-    driver->interface.deinit = NULL;  // Використовуємо AEAT9922_DeInit напряму
-    driver->interface.read_angle = AEAT9922_ReadAngle;
-    driver->interface.read_velocity = AEAT9922_GetVelocity;
-    driver->interface.calibrate = NULL;
-    driver->interface.self_test = NULL;
-    driver->interface.get_state = NULL;
-    driver->interface.get_stats = NULL;
-
-    return SERVO_OK;
-}
-
-Servo_Status_t AEAT9922_Init(void* driver)
-{
-    if (driver == NULL) {
-        return SERVO_INVALID;
-    }
-
-    AEAT9922_Driver_t* enc = (AEAT9922_Driver_t*)driver;
-    Servo_Status_t status;
-
-    // 1. Встановити MSEL = HIGH для SPI4 режиму
-    HAL_GPIO_WritePin((GPIO_TypeDef*)enc->config.msel_port,
-                      enc->config.msel_pin, GPIO_PIN_SET);
-
-    // 2. Ініціалізація SPI
-    status = HWD_SPI_Init(&enc->spi_handle, &enc->config.spi_config);
-    if (status != SERVO_OK) {
-        return status;
-    }
-
-    // 3. Зачекати Power-Up час (10 ms)
-    HAL_Delay(AEAT9922_POWERUP_TIME_MS);
-
-    // 4. Перевірити статус енкодера
-    status = AEAT9922_ReadStatus(enc);
-    if (status != SERVO_OK) {
-        return status;
-    }
-
-    if (!enc->status.ready) {
-        return SERVO_ERROR;
-    }
-
-    // 5. Розблокувати регістри
-    status = AEAT9922_UnlockRegisters(enc);
-    if (status != SERVO_OK) {
-        return status;
-    }
-
-    // 6. Налаштувати абсолютну роздільність
-    uint8_t config1;
-    status = AEAT9922_ReadRegister(enc, AEAT9922_REG_CONFIG1, &config1);
-    if (status != SERVO_OK) {
-        return status;
-    }
-
-    config1 = (config1 & 0xF0) | (enc->config.abs_resolution & 0x0F);
-
-    // Додати налаштування напрямку
-    if (enc->config.direction_ccw) {
-        config1 |= (1 << 4);  // Біт 4: Direction (CCW count up)
-    } else {
-        config1 &= ~(1 << 4);
-    }
-
-    status = AEAT9922_WriteRegister(enc, AEAT9922_REG_CONFIG1, config1);
-    if (status != SERVO_OK) {
-        return status;
-    }
-
-    // 7. Налаштувати інкрементальну роздільність
-    uint16_t cpr = enc->config.incremental_cpr;
-    if (cpr < 1) cpr = 1;
-    if (cpr > 10000) cpr = 10000;
-
-    uint8_t cpr_high = (cpr >> 8) & 0x3F;
-    uint8_t cpr_low = cpr & 0xFF;
-
-    status = AEAT9922_WriteRegister(enc, AEAT9922_REG_INC_RES_HIGH, cpr_high);
-    if (status != SERVO_OK) {
-        return status;
-    }
-
-    status = AEAT9922_WriteRegister(enc, AEAT9922_REG_INC_RES_LOW, cpr_low);
-    if (status != SERVO_OK) {
-        return status;
-    }
-
-    // 8. Налаштувати PSEL для вибору інтерфейсу SPI4
-    uint8_t config2;
-    status = AEAT9922_ReadRegister(enc, AEAT9922_REG_CONFIG2, &config2);
-    if (status != SERVO_OK) {
-        return status;
-    }
-
-    config2 = (config2 & 0x9F) | ((enc->config.interface_mode & 0x03) << 5);
-    status = AEAT9922_WriteRegister(enc, AEAT9922_REG_CONFIG2, config2);
-    if (status != SERVO_OK) {
-        return status;
-    }
-
-    // 9. Ініціалізувати інкрементальний лічильник (якщо використовується)
-    if (enc->config.enable_incremental && enc->config.encoder_timer_handle != NULL) {
-        TIM_HandleTypeDef* htim = (TIM_HandleTypeDef*)enc->config.encoder_timer_handle;
-        HAL_TIM_Encoder_Start(htim, TIM_CHANNEL_ALL);
-        enc->incremental_count = 0;
-        enc->last_incremental_count = 0;
-    }
-
-    // 10. Ініціалізувати часові мітки
-    enc->last_update_time = HAL_GetTick();
-    enc->last_angle = 0.0f;
-
-    return SERVO_OK;
-}
-
-Servo_Status_t AEAT9922_DeInit(void* driver)
-{
-    if (driver == NULL) {
-        return SERVO_INVALID;
-    }
-
-    AEAT9922_Driver_t* enc = (AEAT9922_Driver_t*)driver;
-
-    // Зупинити інкрементальний таймер
-    if (enc->config.enable_incremental && enc->config.encoder_timer_handle != NULL) {
-        TIM_HandleTypeDef* htim = (TIM_HandleTypeDef*)enc->config.encoder_timer_handle;
-        HAL_TIM_Encoder_Stop(htim, TIM_CHANNEL_ALL);
-    }
-
-    // Деініціалізувати SPI
-    return HWD_SPI_DeInit(&enc->spi_handle);
-}
-
-Servo_Status_t AEAT9922_ReadAngle(Sensor_Interface_t* iface, float* angle)
-{
-    if (iface == NULL || angle == NULL || iface->driver_data == NULL) {
-        return SERVO_INVALID;
-    }
-
-    AEAT9922_Driver_t* enc = (AEAT9922_Driver_t*)iface->driver_data;
-    Servo_Status_t status;
-    uint8_t tx_data[3];
-    uint8_t rx_data[3] = {0};
-
-    // Відправити команду читання позиції (register 0x3F)
-    tx_data[0] = AEAT9922_CMD_READ(AEAT9922_REG_POSITION);  // 0x40
-    tx_data[1] = AEAT9922_REG_POSITION;                     // 0x3F
-    tx_data[2] = 0x00;                                       // Dummy
-
-    HWD_SPI_CS_Low(&enc->spi_handle);
-    delay_us(1);  // t_CSn >= 350ns
-
-    status = HWD_SPI_TransmitReceive(&enc->spi_handle, tx_data, rx_data, 3);
-
-    delay_us(1);  // t_CSf >= 50ns
-    HWD_SPI_CS_High(&enc->spi_handle);
-
-    if (status != SERVO_OK) {
-        enc->error_count++;
-        return status;
-    }
-
-    // Розпакувати дані відповідно до протоколу AEAT-9922
-    // Формат 24-біт відповіді: [4_reserved][W][E][18-bit_position]
-    // rx_data[0]: біти [23:16]
-    // rx_data[1]: біти [15:8]
-    // rx_data[2]: біти [7:0]
-
-    uint32_t position_24bit = ((uint32_t)rx_data[0] << 16) |
-                               ((uint32_t)rx_data[1] << 8) |
-                               rx_data[2];
-
-    // Витягнути біти статусу
-    // uint8_t warning = (position_24bit >> 19) & 0x01;  // W bit
-    // uint8_t error = (position_24bit >> 18) & 0x01;    // E bit
-
-    // Витягнути позицію (біти [17:0])
-    uint32_t position_18bit = position_24bit & 0x3FFFF;
-
-    // Застосувати маску відповідно до налаштованої роздільності
-    uint32_t resolution_bits = 18 - (uint8_t)enc->config.abs_resolution;
-    uint32_t position_mask = (1 << resolution_bits) - 1;
-    enc->raw_position = position_18bit & position_mask;
-
-    // Конвертувати в градуси
-    enc->angle_degrees = aeat9922_position_to_degrees(enc->raw_position,
-                                                       enc->config.abs_resolution);
-    *angle = enc->angle_degrees;
-
-    // Оновити швидкість
-    uint32_t current_time = HAL_GetTick();
-    uint32_t dt = current_time - enc->last_update_time;
-
-    if (dt > 0) {
-        float angle_diff = enc->angle_degrees - enc->last_angle;
-
-        // Обробка переходу через 0/360
-        if (angle_diff > 180.0f) {
-            angle_diff -= 360.0f;
-        } else if (angle_diff < -180.0f) {
-            angle_diff += 360.0f;
-        }
-
-        enc->velocity = (angle_diff * 1000.0f) / (float)dt;  // град/с
-        enc->last_angle = enc->angle_degrees;
-        enc->last_update_time = current_time;
-    }
-
-    return SERVO_OK;
-}
-
-Servo_Status_t AEAT9922_GetVelocity(Sensor_Interface_t* iface, float* velocity)
-{
-    if (iface == NULL || velocity == NULL || iface->driver_data == NULL) {
-        return SERVO_INVALID;
-    }
-
-    AEAT9922_Driver_t* enc = (AEAT9922_Driver_t*)iface->driver_data;
-    *velocity = enc->velocity;
 
     return SERVO_OK;
 }
@@ -537,40 +510,9 @@ Servo_Status_t AEAT9922_UpdateIncrementalCount(AEAT9922_Driver_t* driver)
 void AEAT9922_IndexPulseCallback(AEAT9922_Driver_t* driver)
 {
     if (driver != NULL) {
-        // Підрахувати повний оберт
-        driver->revolution_count++;
+        // Підрахувати повний оберт (можна використовувати для верифікації multi-turn)
+        driver->interface.data.revolution_count++;
     }
-}
-
-Sensor_Interface_t* AEAT9922_GetInterface(AEAT9922_Driver_t* driver)
-{
-    if (driver == NULL) {
-        return NULL;
-    }
-
-    return &driver->interface;
-}
-
-/* Private functions ---------------------------------------------------------*/
-
-static float aeat9922_position_to_degrees(uint32_t position,
-                                          AEAT9922_Abs_Resolution_t res)
-{
-    // Обчислити максимальне значення для даної роздільної здатності
-    uint32_t max_count = 1 << (18 - (uint8_t)res);
-
-    // Конвертувати в градуси (0-360)
-    float degrees = ((float)position * 360.0f) / (float)max_count;
-
-    // Обмежити діапазон 0-360
-    if (degrees >= 360.0f) {
-        degrees -= 360.0f;
-    }
-    if (degrees < 0.0f) {
-        degrees += 360.0f;
-    }
-
-    return degrees;
 }
 
 #endif /* USE_SENSOR_AEAT9922 */

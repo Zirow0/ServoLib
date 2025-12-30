@@ -6,11 +6,12 @@
  *
  * Драйвер для високоточного магнітного енкодера AEAT-9922 від Broadcom.
  * Підтримує абсолютний та інкрементальний режими через SPI інтерфейс.
+ * Реалізує Hardware Callbacks Pattern - тільки апаратні операції (SPI),
+ * вся логіка (конвертація, velocity, multi-turn) в position.c.
  */
 
 #ifndef SERVOCORE_DRV_AEAT9922_H
 #define SERVOCORE_DRV_AEAT9922_H
-
 
 #ifdef __cplusplus
 extern "C" {
@@ -87,29 +88,22 @@ typedef struct {
 
 /**
  * @brief Структура драйвера AEAT-9922
+ *
+ * Містить тільки апаратну специфіку (SPI, статус AEAT).
+ * Вся логіка (position, velocity, multi-turn) в Position_Sensor_Interface_t.
  */
 typedef struct {
-    AEAT9922_Config_t config;      /**< Конфігурація енкодера */
-    Sensor_Interface_t interface;  /**< Реалізація Sensor_Interface_t */
-    HWD_SPI_Handle_t spi_handle;   /**< Дескриптор SPI */
+    Position_Sensor_Interface_t interface;  /**< Універсальний інтерфейс (ПЕРШИЙ!) */
+    AEAT9922_Config_t config;               /**< Конфігурація енкодера */
+    HWD_SPI_Handle_t spi_handle;            /**< Дескриптор SPI */
 
-    // Дані датчика
-    uint32_t raw_position;         /**< Сира позиція з енкодера */
-    float angle_degrees;           /**< Кут в градусах (0-360) */
-    float velocity;                /**< Швидкість (град/с) */
-    uint32_t revolution_count;     /**< Лічильник повних обертів (через Index) */
-
-    // Статус
-    AEAT9922_Status_t status;      /**< Статус енкодера */
-    uint32_t error_count;          /**< Лічильник помилок */
-
-    // Часові мітки для обчислення швидкості
-    uint32_t last_update_time;     /**< Час останнього оновлення (мс) */
-    float last_angle;              /**< Попередній кут для обчислення швидкості */
+    // ТІЛЬКИ AEAT-специфічне
+    AEAT9922_Status_t status;               /**< Статус енкодера */
+    uint32_t error_count;                   /**< Лічильник помилок SPI */
 
     // Інкрементальний лічильник (якщо використовується)
-    int32_t incremental_count;     /**< Загальний інкрементальний лічильник */
-    int32_t last_incremental_count; /**< Попереднє значення лічильника */
+    int32_t incremental_count;              /**< Загальний інкрементальний лічильник */
+    int32_t last_incremental_count;         /**< Попереднє значення лічильника */
 
 } AEAT9922_Driver_t;
 
@@ -118,7 +112,8 @@ typedef struct {
 /**
  * @brief Створення драйвера AEAT-9922
  *
- * Ініціалізує структуру драйвера з конфігурацією
+ * Ініціалізує структуру драйвера з конфігурацією та прив'язує hardware callbacks.
+ * Після створення використовуйте &driver->interface для доступу до Position_Sensor_Interface_t.
  *
  * @param driver Вказівник на структуру драйвера
  * @param config Вказівник на конфігурацію
@@ -126,45 +121,6 @@ typedef struct {
  */
 Servo_Status_t AEAT9922_Create(AEAT9922_Driver_t* driver,
                                 const AEAT9922_Config_t* config);
-
-/**
- * @brief Ініціалізація AEAT-9922
- *
- * Виконує повну ініціалізацію енкодера:
- * - Налаштування SPI
- * - Конфігурація роздільної здатності
- * - Перевірка статусу
- *
- * @param driver Вказівник на драйвер (приведений до void*)
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t AEAT9922_Init(void* driver);
-
-/**
- * @brief Деініціалізація AEAT-9922
- *
- * @param driver Вказівник на драйвер (приведений до void*)
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t AEAT9922_DeInit(void* driver);
-
-/**
- * @brief Зчитування абсолютного кута через SPI
- *
- * @param iface Вказівник на інтерфейс датчика
- * @param angle Вказівник для збереження кута (0-360 градусів)
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t AEAT9922_ReadAngle(Sensor_Interface_t* iface, float* angle);
-
-/**
- * @brief Обчислення швидкості
- *
- * @param iface Вказівник на інтерфейс датчика
- * @param velocity Вказівник для збереження швидкості (град/с)
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t AEAT9922_GetVelocity(Sensor_Interface_t* iface, float* velocity);
 
 /**
  * @brief Зчитування статусу енкодера
@@ -257,14 +213,6 @@ Servo_Status_t AEAT9922_UpdateIncrementalCount(AEAT9922_Driver_t* driver);
  * @param driver Вказівник на структуру драйвера
  */
 void AEAT9922_IndexPulseCallback(AEAT9922_Driver_t* driver);
-
-/**
- * @brief Отримання інтерфейсу датчика
- *
- * @param driver Вказівник на структуру драйвера
- * @return Sensor_Interface_t* Вказівник на інтерфейс
- */
-Sensor_Interface_t* AEAT9922_GetInterface(AEAT9922_Driver_t* driver);
 
 /* Адреси регістрів AEAT-9922 -----------------------------------------------*/
 
