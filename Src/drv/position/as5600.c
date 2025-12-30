@@ -103,7 +103,7 @@ static Servo_Status_t AS5600_HW_Init(void* driver_data, const Position_Params_t*
     }
 
     // Перевірка доступності пристрою
-    status = HWD_I2C_IsDeviceReady(&driver->i2c_handle, AS5600_I2C_ADDRESS << 1, 3, 100);
+    status = HWD_I2C_IsDeviceReady(&driver->i2c_handle, AS5600_I2C_ADDRESS << 1, 3);
     if (status != SERVO_OK) {
         return SERVO_ERROR;
     }

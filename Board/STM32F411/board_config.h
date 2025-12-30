@@ -26,14 +26,14 @@ extern "C" {
 #define USE_MOTOR_PWM       1        /**< Використовувати PWM драйвер двигуна */
 #define USE_BRAKE           1        /**< Використовувати brake драйвер */
 
-/* #define USE_HWD_I2C */    /* I2C вимкнено - AS5600 не використовується */
 #define USE_HWD_SPI          /* SPI увімкнено - для AEAT-9922 */
 
 #define USE_SENSOR_POSITION  /* Універсальний інтерфейс position sensor */
 #define USE_SENSOR_AEAT9922  /* увімкнено AEAT-9922 */
 
-#define USE_HWD_I2C
-#define USE_SENSOR_AS5600
+/* I2C та AS5600 вимкнено - використовується AEAT-9922 через SPI */
+// #define USE_HWD_I2C
+// #define USE_SENSOR_AS5600
 
 /* Forward declarations ------------------------------------------------------*/
 typedef struct __SPI_HandleTypeDef SPI_HandleTypeDef;
