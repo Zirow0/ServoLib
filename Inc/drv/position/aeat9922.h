@@ -18,7 +18,7 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 #include "../../core.h"
-#include "../../iface/sensor.h"
+#include "position.h"
 #include "../../hwd/hwd_spi.h"
 #include <stdint.h>
 #include <stdbool.h>

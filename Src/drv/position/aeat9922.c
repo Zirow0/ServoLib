@@ -15,7 +15,7 @@
 	#define USE_SENSOR_POSITION
 #endif
 
-#include "drv/sensor/aeat9922.h"
+#include "drv/position/aeat9922.h"
 #include "hwd/hwd_timer.h"
 #include "util/math.h"
 #include "stm32f4xx_hal.h"

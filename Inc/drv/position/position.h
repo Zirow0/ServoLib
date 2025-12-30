@@ -1,5 +1,5 @@
 /**
- * @file sensor.h
+ * @file position.h
  * @brief Абстрактний інтерфейс датчика положення
  * @author ServoCore Team
  * @date 2025
@@ -7,15 +7,15 @@
  * Незалежний від апаратного забезпечення інтерфейс для датчиків положення
  */
 
-#ifndef SERVOCORE_IFACE_SENSOR_H
-#define SERVOCORE_IFACE_SENSOR_H
+#ifndef SERVOCORE_DRV_POSITION_H
+#define SERVOCORE_DRV_POSITION_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* Includes ------------------------------------------------------------------*/
-#include "../core.h"
+#include "../../core.h"
 
 /* Exported types ------------------------------------------------------------*/
 
@@ -149,4 +149,4 @@ Servo_Status_t Sensor_GetStats(Sensor_Interface_t* sensor, Sensor_Stats_t* stats
 }
 #endif
 
-#endif /* SERVOCORE_IFACE_SENSOR_H */
+#endif /* SERVOCORE_DRV_POSITION_H */

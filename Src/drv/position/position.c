@@ -1,12 +1,12 @@
 /**
- * @file sensor.c
- * @brief Реалізація інтерфейсу датчика
+ * @file position.c
+ * @brief Реалізація інтерфейсу датчика положення
  * @author ServoCore Team
  * @date 2025
  */
 
 /* Includes ------------------------------------------------------------------*/
-#include "../../Inc/iface/sensor.h"
+#include "../../Inc/drv/position/position.h"
 
 /* Private functions ---------------------------------------------------------*/
 

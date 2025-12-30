@@ -18,7 +18,7 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 #include "../../core.h"
-#include "../../iface/sensor.h"
+#include "position.h"
 #include "../../hwd/hwd_i2c.h"
 
 /* Exported constants --------------------------------------------------------*/

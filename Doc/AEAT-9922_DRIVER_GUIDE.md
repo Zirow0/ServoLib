@@ -57,9 +57,9 @@ Application Layer
     ↓
 ctrl/servo.c (Servo Controller)
     ↓
-iface/sensor.h (Sensor Interface)
+drv/position/position.h (Position Sensor Interface)
     ↓
-drv/sensor/aeat9922.h (AEAT-9922 Driver) ← ВИ ТУТ
+drv/position/aeat9922.h (AEAT-9922 Driver) ← ВИ ТУТ
     ↓
 hwd/hwd_spi.h (SPI Abstraction)
     ↓
@@ -93,14 +93,14 @@ ServoLib/
    - Абстракція SPI інтерфейсу
    - Незалежна від конкретного енкодера
 
-2. **AEAT-9922 Driver** (`drv/sensor/aeat9922.h`, `aeat9922.c`)
+2. **AEAT-9922 Driver** (`drv/position/aeat9922.h`, `aeat9922.c`)
    - Ініціалізація та конфігурація
    - Зчитування абсолютної позиції через SPI
    - Робота з інкрементальним виходом
    - Калібрування та діагностика
 
-3. **Sensor Interface** (`iface/sensor.h`)
-   - Уніфікований інтерфейс для всіх датчиків
+3. **Position Sensor Interface** (`drv/position/position.h`)
+   - Уніфікований інтерфейс для всіх датчиків положення
    - AEAT-9922 реалізує цей інтерфейс
 
 ---
@@ -328,14 +328,14 @@ void HWD_SPI_CS_High(const HWD_SPI_Config_t* config)
 
 ### 5.2 AEAT-9922 Driver
 
-#### `Inc/drv/sensor/aeat9922.h`
+#### `Inc/drv/position/aeat9922.h`
 
 ```c
 #ifndef DRV_AEAT9922_H
 #define DRV_AEAT9922_H
 
 #include "core.h"
-#include "iface/sensor.h"
+#include "drv/position/position.h"
 #include "hwd/hwd_spi.h"
 #include <stdint.h>
 #include <stdbool.h>

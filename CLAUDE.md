@@ -139,9 +139,9 @@ Application (main.c)           ← Your code
     ↓
 Control Layer (ctrl/)          ← PID, Safety, Trajectory, Servo
     ↓
-Interface Layer (iface/)       ← Sensor, Brake interfaces
+Interface Layer (iface/)       ← Brake interface
     ↓
-Driver Layer (drv/)            ← Motor (base + PWM), Sensors, Brake drivers
+Driver Layer (drv/)            ← Motor, Position sensors, Brake drivers
     ↓
 Hardware Driver Layer (hwd/)   ← PWM, I2C, SPI, GPIO, Timer abstractions
     ↓
@@ -162,7 +162,6 @@ Platform Layer (Board/)        ← STM32F411 implementations
 - `calib.c` - Calibration system
 
 **iface/** - Abstract interfaces defining contracts:
-- `sensor.h` - Position sensor interface (read_angle, get_velocity)
 - `brake.h` - Brake interface (release, engage, notify_activity)
 
 **drv/** - Hardware drivers using HWD abstractions:
@@ -175,8 +174,11 @@ Platform Layer (Board/)        ← STM32F411 implementations
   - Provides hardware callbacks for `Motor_Interface_t`
   - Supports single-channel (PWM+DIR) and dual-channel (H-bridge) modes
   - Create with `PWM_Motor_Create()`, then use `&driver->interface` for motor operations
-- `drv/sensor/aeat9922.c` - AEAT-9922 18-bit magnetic encoder (SPI) - **Currently enabled**
-- `drv/sensor/as5600.c` - AS5600 12-bit magnetic encoder (I2C) - Currently disabled
+- `drv/position/position.h` - **Position sensor interface** (read_angle, get_velocity, calibrate)
+  - Universal interface for all position sensors (magnetic encoders, absolute encoders, etc.)
+  - Contains `Sensor_Interface_t` with callback functions pattern
+- `drv/position/aeat9922.c` - AEAT-9922 18-bit magnetic encoder (SPI) - **Currently enabled**
+- `drv/position/as5600.c` - AS5600 12-bit magnetic encoder (I2C) - Currently disabled
 - `drv/brake/brake.c` - Electronic brake driver with fail-safe logic
 
 **hwd/** - Hardware abstraction layer (declarations only):

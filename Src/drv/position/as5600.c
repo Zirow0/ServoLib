@@ -19,7 +19,7 @@
  #define USE_SENSOR_POSITION
 #endif
 
-#include "../../../Inc/drv/sensor/as5600.h"
+#include "../../../Inc/drv/position/as5600.h"
 #include "../../../Inc/ctrl/time.h"
 #include <string.h>
 
