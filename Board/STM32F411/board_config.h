@@ -32,6 +32,9 @@ extern "C" {
 #define USE_SENSOR_POSITION  /* Універсальний інтерфейс position sensor */
 #define USE_SENSOR_AEAT9922  /* увімкнено AEAT-9922 */
 
+#define USE_HWD_I2C
+#define USE_SENSOR_AS5600
+
 /* Forward declarations ------------------------------------------------------*/
 typedef struct __SPI_HandleTypeDef SPI_HandleTypeDef;
 
