@@ -128,7 +128,7 @@ Servo_Status_t Servo_Update(Servo_Controller_t* servo)
         pid_output = Safety_ClampVelocity(&servo->safety, pid_output);
 
         // Керування мотором
-        Motor_SetPower(servo->motor, pid_output);
+        Motor_SetPower_DC(servo->motor, pid_output);
 
         servo->state.state = SERVO_STATE_RUNNING;
     }
@@ -138,7 +138,7 @@ Servo_Status_t Servo_Update(Servo_Controller_t* servo)
         velocity = Safety_ClampVelocity(&servo->safety, velocity);
 
         // Пряме керування швидкістю
-        Motor_SetPower(servo->motor, velocity);
+        Motor_SetPower_DC(servo->motor, velocity);
 
         servo->state.state = SERVO_STATE_RUNNING;
     }

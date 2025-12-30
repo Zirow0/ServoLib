@@ -25,22 +25,16 @@ static HWD_Status_t hwd_status = {0};
 
 Servo_Status_t HWD_Init(void)
 {
-    Servo_Status_t status;
-
-    // Ініціалізація таймера (має бути першим)
-    status = HWD_Timer_Init();
-    if (status != SERVO_OK) {
-        return status;
-    }
+    // Таймер ініціалізується HAL, не потребує окремої ініціалізації
     hwd_status.timer_initialized = true;
 
-    // Ініціалізація GPIO
+    // GPIO ініціалізується HAL
     hwd_status.gpio_initialized = true;
 
-    // Ініціалізація PWM
+    // PWM ініціалізується HAL
     hwd_status.pwm_initialized = true;
 
-    // Ініціалізація I2C (опціонально, якщо використовується)
+    // I2C ініціалізується HAL (опціонально)
     hwd_status.i2c_initialized = true;
 
     return SERVO_OK;
