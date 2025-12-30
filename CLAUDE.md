@@ -139,9 +139,9 @@ Application (main.c)           ← Your code
     ↓
 Control Layer (ctrl/)          ← PID, Safety, Trajectory, Servo
     ↓
-Interface Layer (iface/)       ← Motor, Sensor, Brake interfaces
+Interface Layer (iface/)       ← Sensor, Brake interfaces
     ↓
-Driver Layer (drv/)            ← PWM Motor, AS5600/AEAT-9922, Brake drivers
+Driver Layer (drv/)            ← Motor (base + PWM), Sensors, Brake drivers
     ↓
 Hardware Driver Layer (hwd/)   ← PWM, I2C, SPI, GPIO, Timer abstractions
     ↓
@@ -162,15 +162,21 @@ Platform Layer (Board/)        ← STM32F411 implementations
 - `calib.c` - Calibration system
 
 **iface/** - Abstract interfaces defining contracts:
-- `motor.h` - Motor interface (init, set_power, stop, emergency_stop)
 - `sensor.h` - Position sensor interface (read_angle, get_velocity)
 - `brake.h` - Brake interface (release, engage, notify_activity)
 
 **drv/** - Hardware drivers using HWD abstractions:
-- `drv/motor/motor.h` - Base motor driver with common logic
-- `drv/motor/pwm.c` - PWM DC motor driver (dual-channel H-bridge)
-- `drv/sensor/as5600.c` - AS5600 12-bit magnetic encoder (I2C)
-- `drv/sensor/aeat9922.c` - AEAT-9922 18-bit magnetic encoder (SPI)
+- `drv/motor/motor.h` - **Universal motor interface with hardware callbacks**
+  - Contains `Motor_Interface_t` structure with base logic and hardware callbacks
+  - Supports DC, Stepper, and BLDC motors through universal `Motor_Command_t`
+  - Base functions: `Motor_Init()`, `Motor_SetPower()`, `Motor_Stop()`, `Motor_EmergencyStop()`
+  - Wrapper functions: `Motor_SetPower_DC()`, `Motor_SetPower_Stepper()`, `Motor_SetPower_BLDC()`
+- `drv/motor/pwm.c` - PWM motor driver implementation
+  - Provides hardware callbacks for `Motor_Interface_t`
+  - Supports single-channel (PWM+DIR) and dual-channel (H-bridge) modes
+  - Create with `PWM_Motor_Create()`, then use `&driver->interface` for motor operations
+- `drv/sensor/aeat9922.c` - AEAT-9922 18-bit magnetic encoder (SPI) - **Currently enabled**
+- `drv/sensor/as5600.c` - AS5600 12-bit magnetic encoder (I2C) - Currently disabled
 - `drv/brake/brake.c` - Electronic brake driver with fail-safe logic
 
 **hwd/** - Hardware abstraction layer (declarations only):
@@ -216,6 +222,43 @@ Servo_Status_t HWD_GPIO_WritePinDescriptor(const HWD_GPIO_Pin_t* pin, HWD_GPIO_P
 2. **Always use HWD functions** for hardware access
 3. **Platform code only in Board/** - all other code must be portable
 4. When adding new hardware support, only modify/create files in `Board/YOUR_PLATFORM/`
+
+### Motor Driver Development Rules (After Refactoring)
+1. **Never modify Motor_Interface_t directly** - use only through provided functions
+2. **Base logic in motor.c** - Common operations (state, power limiting, statistics) handled by `Motor_Init()`, `Motor_SetPower()`, `Motor_Stop()`
+3. **Hardware specifics in callbacks** - Each driver (PWM, Stepper, BLDC) provides hardware callbacks
+4. **Use wrapper functions** - Prefer `Motor_SetPower_DC()` over creating `Motor_Command_t` manually
+5. **Driver creation pattern:**
+   - Call `SpecificDriver_Create()` to set up hardware callbacks
+   - Access interface via `&driver->interface`
+   - Initialize with `Motor_Init(&driver->interface, params)`
+
+### Adding New Motor Type Support
+To add a new motor type (e.g., BLDC, Stepper):
+
+1. **Create driver file** `drv/motor/your_motor.h` and `drv/motor/your_motor.c`
+2. **Define driver structure:**
+   ```c
+   typedef struct {
+       Motor_Interface_t interface;  // Universal interface
+       // Your hardware-specific fields
+   } YourMotor_Driver_t;
+   ```
+3. **Implement hardware callbacks:**
+   - `YourMotor_HW_Init()` - Initialize hardware (timers, GPIO, etc.)
+   - `YourMotor_HW_SetPower()` - Apply power to motor phases
+   - `YourMotor_HW_Stop()` - Stop motor
+   - `YourMotor_HW_Update()` - Update state (optional)
+4. **Create factory function:**
+   ```c
+   Servo_Status_t YourMotor_Create(YourMotor_Driver_t* driver, config) {
+       driver->interface.hw.init = YourMotor_HW_Init;
+       driver->interface.hw.set_power = YourMotor_HW_SetPower;
+       // ... other callbacks
+       driver->interface.driver_data = driver;
+   }
+   ```
+5. **Use universal interface** - All base logic (state, stats) is handled by `motor.c`
 
 ### Adding New Platform Support
 To port to another STM32 or platform:
@@ -285,8 +328,8 @@ Each driver file uses conditional compilation:
 - Overcurrent protection
 
 ### Sensors
-- AS5600: 12-bit I2C magnetic encoder (4096 counts/rev)
-- AEAT-9922: 18-bit SPI magnetic encoder (262144 counts/rev)
+- **AEAT-9922: 18-bit SPI magnetic encoder (262144 counts/rev)** - Currently enabled and in use
+- AS5600: 12-bit I2C magnetic encoder (4096 counts/rev) - Available but currently disabled (I2C not configured)
 - Velocity calculation from position delta
 - Anomaly filtering
 
@@ -303,29 +346,78 @@ Each driver file uses conditional compilation:
 - **Timer 5:** 32-bit microsecond timer
 - **GPIO:** Brake control (e.g., PA8)
 
-## Common Patterns
+## Motor Driver Architecture (After Refactoring)
 
-### Initializing a Servo Controller (STM32)
+### Key Concepts
+
+**Separation of Concerns:**
+- **Motor_Interface_t** (`drv/motor/motor.h`) - Universal interface containing:
+  - `Motor_Data_t data` - Common logic: state, power, direction, statistics
+  - `Motor_Hardware_Callbacks_t hw` - Hardware-specific callbacks
+  - `void* driver_data` - Pointer to specific driver (e.g., `PWM_Motor_Driver_t`)
+
+- **Specific Driver** (e.g., `PWM_Motor_Driver_t` in `drv/motor/pwm.h`) - Contains:
+  - `Motor_Interface_t interface` - The universal interface
+  - Hardware-specific configuration (PWM channels, GPIO pins)
+  - Provides hardware callbacks to the interface
+
+**Universal Command System:**
+```c
+Motor_Command_t cmd = {
+    .type = MOTOR_TYPE_DC_PWM,  // or MOTOR_TYPE_STEPPER, MOTOR_TYPE_BLDC
+    .data.dc.power = 50.0f      // DC motor: -100.0 to +100.0
+    // .data.stepper = {phase_a, phase_b}      // Stepper motor
+    // .data.bldc = {phase_a, phase_b, phase_c} // BLDC motor
+};
+Motor_SetPower(&motor_interface, &cmd);
+```
+
+**Hardware Callbacks Pattern:**
+```c
+// PWM driver provides these callbacks
+Motor_Hardware_Callbacks_t hw = {
+    .init = PWM_HW_Init,          // Initialize PWM channels
+    .deinit = PWM_HW_DeInit,      // Deinitialize
+    .set_power = PWM_HW_SetPower, // Apply PWM signals
+    .stop = PWM_HW_Stop,          // Stop PWM
+    .update = PWM_HW_Update       // Update (optional)
+};
+```
+
+### Common Patterns
+
+#### 1. Creating and Initializing PWM Motor Driver
 ```c
 #include "ctrl/servo.h"
 #include "drv/motor/pwm.h"
 
-PWM_Motor_Driver_t motor;
+PWM_Motor_Driver_t motor_driver;
 Servo_Controller_t servo;
 
-// Configure and initialize motor
-PWM_Motor_Config_t motor_config = { /* ... */ };
-PWM_Motor_Create(&motor, &motor_config);
-Motor_Init(&motor.interface, &motor_params);
+// Step 1: Create PWM driver (sets up hardware callbacks)
+PWM_Motor_Config_t pwm_config = {
+    .type = PWM_MOTOR_TYPE_DUAL_PWM,  // H-bridge mode
+    .pwm_fwd = &pwm_handle_fwd,       // Forward PWM channel
+    .pwm_bwd = &pwm_handle_bwd,       // Backward PWM channel
+    .gpio_dir = NULL                  // No DIR pin in dual-PWM mode
+};
+PWM_Motor_Create(&motor_driver, &pwm_config);
 
-// Configure servo
+// Step 2: Initialize motor interface (calls hw.init callback)
+Motor_Params_t motor_params = {
+    .type = MOTOR_TYPE_DC_PWM,
+    .max_power = 100.0f,
+    .min_power = 5.0f,
+    .invert_direction = false
+};
+Motor_Init(&motor_driver.interface, &motor_params);
+
+// Step 3: Configure servo with motor interface
 Servo_Config_t servo_config = {
     .update_frequency = 1000.0f,
     /* ... PID, safety, trajectory params ... */
 };
-
-// Initialize servo
-Servo_Init(&servo, &servo_config, &motor.interface);
+Servo_Init(&servo, &servo_config, &motor_driver.interface);
 
 // Main control loop
 while(1) {
@@ -334,7 +426,26 @@ while(1) {
 }
 ```
 
-### Setting Target Position
+#### 2. Direct Motor Control (Without Servo)
+```c
+// Using universal Motor_SetPower() with command structure
+Motor_Command_t cmd = {
+    .type = MOTOR_TYPE_DC_PWM,
+    .data.dc.power = 75.0f  // 75% forward
+};
+Motor_SetPower(&motor_driver.interface, &cmd);
+
+// Using wrapper function for convenience
+Motor_SetPower_DC(&motor_driver.interface, -50.0f);  // 50% backward
+
+// Stop motor
+Motor_Stop(&motor_driver.interface);
+
+// Emergency stop
+Motor_EmergencyStop(&motor_driver.interface);
+```
+
+#### 3. Setting Target Position (With Servo)
 ```c
 // Set position in degrees
 Servo_SetPosition(&servo, 90.0f);
@@ -348,6 +459,18 @@ if (Servo_IsAtTarget(&servo)) {
 float position = Servo_GetPosition(&servo);
 float velocity = Servo_GetVelocity(&servo);
 Servo_State_t state = Servo_GetState(&servo);
+```
+
+#### 4. Single-Channel PWM Mode (PWM + DIR)
+```c
+PWM_Motor_Config_t pwm_config = {
+    .type = PWM_MOTOR_TYPE_SINGLE_PWM_DIR,  // PWM + DIR mode
+    .pwm_fwd = &pwm_handle,                 // Single PWM channel
+    .pwm_bwd = NULL,                        // Not used
+    .gpio_dir = GPIOA,                      // Direction GPIO port
+    .gpio_pin = GPIO_PIN_8                  // Direction pin
+};
+PWM_Motor_Create(&motor_driver, &pwm_config);
 ```
 
 ## Documentation Files
@@ -372,8 +495,9 @@ Development happens on feature branches merged to `master`
 - **License:** MIT License
 - **Organization:** КПІ ім. Ігоря Сікорського (diploma project)
 - **Target platform:** STM32F411CEU6 (BlackPill) as primary, but architecture supports any STM32F4
-- **Sensors:** Currently supports AS5600 (I2C) and AEAT-9922 (SPI) magnetic encoders
-- **Motor types:** DC motors with PWM control via H-bridge drivers
+- **Current sensor:** AEAT-9922 (18-bit SPI) is enabled; AS5600 (I2C) is available but disabled
+- **Motor types:** DC motors with PWM control (supports both single-channel PWM+DIR and dual-channel H-bridge modes)
+- **Motor architecture:** Unified `Motor_Interface_t` with hardware callbacks pattern, extensible to Stepper and BLDC motors
 
 ## Safety Critical Code
 
