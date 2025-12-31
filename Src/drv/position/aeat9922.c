@@ -251,7 +251,7 @@ static Servo_Status_t AEAT9922_HW_ReadRaw(void* driver_data, Position_Raw_Data_t
     uint32_t position_18bit = position_24bit & 0x3FFFF;
 
     // Застосувати маску відповідно до налаштованої роздільності
-    uint32_t resolution_bits = 18 - (uint8_t)driver->config.abs_resolution;
+    uint32_t resolution_bits = 18 - (uint8_t)driver->config.general.abs_resolution;
     uint32_t position_mask = (1U << resolution_bits) - 1;
     uint32_t raw_position = position_18bit & position_mask;
 
