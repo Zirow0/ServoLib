@@ -26,16 +26,75 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 
-/**
- * @brief Режими інтерфейсу AEAT-9922
- */
-typedef enum {
-    AEAT9922_INTERFACE_SPI4_16BIT = 0,  /**< SPI-4(A) 16-біт з парністю */
-    AEAT9922_INTERFACE_SPI4_24BIT = 1   /**< SPI-4(B) 24-біт з CRC */
-} AEAT9922_Interface_t;
+/* ========================================================================== */
+/* КОНСТАНТИ З DATASHEET                                                      */
+/* ========================================================================== */
+
+// Power-Up Time (Table 3, Page 5)
+#define AEAT9922_POWERUP_TIME_MS            10      // Час запуску після подачі живлення
+
+// EEPROM Programming
+#define AEAT9922_EEPROM_WRITE_TIME_MS       40      // Час запису в EEPROM
+
+// Calibration
+#define AEAT9922_CALIB_ACCURACY_TIME_MS     2000    // Час калібрування точності (~2 сек)
+#define AEAT9922_CALIB_ZERO_TIME_MS         100     // Час zero reset калібрування
+
+// SPI4 Timing (Table 8, Page 10)
+#define AEAT9922_SPI4_T_CSN_MIN_NS          350     // CS LOW до першого SCK
+#define AEAT9922_SPI4_T_CSR_MIN_NS          350     // CS HIGH між транзакціями
+#define AEAT9922_SPI4_T_CLK_MIN_NS          100     // Clock period (10 MHz max)
+
+// ABI Incremental (Table 5, Page 6)
+#define AEAT9922_ABI_REACTION_TIME_MS       10      // Час до першого ABI імпульсу
+#define AEAT9922_ABI_MAX_FREQUENCY_HZ       1000000 // Максимальна частота 1 MHz
+
+// Incremental CPR (Table 4, Page 6)
+#define AEAT9922_INC_CPR_MIN                1       // Мінімальна CPR
+#define AEAT9922_INC_CPR_MAX                10000   // Максимальна CPR
+
+// UVW Pole Pairs (Page 19)
+#define AEAT9922_UVW_POLE_PAIRS_MIN         1       // Мінімум 1 пара полюсів
+#define AEAT9922_UVW_POLE_PAIRS_MAX         32      // Максимум 32 пари
+
+/* ========================================================================== */
+/* РЕЖИМИ РОБОТИ                                                              */
+/* ========================================================================== */
 
 /**
- * @brief Роздільна здатність абсолютного виходу
+ * @brief Прапорці режимів роботи (можна комбінувати)
+ */
+typedef enum {
+    AEAT9922_MODE_NONE             = 0,         // Жоден режим
+
+    // Абсолютні інтерфейси (Table 7, Page 9)
+    AEAT9922_MODE_SPI3             = (1 << 0),  // SPI-3 (тільки memory R/W)
+    AEAT9922_MODE_SSI3             = (1 << 1),  // SSI-3
+    AEAT9922_MODE_SSI2             = (1 << 2),  // SSI-2
+    AEAT9922_MODE_SPI4             = (1 << 3),  // SPI-4 (діагностика + position)
+    AEAT9922_MODE_PWM              = (1 << 4),  // PWM вихід
+
+    // Інкрементальні виходи
+    AEAT9922_MODE_ABI              = (1 << 5),  // ABI інкрементальний вихід
+    AEAT9922_MODE_UVW              = (1 << 6),  // UVW комутація
+} AEAT9922_Mode_Flags_t;
+
+/**
+ * @brief Варіанти протоколів (PSEL[1:0] біти)
+ */
+typedef enum {
+    AEAT9922_PSEL_SPI4_16BIT   = 0,  // PSEL[1:0]=00: SPI-4(A) 16-bit з парністю
+    AEAT9922_PSEL_SPI4_24BIT   = 1,  // PSEL[1:0]=01: SPI-4(B) 24-bit з CRC
+    AEAT9922_PSEL_SSI3_A       = 0,  // PSEL[1:0]=00: SSI-3(A)
+    AEAT9922_PSEL_SSI3_B       = 1,  // PSEL[1:0]=01: SSI-3(B)
+    AEAT9922_PSEL_SSI2_A       = 0,  // PSEL[1:0]=00: SSI-2(A)
+    AEAT9922_PSEL_SSI2_B       = 1,  // PSEL[1:0]=01: SSI-2(B)
+    AEAT9922_PSEL_PWM_SIMPLE   = 0,  // PSEL[1:0]=00: PWM без Init/Error/Exit
+    AEAT9922_PSEL_PWM_EXTENDED = 1,  // PSEL[1:0]=01: PWM з Init/Error/Exit
+} AEAT9922_Protocol_Variant_t;
+
+/**
+ * @brief Роздільна здатність абсолютного виходу (CONFIG1[3:0])
  */
 typedef enum {
     AEAT9922_ABS_RES_18BIT = 0,  /**< 262144 позицій */
@@ -50,6 +109,26 @@ typedef enum {
 } AEAT9922_Abs_Resolution_t;
 
 /**
+ * @brief Index pulse width (регістр CONFIG0)
+ */
+typedef enum {
+    AEAT9922_INDEX_WIDTH_90  = 0,  /**< 90 електричних градусів */
+    AEAT9922_INDEX_WIDTH_180 = 1,  /**< 180 електричних градусів */
+    AEAT9922_INDEX_WIDTH_270 = 2,  /**< 270 електричних градусів */
+    AEAT9922_INDEX_WIDTH_360 = 3   /**< 360 електричних градусів */
+} AEAT9922_Index_Width_t;
+
+/**
+ * @brief Index state - позиція імпульсу Index (регістр CONFIG0)
+ */
+typedef enum {
+    AEAT9922_INDEX_STATE_90  = 0,  /**< Index на 90° позиції */
+    AEAT9922_INDEX_STATE_180 = 1,  /**< Index на 180° позиції */
+    AEAT9922_INDEX_STATE_270 = 2,  /**< Index на 270° позиції */
+    AEAT9922_INDEX_STATE_360 = 3   /**< Index на 360° позиції (нульова) */
+} AEAT9922_Index_State_t;
+
+/**
  * @brief Структура статусу енкодера
  */
 typedef struct {
@@ -60,30 +139,64 @@ typedef struct {
 } AEAT9922_Status_t;
 
 /**
- * @brief Конфігурація AEAT-9922
+ * @brief Конфігурація SPI інтерфейсу
  */
 typedef struct {
-    // SPI конфігурація
-    HWD_SPI_Config_t spi_config;
+    HWD_SPI_Config_t spi_config;             /**< Апаратна конфігурація SPI */
 
-    // GPIO для MSEL піна
-    void* msel_port;      /**< GPIO порт для MSEL */
-    uint16_t msel_pin;    /**< GPIO пін для MSEL */
+    void* msel_port;                          /**< GPIO порт для MSEL (GPIOA, etc.) */
+    uint16_t msel_pin;                        /**< GPIO пін для MSEL (GPIO_PIN_x) */
 
-    // Налаштування роздільної здатності
-    AEAT9922_Abs_Resolution_t abs_resolution;  /**< Абсолютна роздільність */
-    uint16_t incremental_cpr;                   /**< Інкрементальна CPR (1-10000) */
+    AEAT9922_Protocol_Variant_t protocol_variant;  /**< Варіант протоколу (16-bit або 24-bit) */
+} AEAT9922_SPI_Config_t;
 
-    // Інтерфейс
-    AEAT9922_Interface_t interface_mode;
+/**
+ * @brief Конфігурація ABI інкрементального виходу
+ */
+typedef struct {
+    uint16_t incremental_cpr;                 /**< Counts Per Revolution (1-10000) */
 
-    // Напрямок обертання (true = CCW count up)
-    bool direction_ccw;
+    AEAT9922_Index_Width_t index_width;       /**< Ширина імпульсу Index */
+    AEAT9922_Index_State_t index_state;       /**< Позиція імпульсу Index */
 
-    // Параметри інкрементального виходу (опціонально)
-    bool enable_incremental;      /**< Використовувати апаратний підрахунок */
-    void* encoder_timer_handle;   /**< Вказівник на TIM handle для encoder mode */
+    bool enable_incremental;                  /**< Використовувати апаратний підрахунок */
+    void* encoder_timer_handle;               /**< TIM handle для Encoder Mode (NULL якщо не використовується) */
+} AEAT9922_ABI_Config_t;
 
+/**
+ * @brief Конфігурація UVW комутаційних сигналів
+ */
+typedef struct {
+    uint8_t pole_pairs;                       /**< Кількість пар полюсів (1-32) */
+} AEAT9922_UVW_Config_t;
+
+/**
+ * @brief Загальна конфігурація датчика
+ */
+typedef struct {
+    AEAT9922_Abs_Resolution_t abs_resolution; /**< Роздільна здатність (CONFIG1[3:0]) */
+
+    bool direction_ccw;                       /**< true = CCW count up, false = CW count up */
+
+    bool auto_zero_on_init;                   /**< Виконати zero reset при ініціалізації */
+
+    bool enable_inl_correction;               /**< Увімкнути INL angle correction */
+
+    float hysteresis_deg;                     /**< Гістерезис в механічних градусах */
+} AEAT9922_General_Config_t;
+
+/**
+ * @brief Повна конфігурація AEAT-9922
+ */
+typedef struct {
+    uint32_t enabled_modes;                   /**< Комбінація AEAT9922_Mode_Flags_t */
+
+    AEAT9922_General_Config_t general;        /**< Загальні налаштування */
+
+    AEAT9922_SPI_Config_t spi_config;         /**< Конфігурація SPI (для SPI3, SPI4) */
+
+    AEAT9922_ABI_Config_t abi;                /**< ABI інкрементальний вихід */
+    AEAT9922_UVW_Config_t uvw;                /**< UVW комутація */
 } AEAT9922_Config_t;
 
 /**

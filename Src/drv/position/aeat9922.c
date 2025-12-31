@@ -62,50 +62,63 @@ static Servo_Status_t AEAT9922_HW_Init(void* driver_data, const Position_Params_
 {
     AEAT9922_Driver_t* driver = (AEAT9922_Driver_t*)driver_data;
     Servo_Status_t status;
+    uint32_t modes = driver->config.enabled_modes;
 
-    // 1. Встановити MSEL = HIGH для SPI4 режиму
-    HAL_GPIO_WritePin((GPIO_TypeDef*)driver->config.msel_port,
-                      driver->config.msel_pin, GPIO_PIN_SET);
+    // 1. Встановити MSEL відповідно до режимів
+    // MSEL=1 для SPI4/PWM/UVW, MSEL=0 для SPI3/SSI
+    GPIO_PinState msel_state = GPIO_PIN_RESET;
+    if (modes & (AEAT9922_MODE_SPI4 | AEAT9922_MODE_PWM | AEAT9922_MODE_UVW)) {
+        msel_state = GPIO_PIN_SET;
+    }
+    HAL_GPIO_WritePin((GPIO_TypeDef*)driver->config.spi_config.msel_port,
+                      driver->config.spi_config.msel_pin, msel_state);
 
-    // 2. Ініціалізація SPI
-    status = HWD_SPI_Init(&driver->spi_handle, &driver->config.spi_config);
-    if (status != SERVO_OK) {
-        return status;
+    // 2. Ініціалізація SPI (якщо використовується будь-який SPI режим)
+    if (modes & (AEAT9922_MODE_SPI3 | AEAT9922_MODE_SPI4)) {
+        status = HWD_SPI_Init(&driver->spi_handle, &driver->config.spi_config.spi_config);
+        if (status != SERVO_OK) {
+            return status;
+        }
     }
 
     // 3. Зачекати Power-Up час (10 ms)
     HAL_Delay(AEAT9922_POWERUP_TIME_MS);
 
-    // 4. Перевірити статус енкодера
-    status = AEAT9922_ReadStatus(driver);
-    if (status != SERVO_OK) {
-        return status;
+    // 4. Перевірити статус енкодера (якщо SPI доступний)
+    if (modes & (AEAT9922_MODE_SPI3 | AEAT9922_MODE_SPI4)) {
+        status = AEAT9922_ReadStatus(driver);
+        if (status != SERVO_OK) {
+            return status;
+        }
+
+        if (!driver->status.ready) {
+            return SERVO_ERROR;
+        }
     }
 
-    if (!driver->status.ready) {
-        return SERVO_ERROR;
+    // 5. Розблокувати регістри для конфігурації
+    if (modes & (AEAT9922_MODE_SPI3 | AEAT9922_MODE_SPI4)) {
+        status = AEAT9922_UnlockRegisters(driver);
+        if (status != SERVO_OK) {
+            return status;
+        }
     }
 
-    // 5. Розблокувати регістри
-    status = AEAT9922_UnlockRegisters(driver);
-    if (status != SERVO_OK) {
-        return status;
-    }
-
-    // 6. Налаштувати абсолютну роздільність
+    // 6. Налаштувати абсолютну роздільність (CONFIG1)
     uint8_t config1;
     status = AEAT9922_ReadRegister(driver, AEAT9922_REG_CONFIG1, &config1);
     if (status != SERVO_OK) {
         return status;
     }
 
-    config1 = (config1 & 0xF0) | (driver->config.abs_resolution & 0x0F);
+    // Встановити роздільність (біти [3:0])
+    config1 = (config1 & 0xF0) | (driver->config.general.abs_resolution & 0x0F);
 
-    // Додати налаштування напрямку
-    if (driver->config.direction_ccw) {
-        config1 |= (1 << 4);  // Біт 4: Direction (CCW count up)
+    // Встановити напрямок (біт 4)
+    if (driver->config.general.direction_ccw) {
+        config1 |= (1 << 4);  // CCW count up
     } else {
-        config1 &= ~(1 << 4);
+        config1 &= ~(1 << 4); // CW count up
     }
 
     status = AEAT9922_WriteRegister(driver, AEAT9922_REG_CONFIG1, config1);
@@ -113,43 +126,60 @@ static Servo_Status_t AEAT9922_HW_Init(void* driver_data, const Position_Params_
         return status;
     }
 
-    // 7. Налаштувати інкрементальну роздільність
-    uint16_t cpr = driver->config.incremental_cpr;
-    if (cpr < 1) cpr = 1;
-    if (cpr > 10000) cpr = 10000;
+    // 7. Налаштувати інкрементальну роздільність (якщо режим ABI увімкнений)
+    if (modes & AEAT9922_MODE_ABI) {
+        uint16_t cpr = driver->config.abi.incremental_cpr;
+        if (cpr < AEAT9922_INC_CPR_MIN) cpr = AEAT9922_INC_CPR_MIN;
+        if (cpr > AEAT9922_INC_CPR_MAX) cpr = AEAT9922_INC_CPR_MAX;
 
-    uint8_t cpr_high = (cpr >> 8) & 0x3F;
-    uint8_t cpr_low = cpr & 0xFF;
+        uint8_t cpr_high = (cpr >> 8) & 0x3F;
+        uint8_t cpr_low = cpr & 0xFF;
 
-    status = AEAT9922_WriteRegister(driver, AEAT9922_REG_INC_RES_HIGH, cpr_high);
-    if (status != SERVO_OK) {
-        return status;
+        status = AEAT9922_WriteRegister(driver, AEAT9922_REG_INC_RES_HIGH, cpr_high);
+        if (status != SERVO_OK) {
+            return status;
+        }
+
+        status = AEAT9922_WriteRegister(driver, AEAT9922_REG_INC_RES_LOW, cpr_low);
+        if (status != SERVO_OK) {
+            return status;
+        }
+
+        // Налаштувати Index pulse width та state (CONFIG0)
+        // TODO: Implement CONFIG0 write for index_width and index_state
     }
 
-    status = AEAT9922_WriteRegister(driver, AEAT9922_REG_INC_RES_LOW, cpr_low);
-    if (status != SERVO_OK) {
-        return status;
-    }
-
-    // 8. Налаштувати PSEL для вибору інтерфейсу SPI4
+    // 8. Налаштувати PSEL для вибору варіанту протоколу (CONFIG2)
     uint8_t config2;
     status = AEAT9922_ReadRegister(driver, AEAT9922_REG_CONFIG2, &config2);
     if (status != SERVO_OK) {
         return status;
     }
 
-    config2 = (config2 & 0x9F) | ((driver->config.interface_mode & 0x03) << 5);
+    // PSEL[1:0] в бітах [6:5]
+    config2 = (config2 & 0x9F) | ((driver->config.spi_config.protocol_variant & 0x03) << 5);
+
     status = AEAT9922_WriteRegister(driver, AEAT9922_REG_CONFIG2, config2);
     if (status != SERVO_OK) {
         return status;
     }
 
-    // 9. Ініціалізувати інкрементальний лічильник (якщо використовується)
-    if (driver->config.enable_incremental && driver->config.encoder_timer_handle != NULL) {
-        TIM_HandleTypeDef* htim = (TIM_HandleTypeDef*)driver->config.encoder_timer_handle;
-        HAL_TIM_Encoder_Start(htim, TIM_CHANNEL_ALL);
-        driver->incremental_count = 0;
-        driver->last_incremental_count = 0;
+    // 9. Ініціалізувати апаратний таймер для ABI (якщо використовується)
+    if ((modes & AEAT9922_MODE_ABI) && driver->config.abi.enable_incremental) {
+        if (driver->config.abi.encoder_timer_handle != NULL) {
+            TIM_HandleTypeDef* htim = (TIM_HandleTypeDef*)driver->config.abi.encoder_timer_handle;
+            HAL_TIM_Encoder_Start(htim, TIM_CHANNEL_ALL);
+            driver->incremental_count = 0;
+            driver->last_incremental_count = 0;
+        }
+    }
+
+    // 10. Виконати auto zero калібрування (якщо увімкнено)
+    if (driver->config.general.auto_zero_on_init) {
+        status = AEAT9922_CalibrateZero(driver);
+        if (status != SERVO_OK) {
+            return status;
+        }
     }
 
     return SERVO_OK;
@@ -161,15 +191,22 @@ static Servo_Status_t AEAT9922_HW_Init(void* driver_data, const Position_Params_
 static Servo_Status_t AEAT9922_HW_DeInit(void* driver_data)
 {
     AEAT9922_Driver_t* driver = (AEAT9922_Driver_t*)driver_data;
+    uint32_t modes = driver->config.enabled_modes;
 
-    // Зупинити інкрементальний таймер
-    if (driver->config.enable_incremental && driver->config.encoder_timer_handle != NULL) {
-        TIM_HandleTypeDef* htim = (TIM_HandleTypeDef*)driver->config.encoder_timer_handle;
-        HAL_TIM_Encoder_Stop(htim, TIM_CHANNEL_ALL);
+    // Зупинити інкрементальний таймер (якщо ABI увімкнений)
+    if ((modes & AEAT9922_MODE_ABI) && driver->config.abi.enable_incremental) {
+        if (driver->config.abi.encoder_timer_handle != NULL) {
+            TIM_HandleTypeDef* htim = (TIM_HandleTypeDef*)driver->config.abi.encoder_timer_handle;
+            HAL_TIM_Encoder_Stop(htim, TIM_CHANNEL_ALL);
+        }
     }
 
-    // Деініціалізувати SPI
-    return HWD_SPI_DeInit(&driver->spi_handle);
+    // Деініціалізувати SPI (якщо використовується)
+    if (modes & (AEAT9922_MODE_SPI3 | AEAT9922_MODE_SPI4)) {
+        return HWD_SPI_DeInit(&driver->spi_handle);
+    }
+
+    return SERVO_OK;
 }
 
 /**
@@ -261,7 +298,7 @@ Servo_Status_t AEAT9922_Create(AEAT9922_Driver_t* driver,
 
     // Налаштувати метадані інтерфейсу
     driver->interface.capabilities = POSITION_CAP_ABSOLUTE | POSITION_CAP_MULTITURN;
-    driver->interface.resolution_bits = 18 - (uint8_t)config->abs_resolution;
+    driver->interface.resolution_bits = 18 - (uint8_t)config->general.abs_resolution;
     driver->interface.requires_calibration = false;  // Абсолютний енкодер
     driver->interface.driver_data = driver;
 
@@ -485,11 +522,17 @@ Servo_Status_t AEAT9922_CalibrateZero(AEAT9922_Driver_t* driver)
 
 Servo_Status_t AEAT9922_UpdateIncrementalCount(AEAT9922_Driver_t* driver)
 {
-    if (driver == NULL || !driver->config.enable_incremental) {
+    if (driver == NULL) {
         return SERVO_INVALID;
     }
 
-    TIM_HandleTypeDef* htim = (TIM_HandleTypeDef*)driver->config.encoder_timer_handle;
+    // Перевірити чи увімкнений режим ABI з апаратним таймером
+    if (!(driver->config.enabled_modes & AEAT9922_MODE_ABI) ||
+        !driver->config.abi.enable_incremental) {
+        return SERVO_INVALID;
+    }
+
+    TIM_HandleTypeDef* htim = (TIM_HandleTypeDef*)driver->config.abi.encoder_timer_handle;
     if (htim == NULL) {
         return SERVO_INVALID;
     }
