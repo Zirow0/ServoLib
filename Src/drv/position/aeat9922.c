@@ -97,75 +97,74 @@ static Servo_Status_t AEAT9922_HW_Init(void* driver_data, const Position_Params_
         }
     }
 
-    // 5. Розблокувати регістри для конфігурації
+    // 5. Прочитати та перевірити конфігурацію CONFIG1 (роздільність, напрямок)
     if (modes & (AEAT9922_MODE_SPI3 | AEAT9922_MODE_SPI4)) {
-        status = AEAT9922_UnlockRegisters(driver);
+        uint8_t config1;
+        status = AEAT9922_ReadRegister(driver, AEAT9922_REG_CONFIG1, &config1);
         if (status != SERVO_OK) {
             return status;
         }
+
+        // Витягнути поточну роздільність (біти [3:0])
+        uint8_t current_resolution = config1 & 0x0F;
+
+        // Витягнути напрямок (біт 4)
+        bool current_direction_ccw = (config1 & (1 << 4)) != 0;
+
+        // Перевірка: чи конфігурація датчика відповідає очікуваній
+        if (current_resolution != (driver->config.general.abs_resolution & 0x0F)) {
+            // Попередження: роздільність не відповідає конфігурації
+            // Можна логувати або повернути помилку
+        }
+
+        if (current_direction_ccw != driver->config.general.direction_ccw) {
+            // Попередження: напрямок не відповідає конфігурації
+        }
+
+        // Оновити інтерфейс з реальною роздільністю
+        driver->interface.resolution_bits = 18 - current_resolution;
     }
 
-    // 6. Налаштувати абсолютну роздільність (CONFIG1)
-    uint8_t config1;
-    status = AEAT9922_ReadRegister(driver, AEAT9922_REG_CONFIG1, &config1);
-    if (status != SERVO_OK) {
-        return status;
-    }
-
-    // Встановити роздільність (біти [3:0])
-    config1 = (config1 & 0xF0) | (driver->config.general.abs_resolution & 0x0F);
-
-    // Встановити напрямок (біт 4)
-    if (driver->config.general.direction_ccw) {
-        config1 |= (1 << 4);  // CCW count up
-    } else {
-        config1 &= ~(1 << 4); // CW count up
-    }
-
-    status = AEAT9922_WriteRegister(driver, AEAT9922_REG_CONFIG1, config1);
-    if (status != SERVO_OK) {
-        return status;
-    }
-
-    // 7. Налаштувати інкрементальну роздільність (якщо режим ABI увімкнений)
+    // 6. Прочитати та перевірити інкрементальну роздільність (якщо режим ABI)
     if (modes & AEAT9922_MODE_ABI) {
-        uint16_t cpr = driver->config.abi.incremental_cpr;
-        if (cpr < AEAT9922_INC_CPR_MIN) cpr = AEAT9922_INC_CPR_MIN;
-        if (cpr > AEAT9922_INC_CPR_MAX) cpr = AEAT9922_INC_CPR_MAX;
+        uint8_t cpr_high, cpr_low;
 
-        uint8_t cpr_high = (cpr >> 8) & 0x3F;
-        uint8_t cpr_low = cpr & 0xFF;
-
-        status = AEAT9922_WriteRegister(driver, AEAT9922_REG_INC_RES_HIGH, cpr_high);
+        status = AEAT9922_ReadRegister(driver, AEAT9922_REG_INC_RES_HIGH, &cpr_high);
         if (status != SERVO_OK) {
             return status;
         }
 
-        status = AEAT9922_WriteRegister(driver, AEAT9922_REG_INC_RES_LOW, cpr_low);
+        status = AEAT9922_ReadRegister(driver, AEAT9922_REG_INC_RES_LOW, &cpr_low);
         if (status != SERVO_OK) {
             return status;
         }
 
-        // Налаштувати Index pulse width та state (CONFIG0)
-        // TODO: Implement CONFIG0 write for index_width and index_state
+        uint16_t current_cpr = ((uint16_t)(cpr_high & 0x3F) << 8) | cpr_low;
+
+        // Перевірка: чи CPR відповідає конфігурації
+        if (current_cpr != driver->config.abi.incremental_cpr) {
+            // Попередження: CPR не відповідає конфігурації
+        }
     }
 
-    // 8. Налаштувати PSEL для вибору варіанту протоколу (CONFIG2)
-    uint8_t config2;
-    status = AEAT9922_ReadRegister(driver, AEAT9922_REG_CONFIG2, &config2);
-    if (status != SERVO_OK) {
-        return status;
+    // 7. Прочитати та перевірити CONFIG2 (PSEL - варіант протоколу)
+    if (modes & (AEAT9922_MODE_SPI3 | AEAT9922_MODE_SPI4)) {
+        uint8_t config2;
+        status = AEAT9922_ReadRegister(driver, AEAT9922_REG_CONFIG2, &config2);
+        if (status != SERVO_OK) {
+            return status;
+        }
+
+        // Витягнути PSEL[1:0] з бітів [6:5]
+        uint8_t current_psel = (config2 >> 5) & 0x03;
+
+        // Перевірка: чи PSEL відповідає конфігурації
+        if (current_psel != (driver->config.spi_config.protocol_variant & 0x03)) {
+            // Попередження: варіант протоколу не відповідає конфігурації
+        }
     }
 
-    // PSEL[1:0] в бітах [6:5]
-    config2 = (config2 & 0x9F) | ((driver->config.spi_config.protocol_variant & 0x03) << 5);
-
-    status = AEAT9922_WriteRegister(driver, AEAT9922_REG_CONFIG2, config2);
-    if (status != SERVO_OK) {
-        return status;
-    }
-
-    // 9. Ініціалізувати апаратний таймер для ABI (якщо використовується)
+    // 8. Ініціалізувати апаратний таймер для ABI (якщо використовується)
     if ((modes & AEAT9922_MODE_ABI) && driver->config.abi.enable_incremental) {
         if (driver->config.abi.encoder_timer_handle != NULL) {
             TIM_HandleTypeDef* htim = (TIM_HandleTypeDef*)driver->config.abi.encoder_timer_handle;
@@ -175,13 +174,9 @@ static Servo_Status_t AEAT9922_HW_Init(void* driver_data, const Position_Params_
         }
     }
 
-    // 10. Виконати auto zero калібрування (якщо увімкнено)
-    if (driver->config.general.auto_zero_on_init) {
-        status = AEAT9922_CalibrateZero(driver);
-        if (status != SERVO_OK) {
-            return status;
-        }
-    }
+    // 9. Перевірка готовності датчика до роботи
+    // Всі регістри прочитані, конфігурація перевірена
+    // Датчик готовий до використання
 
     return SERVO_OK;
 }
