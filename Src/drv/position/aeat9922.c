@@ -20,6 +20,7 @@
 
 #include "drv/position/aeat9922.h"
 #include "hwd/hwd_timer.h"
+#include "util/checksum.h"
 #include "stm32f4xx_hal.h"
 #include <string.h>
 
@@ -214,6 +215,10 @@ static Servo_Status_t AEAT9922_HW_DeInit(void* driver_data)
  *
  * Читає ТІЛЬКИ сирі дані через SPI, БЕЗ конвертації в градуси.
  * Конвертацію робить position.c.
+ *
+ * SPI4-B Protocol (24-bit з CRC):
+ * TX: [CMD | ADDR | DUMMY]
+ * RX: [Reserved(4)|W|E|Data[17:10]] [Data[9:2]] [CRC-8]
  */
 static Servo_Status_t AEAT9922_HW_ReadRaw(void* driver_data, Position_Raw_Data_t* raw)
 {
@@ -225,7 +230,13 @@ static Servo_Status_t AEAT9922_HW_ReadRaw(void* driver_data, Position_Raw_Data_t
     // Відправити команду читання позиції (register 0x3F)
     tx_data[0] = AEAT9922_CMD_READ(AEAT9922_REG_POSITION);  // 0x40
     tx_data[1] = AEAT9922_REG_POSITION;                     // 0x3F
-    tx_data[2] = 0x00;                                       // Dummy
+
+    // Розрахувати CRC для TX пакету (якщо SPI4-B)
+    if (driver->config.spi_config.protocol_variant == AEAT9922_PSEL_SPI4_24BIT) {
+        tx_data[2] = Checksum_CRC8(tx_data, 2, CRC8_POLY_DEFAULT);
+    } else {
+        tx_data[2] = 0x00;  // Dummy для інших режимів
+    }
 
     HWD_SPI_CS_Low(&driver->spi_handle);
     delay_us(1);  // t_CSn >= 350ns
@@ -241,14 +252,56 @@ static Servo_Status_t AEAT9922_HW_ReadRaw(void* driver_data, Position_Raw_Data_t
         return status;
     }
 
-    // Розпакувати дані відповідно до протоколу AEAT-9922
-    // Формат 24-біт відповіді: [4_reserved][W][E][18-bit_position]
-    uint32_t position_24bit = ((uint32_t)rx_data[0] << 16) |
-                               ((uint32_t)rx_data[1] << 8) |
-                               rx_data[2];
+    /* ========================================================================
+     * SPI4-B РОЗПАКОВКА (24-bit з CRC-8)
+     * ========================================================================
+     * Формат відповіді:
+     * Байт 0 [23:16]: Reserved(4) | W | E | Data[17:16]
+     * Байт 1 [15:8]:  Data[15:8]
+     * Байт 2 [7:0]:   CRC-8
+     *
+     * Біти:
+     * [23:22] - Reserved (завжди 0)
+     * [22]    - W (Warning): магніт не в оптимальній позиції
+     * [21]    - E (Error): критична помилка комунікації
+     * [20:5]  - Position data (16 біт для 18-bit роздільності)
+     * [7:0]   - CRC-8 контрольна сума
+     */
 
-    // Витягнути позицію (біти [17:0])
-    uint32_t position_18bit = position_24bit & 0x3FFFF;
+    // Перевірка CRC-8 (якщо SPI4-B режим активний)
+    if (driver->config.spi_config.protocol_variant == AEAT9922_PSEL_SPI4_24BIT) {
+        uint8_t calculated_crc = Checksum_CRC8(rx_data, 2, CRC8_POLY_DEFAULT);
+        uint8_t received_crc = rx_data[2];
+
+        if (calculated_crc != received_crc) {
+            // CRC помилка
+            driver->error_count++;
+            raw->valid = false;
+            return SERVO_ERROR;
+        }
+    }
+
+    // Витягнути прапорці W та E
+    bool warning_flag = (rx_data[0] & (1 << 6)) != 0;  // W bit
+    bool error_flag   = (rx_data[0] & (1 << 5)) != 0;  // E bit
+
+    // Обробити помилки
+    if (error_flag) {
+        driver->error_count++;
+        raw->valid = false;
+        return SERVO_ERROR;
+    }
+
+    if (warning_flag) {
+        // Попередження: магніт не в оптимальній позиції
+        // Можна логувати, але продовжуємо роботу
+    }
+
+    // Витягнути дані позиції (біти [20:5] = 16 біт)
+    // Для 18-bit роздільності: rx_data[0] містить [Data17:Data16], rx_data[1] містить [Data15:Data8]
+    uint32_t position_18bit = ((uint32_t)(rx_data[0] & 0x03) << 16) |  // Біти [17:16]
+                              ((uint32_t)rx_data[1] << 8);               // Біти [15:8]
+    // Біти [7:0] відсутні в SPI4-B для позиції (CRC займає байт 2)
 
     // Застосувати маску відповідно до налаштованої роздільності
     uint32_t resolution_bits = 18 - (uint8_t)driver->config.general.abs_resolution;
@@ -334,18 +387,45 @@ Servo_Status_t AEAT9922_ReadRegister(AEAT9922_Driver_t* driver,
         return SERVO_INVALID;
     }
 
-    uint8_t tx_data[2];
-    uint8_t rx_data[2] = {0};
     Servo_Status_t status;
+
+    /* ========================================================================
+     * SPI4-B READ REGISTER PROTOCOL
+     * ========================================================================
+     * Транзакція 1 (команда):
+     *   TX: [CMD_READ | ADDRESS | DUMMY]
+     *   RX: [ignored]
+     *
+     * Транзакція 2 (дані):
+     *   TX: [DUMMY | DUMMY | DUMMY]
+     *   RX: [DATA | Reserved | CRC-8] для SPI4-B
+     *   RX: [DATA | Reserved] для SPI3
+     */
+
+    // Визначити розмір пакету залежно від режиму
+    uint8_t packet_size = 2;  // За замовчуванням SPI3
+    if (driver->config.spi_config.protocol_variant == AEAT9922_PSEL_SPI4_24BIT) {
+        packet_size = 3;  // SPI4-B з CRC
+    }
+
+    uint8_t tx_data[3] = {0};
+    uint8_t rx_data[3] = {0};
 
     // Крок 1: Відправити команду читання (RW=1, адреса)
     tx_data[0] = AEAT9922_CMD_READ(address);  // 0x40 (RW=1)
     tx_data[1] = address;                     // Адреса регістру
 
+    // Розрахувати CRC для SPI4-B
+    if (packet_size == 3) {
+        tx_data[2] = Checksum_CRC8(tx_data, 2, CRC8_POLY_DEFAULT);
+    } else {
+        tx_data[2] = 0x00;  // Не використовується для SPI3
+    }
+
     HWD_SPI_CS_Low(&driver->spi_handle);
     delay_us(1);  // t_CSn >= 350ns
 
-    status = HWD_SPI_TransmitReceive(&driver->spi_handle, tx_data, rx_data, 2);
+    status = HWD_SPI_TransmitReceive(&driver->spi_handle, tx_data, rx_data, packet_size);
 
     delay_us(1);  // t_CSf >= 50ns
     HWD_SPI_CS_High(&driver->spi_handle);
@@ -357,22 +437,37 @@ Servo_Status_t AEAT9922_ReadRegister(AEAT9922_Driver_t* driver,
     delay_us(2);  // t_CSR >= 350ns (між транзакціями)
 
     // Крок 2: Зчитати дані в наступній транзакції
-    tx_data[0] = 0x00;  // Dummy byte
-    tx_data[1] = 0x00;  // Dummy byte
+    tx_data[0] = 0x00;  // Dummy
+    tx_data[1] = 0x00;  // Dummy
+    tx_data[2] = 0x00;  // Dummy
 
     HWD_SPI_CS_Low(&driver->spi_handle);
     delay_us(1);
 
-    status = HWD_SPI_TransmitReceive(&driver->spi_handle, tx_data, rx_data, 2);
+    status = HWD_SPI_TransmitReceive(&driver->spi_handle, tx_data, rx_data, packet_size);
 
     delay_us(1);
     HWD_SPI_CS_High(&driver->spi_handle);
 
-    if (status == SERVO_OK) {
-        *value = rx_data[0];  // Дані в першому байті відповіді
+    if (status != SERVO_OK) {
+        return status;
     }
 
-    return status;
+    // Перевірка CRC для SPI4-B
+    if (packet_size == 3) {
+        uint8_t calculated_crc = Checksum_CRC8(rx_data, 2, CRC8_POLY_DEFAULT);
+        uint8_t received_crc = rx_data[2];
+
+        if (calculated_crc != received_crc) {
+            // CRC помилка
+            return SERVO_ERROR;
+        }
+    }
+
+    // Витягнути дані (перший байт містить регістр)
+    *value = rx_data[1];
+
+    return SERVO_OK;
 }
 
 Servo_Status_t AEAT9922_WriteRegister(AEAT9922_Driver_t* driver,
@@ -382,8 +477,22 @@ Servo_Status_t AEAT9922_WriteRegister(AEAT9922_Driver_t* driver,
         return SERVO_INVALID;
     }
 
+    /* ========================================================================
+     * SPI4-B WRITE REGISTER PROTOCOL
+     * ========================================================================
+     * Для SPI4-B (24-bit з CRC):
+     *   TX: [CMD_WRITE | ADDRESS | DATA]
+     *   Потім в наступній транзакції надсилається CRC
+     *
+     * Для SPI3:
+     *   TX: [CMD_WRITE | ADDRESS | DATA]
+     */
+
+    // Визначити розмір пакету
+    uint8_t packet_size = 3;  // Завжди 3 байти для write
+
     uint8_t tx_data[3];
-    uint8_t rx_data[3] = {0};  // Dummy receive buffer
+    uint8_t rx_data[3] = {0};
 
     // Команда запису: RW=0 (bit 6 = 0), адреса, дані
     tx_data[0] = AEAT9922_CMD_WRITE(address);  // 0x00 (RW=0)
@@ -394,15 +503,42 @@ Servo_Status_t AEAT9922_WriteRegister(AEAT9922_Driver_t* driver,
     delay_us(1);  // t_CSn >= 350ns
 
     Servo_Status_t status = HWD_SPI_TransmitReceive(&driver->spi_handle,
-                                                     tx_data, rx_data, 3);
+                                                     tx_data, rx_data, packet_size);
 
     delay_us(1);  // t_CSf >= 50ns
     HWD_SPI_CS_High(&driver->spi_handle);
 
+    if (status != SERVO_OK) {
+        return status;
+    }
+
+    // Для SPI4-B надіслати CRC в окремій транзакції
+    if (driver->config.spi_config.protocol_variant == AEAT9922_PSEL_SPI4_24BIT) {
+        delay_us(2);  // t_CSR >= 350ns
+
+        // Розрахувати CRC для відправлених даних
+        uint8_t crc = Checksum_CRC8(tx_data, 3, CRC8_POLY_DEFAULT);
+
+        uint8_t crc_tx[1] = {crc};
+        uint8_t crc_rx[1] = {0};
+
+        HWD_SPI_CS_Low(&driver->spi_handle);
+        delay_us(1);
+
+        status = HWD_SPI_TransmitReceive(&driver->spi_handle, crc_tx, crc_rx, 1);
+
+        delay_us(1);
+        HWD_SPI_CS_High(&driver->spi_handle);
+
+        if (status != SERVO_OK) {
+            return status;
+        }
+    }
+
     // Час на обробку запису (мінімум 1 ms)
     HAL_Delay(1);
 
-    return status;
+    return SERVO_OK;
 }
 
 Servo_Status_t AEAT9922_UnlockRegisters(AEAT9922_Driver_t* driver)
