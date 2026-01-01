@@ -154,11 +154,15 @@ static Servo_Status_t AS5600_HW_ReadRaw(void* driver_data, Position_Raw_Data_t* 
         return status;
     }
 
+    // ========== КОНВЕРТАЦІЯ RAW → RADIANS ==========
+    // AS5600 = 12-bit = 4096 позицій
+    float angle_rad = ((float)angle_raw * TWO_PI) / 4096.0f;
+
     // Заповнити структуру RAW даних
-    raw->raw_position = angle_raw;
+    raw->angle_rad = angle_rad;         // float, 0-2π
     raw->timestamp_us = HWD_Timer_GetMicros();
-    raw->has_velocity = false;  // AS5600 не надає готову velocity
-    raw->raw_velocity = 0.0f;
+    raw->has_velocity = false;          // AS5600 не надає готову velocity
+    raw->velocity_rad_s = 0.0f;
     raw->valid = true;
 
     return SERVO_OK;
@@ -173,15 +177,16 @@ static Servo_Status_t AS5600_HW_Calibrate(void* driver_data)
 {
     AS5600_Driver_t* driver = (AS5600_Driver_t*)driver_data;
 
-    // Зчитати поточну позицію
-    Position_Raw_Data_t raw;
-    Servo_Status_t status = AS5600_HW_ReadRaw(driver_data, &raw);
-    if (status != SERVO_OK || !raw.valid) {
+    // Зчитати поточну raw позицію (0-4095) безпосередньо
+    uint16_t angle_raw;
+    uint8_t reg = driver->config.use_raw_angle ? AS5600_REG_RAW_ANGLE_H : AS5600_REG_ANGLE_H;
+    Servo_Status_t status = AS5600_ReadReg16(driver, reg, &angle_raw);
+    if (status != SERVO_OK) {
         return SERVO_ERROR;
     }
 
     // Встановити як ZPOS
-    return AS5600_SetZeroPosition(driver, (uint16_t)raw.raw_position);
+    return AS5600_SetZeroPosition(driver, angle_raw);
 }
 
 /* Exported functions --------------------------------------------------------*/
@@ -208,9 +213,6 @@ Servo_Status_t AS5600_Create(AS5600_Driver_t* driver,
 
     // Встановити можливості
     driver->interface.capabilities = POSITION_CAP_ABSOLUTE;  // AS5600 = абсолютний датчик
-
-    // Встановити роздільну здатність
-    driver->interface.resolution_bits = 12;  // 12-bit = 4096 позицій
 
     // Прив'язати driver_data
     driver->interface.driver_data = driver;

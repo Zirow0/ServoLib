@@ -7,6 +7,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "../../Inc/util/derivative.h"
+#include "../../Inc/core.h"
 #include <math.h>
 
 /* Exported functions --------------------------------------------------------*/
@@ -39,6 +40,39 @@ float Derivative_CalculateVelocity(float current_pos, float last_pos,
     delta_pos = Derivative_NormalizeAngleDelta(delta_pos);
 
     // Швидкість (град/с)
+    float velocity = delta_pos / dt_s;
+
+    return velocity;
+}
+
+float Derivative_NormalizeAngleDeltaRad(float delta_rad)
+{
+    // Приведення до діапазону [-π, π]
+    while (delta_rad > PI) {
+        delta_rad -= TWO_PI;
+    }
+    while (delta_rad < -PI) {
+        delta_rad += TWO_PI;
+    }
+    return delta_rad;
+}
+
+float Derivative_CalculateVelocityRad(float current_pos_rad, float last_pos_rad,
+                                      uint32_t current_time_us, uint32_t last_time_us)
+{
+    // Перевірка на нульовий час
+    if (current_time_us <= last_time_us) {
+        return 0.0f;
+    }
+
+    // Різниця часу в секундах
+    float dt_s = (float)(current_time_us - last_time_us) / 1000000.0f;
+
+    // Різниця позицій з нормалізацією переходу через 0/2π
+    float delta_pos = current_pos_rad - last_pos_rad;
+    delta_pos = Derivative_NormalizeAngleDeltaRad(delta_pos);
+
+    // Швидкість (рад/с)
     float velocity = delta_pos / dt_s;
 
     return velocity;

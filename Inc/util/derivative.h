@@ -47,6 +47,32 @@ float Derivative_NormalizeAngleDelta(float delta_deg);
 float Derivative_CalculateVelocity(float current_pos, float last_pos,
                                    uint32_t current_time_us, uint32_t last_time_us);
 
+/**
+ * @brief Нормалізація різниці кутів в радіанах з врахуванням переходу через 0/2π
+ *
+ * Перетворює різницю кутів у діапазон [-π, π] радіанів.
+ * Приклад: delta = 6.0 - 0.2 = 5.8 → нормалізоване = -0.483
+ *
+ * @param delta_rad Різниця кутів (радіани)
+ * @return float Нормалізована різниця [-π, π]
+ */
+float Derivative_NormalizeAngleDeltaRad(float delta_rad);
+
+/**
+ * @brief Обчислення швидкості з позиції в радіанах
+ *
+ * Обчислює швидкість (рад/с) з двох послідовних вимірювань позиції.
+ * Автоматично враховує перехід через 0/2π радіанів.
+ *
+ * @param current_pos_rad Поточна позиція (радіани)
+ * @param last_pos_rad Попередня позиція (радіани)
+ * @param current_time_us Поточний час (мікросекунди)
+ * @param last_time_us Попередній час (мікросекунди)
+ * @return float Швидкість (рад/с), 0.0f якщо dt = 0
+ */
+float Derivative_CalculateVelocityRad(float current_pos_rad, float last_pos_rad,
+                                      uint32_t current_time_us, uint32_t last_time_us);
+
 #ifdef __cplusplus
 }
 #endif

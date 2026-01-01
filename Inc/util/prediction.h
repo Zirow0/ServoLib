@@ -48,6 +48,33 @@ float Prediction_LinearExtrapolate(float position_deg, float velocity_deg_s, uin
 float Prediction_GetCurrentPosition(float last_position_deg, float velocity_deg_s,
                                    uint32_t last_time_us, uint32_t current_time_us);
 
+/**
+ * @brief Лінійна екстраполяція позиції в радіанах
+ *
+ * Обчислює позицію через dt_us, використовуючи поточну позицію та швидкість.
+ * Формула: predicted_pos = position + velocity * dt
+ *
+ * @param position_rad Поточна позиція (радіани)
+ * @param velocity_rad_s Швидкість (рад/с)
+ * @param dt_us Інтервал екстраполяції (мікросекунди)
+ * @return float Передбачена позиція (радіани, 0-2π)
+ */
+float Prediction_LinearExtrapolateRad(float position_rad, float velocity_rad_s, uint32_t dt_us);
+
+/**
+ * @brief Отримання передбаченої позиції в радіанах на поточний момент
+ *
+ * Обчислює позицію на current_time_us, екстраполюючи від last_time_us.
+ *
+ * @param last_position_rad Остання виміряна позиція (радіани)
+ * @param velocity_rad_s Швидкість (рад/с)
+ * @param last_time_us Час останнього вимірювання (мкс)
+ * @param current_time_us Поточний час (мкс)
+ * @return float Передбачена позиція (радіани, 0-2π)
+ */
+float Prediction_GetCurrentPositionRad(float last_position_rad, float velocity_rad_s,
+                                       uint32_t last_time_us, uint32_t current_time_us);
+
 #ifdef __cplusplus
 }
 #endif

@@ -99,7 +99,6 @@ void AEAT9922_Example_Init(void)
     // 3. Налаштування параметрів для Position_Sensor
     Position_Params_t sensor_params = {
         .type = SENSOR_TYPE_AEAT9922,
-        .resolution_bits = 18,           // 18-bit абсолютна роздільність
         .min_angle = 0.0f,
         .max_angle = 360.0f,
         .update_rate = 1000              // 1 kHz update rate

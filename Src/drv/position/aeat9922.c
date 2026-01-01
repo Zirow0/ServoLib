@@ -121,8 +121,7 @@ static Servo_Status_t AEAT9922_HW_Init(void* driver_data, const Position_Params_
             // Попередження: напрямок не відповідає конфігурації
         }
 
-        // Оновити інтерфейс з реальною роздільністю
-        driver->interface.resolution_bits = 18 - current_resolution;
+        // Роздільність перевірена, конвертація буде в HW_ReadRaw
     }
 
     // 6. Прочитати та перевірити інкрементальну роздільність (якщо режим ABI)
@@ -255,6 +254,19 @@ static Servo_Status_t AEAT9922_HW_ReadRaw(void* driver_data, Position_Raw_Data_t
     delay_us(1);  // t_CSf >= 50ns
     HWD_SPI_CS_High(&driver->spi_handle);
 
+    delay_us(1);  // t_CSn >= 350ns
+    HWD_SPI_CS_Low(&driver->spi_handle);
+    delay_us(1);  // t_CSn >= 350ns
+
+    tx_data[0] = 0x00;
+    tx_data[1] = 0x00;
+    tx_data[2] = 0x00;
+
+    status = HWD_SPI_TransmitReceive(&driver->spi_handle, tx_data, rx_data, packet_size);
+
+    delay_us(1);  // t_CSf >= 50ns
+    HWD_SPI_CS_High(&driver->spi_handle);
+
     if (status != SERVO_OK) {
         driver->error_count++;
         raw->valid = false;
@@ -284,6 +296,8 @@ static Servo_Status_t AEAT9922_HW_ReadRaw(void* driver_data, Position_Raw_Data_t
         uint16_t full_data = ((uint16_t)rx_data[0] << 8) | rx_data[1];
         uint8_t parity_check = Checksum_EvenParity16(full_data);
 
+        printf("input raw data:        %d raw\n", full_data);
+
         if (parity_check != 0) {
             // Помилка парності (парність повинна бути парною, тобто 0)
             driver->error_count++;
@@ -294,16 +308,16 @@ static Servo_Status_t AEAT9922_HW_ReadRaw(void* driver_data, Position_Raw_Data_t
         // Витягнути прапорець помилки (біт 14)
         error_flag = (rx_data[0] & (1 << 6)) != 0;  // EF bit
 
-        if (error_flag) {
-            driver->error_count++;
-            raw->valid = false;
-            return SERVO_ERROR;
-        }
+        // if (error_flag) {
+        //     driver->error_count++;
+        //     raw->valid = false;
+        //     return SERVO_ERROR;
+        // }
 
         // Витягнути 10-bit позицію (біти [9:0])
-        raw_position = ((uint32_t)(rx_data[0] & 0x03) << 8) |  // Біти [9:8]
-                       rx_data[1];                              // Біти [7:0]
+        raw_position = ((uint32_t)(full_data & 0x3fff));  // Біти [13:0]
 
+        printf("input raw position:        %d raw\n", raw_position);
     } else {
         /* ====================================================================
          * SPI4-B РОЗПАКОВКА (24-bit з CRC-8)
@@ -361,11 +375,18 @@ static Servo_Status_t AEAT9922_HW_ReadRaw(void* driver_data, Position_Raw_Data_t
     uint32_t position_mask = (1U << resolution_bits) - 1;
     raw_position = raw_position & position_mask;
 
+    // ========== КОНВЕРТАЦІЯ RAW → RADIANS ==========
+    // Максимальне значення для даної роздільності
+    uint32_t max_count = (1U << resolution_bits);
+
+    // Конвертувати в радіани (0-2π)
+    float angle_rad = ((float)raw_position * TWO_PI) / (float)max_count;
+
     // Заповнити структуру Position_Raw_Data_t
-    raw->raw_position = raw_position;
+    raw->angle_rad = angle_rad;             // float, 0-2π
     raw->timestamp_us = HWD_Timer_GetMicros();
-    raw->has_velocity = false;  // AEAT-9922 НЕ надає готову velocity
-    raw->raw_velocity = 0.0f;
+    raw->has_velocity = false;              // AEAT-9922 НЕ надає готову velocity
+    raw->velocity_rad_s = 0.0f;
     raw->valid = true;
 
     return SERVO_OK;
@@ -404,7 +425,6 @@ Servo_Status_t AEAT9922_Create(AEAT9922_Driver_t* driver,
 
     // Налаштувати метадані інтерфейсу
     driver->interface.capabilities = POSITION_CAP_ABSOLUTE | POSITION_CAP_MULTITURN;
-    driver->interface.resolution_bits = 18 - (uint8_t)config->general.abs_resolution;
     driver->interface.requires_calibration = false;  // Абсолютний енкодер
     driver->interface.driver_data = driver;
 

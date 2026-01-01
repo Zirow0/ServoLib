@@ -36,12 +36,14 @@ typedef enum {
 
 /**
  * @brief Сирі дані з датчика (заповнює драйвер)
+ *
+ * ВАЖЛИВО: Драйвер конвертує raw дані до стандарту 0-2π радіанів!
  */
 typedef struct {
-    uint32_t raw_position;      /**< Сире значення (0 до 2^resolution-1) */
+    float angle_rad;            /**< Кут в радіанах (0 до 2π) */
     uint32_t timestamp_us;      /**< Мікросекунди (для velocity) */
     bool has_velocity;          /**< Чи датчик надає готову velocity */
-    float raw_velocity;         /**< Якщо датчик сам обчислює */
+    float velocity_rad_s;       /**< Швидкість в радіанах/с (якщо датчик надає) */
     bool valid;                 /**< Валідність даних */
 } Position_Raw_Data_t;
 
@@ -50,7 +52,6 @@ typedef struct {
  */
 typedef struct {
     Sensor_Type_t type;         /**< Тип датчика */
-    uint32_t resolution_bits;   /**< Роздільна здатність (12, 18 біт) */
     float min_angle;            /**< Мінімальний кут (градуси) */
     float max_angle;            /**< Максимальний кут (градуси) */
     uint32_t update_rate;       /**< Частота оновлення (Hz) */
@@ -69,26 +70,28 @@ typedef struct {
 
 /**
  * @brief Дані датчика позиції (обробляються в position.c)
+ *
+ * ВАЖЛИВО: Внутрішня робота в радіанах, конвертація в градуси через getter функції.
  */
 typedef struct {
-    // Поточні дані (обчислені)
-    float position_deg;           /**< Позиція 0-360° */
-    float velocity_deg_s;         /**< Швидкість (град/с) */
+    // Поточні дані (обчислені, в радіанах)
+    float position_rad;           /**< Позиція 0-2π */
+    float velocity_rad_s;         /**< Швидкість (рад/с) */
 
     // Multi-turn tracking
     int32_t revolution_count;     /**< Кількість повних обертів */
-    float absolute_position_deg;  /**< position + revolutions*360 */
+    float absolute_position_rad;  /**< position + revolutions*2π */
 
     // Для velocity обчислення
     uint32_t last_timestamp_us;   /**< Час останнього update */
-    float last_position_deg;      /**< Попередня позиція */
+    float last_position_rad;      /**< Попередня позиція (рад) */
 
     // Prediction (екстраполяція між updates)
-    float predicted_position_deg;   /**< Передбачена позиція */
+    float predicted_position_rad;   /**< Передбачена позиція (рад) */
     uint32_t prediction_timestamp_us; /**< Час prediction */
 
     // Статус
-    Position_Stats_t stats;       /**< Статистика */
+    Position_Stats_t stats;       /**< Статистика (градуси для зручності) */
     bool is_initialized;          /**< Прапорець ініціалізації */
     bool is_calibrated;           /**< Прапорець калібрування */
 
@@ -107,7 +110,7 @@ typedef struct {
     /** @brief Деініціалізація апаратури */
     Servo_Status_t (*deinit)(void* driver_data);
 
-    /** @brief Читання сирих даних з датчика (БЕЗ конвертації!) */
+    /** @brief Читання даних з датчика (драйвер конвертує raw → radians!) */
     Servo_Status_t (*read_raw)(void* driver_data, Position_Raw_Data_t* raw);
 
     /** @brief Калібрування датчика */
@@ -134,9 +137,6 @@ struct Position_Sensor_Interface {
 
     /** @brief Можливості датчика */
     Position_Capabilities_t capabilities;
-
-    /** @brief Роздільна здатність (12, 18 біт) */
-    uint32_t resolution_bits;
 
     /** @brief Чи потрібне калібрування (incremental = true) */
     bool requires_calibration;

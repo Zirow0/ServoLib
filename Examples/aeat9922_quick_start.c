@@ -51,7 +51,6 @@ void QuickStart_Init(void)
 
     Position_Params_t params = {
         .type = SENSOR_TYPE_AEAT9922,
-        .resolution_bits = 18,
         .min_angle = 0.0f,
         .max_angle = 360.0f,
         .update_rate = 1000
