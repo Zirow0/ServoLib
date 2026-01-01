@@ -216,9 +216,15 @@ static Servo_Status_t AEAT9922_HW_DeInit(void* driver_data)
  * Читає ТІЛЬКИ сирі дані через SPI, БЕЗ конвертації в градуси.
  * Конвертацію робить position.c.
  *
+ * Підтримувані протоколи:
+ *
+ * SPI4-A Protocol (16-bit з парністю):
+ * TX: [CMD | ADDR]
+ * RX: [P|EF|0|0|0|0|Pos[9:8]] [Pos[7:0]]
+ *
  * SPI4-B Protocol (24-bit з CRC):
- * TX: [CMD | ADDR | DUMMY]
- * RX: [Reserved(4)|W|E|Data[17:10]] [Data[9:2]] [CRC-8]
+ * TX: [CMD | ADDR | CRC]
+ * RX: [Reserved(4)|W|E|Data[17:16]] [Data[15:8]] [CRC-8]
  */
 static Servo_Status_t AEAT9922_HW_ReadRaw(void* driver_data, Position_Raw_Data_t* raw)
 {
@@ -226,22 +232,30 @@ static Servo_Status_t AEAT9922_HW_ReadRaw(void* driver_data, Position_Raw_Data_t
     Servo_Status_t status;
     uint8_t tx_data[3];
     uint8_t rx_data[3] = {0};
+    uint8_t packet_size;
+
+    // Визначити розмір пакету залежно від протоколу
+    if (driver->config.spi_config.protocol_variant == AEAT9922_PSEL_SPI4_24BIT) {
+        packet_size = 3;  // SPI4-B: 24-bit з CRC
+    } else {
+        packet_size = 2;  // SPI4-A: 16-bit з парністю
+    }
 
     // Відправити команду читання позиції (register 0x3F)
     tx_data[0] = AEAT9922_CMD_READ(AEAT9922_REG_POSITION);  // 0x40
     tx_data[1] = AEAT9922_REG_POSITION;                     // 0x3F
 
-    // Розрахувати CRC для TX пакету (якщо SPI4-B)
+    // Розрахувати CRC для TX пакету (тільки для SPI4-B)
     if (driver->config.spi_config.protocol_variant == AEAT9922_PSEL_SPI4_24BIT) {
         tx_data[2] = Checksum_CRC8(tx_data, 2, CRC8_POLY_DEFAULT);
     } else {
-        tx_data[2] = 0x00;  // Dummy для інших режимів
+        tx_data[2] = 0x00;  // Не використовується для SPI4-A
     }
 
     HWD_SPI_CS_Low(&driver->spi_handle);
     delay_us(1);  // t_CSn >= 350ns
 
-    status = HWD_SPI_TransmitReceive(&driver->spi_handle, tx_data, rx_data, 3);
+    status = HWD_SPI_TransmitReceive(&driver->spi_handle, tx_data, rx_data, packet_size);
 
     delay_us(1);  // t_CSf >= 50ns
     HWD_SPI_CS_High(&driver->spi_handle);
@@ -252,24 +266,67 @@ static Servo_Status_t AEAT9922_HW_ReadRaw(void* driver_data, Position_Raw_Data_t
         return status;
     }
 
-    /* ========================================================================
-     * SPI4-B РОЗПАКОВКА (24-bit з CRC-8)
-     * ========================================================================
-     * Формат відповіді:
-     * Байт 0 [23:16]: Reserved(4) | W | E | Data[17:16]
-     * Байт 1 [15:8]:  Data[15:8]
-     * Байт 2 [7:0]:   CRC-8
-     *
-     * Біти:
-     * [23:22] - Reserved (завжди 0)
-     * [22]    - W (Warning): магніт не в оптимальній позиції
-     * [21]    - E (Error): критична помилка комунікації
-     * [20:5]  - Position data (16 біт для 18-bit роздільності)
-     * [7:0]   - CRC-8 контрольна сума
-     */
+    // Розпакувати дані залежно від протоколу
+    uint32_t raw_position;
+    bool error_flag = false;
 
-    // Перевірка CRC-8 (якщо SPI4-B режим активний)
-    if (driver->config.spi_config.protocol_variant == AEAT9922_PSEL_SPI4_24BIT) {
+    if (driver->config.spi_config.protocol_variant == AEAT9922_PSEL_SPI4_16BIT) {
+        /* ====================================================================
+         * SPI4-A РОЗПАКОВКА (16-bit з парністю)
+         * ====================================================================
+         * Формат відповіді:
+         * Байт 0 [15:8]: P | EF | 0 | 0 | 0 | 0 | Pos[9:8]
+         * Байт 1 [7:0]:  Pos[7:0]
+         *
+         * Біти:
+         * [15]    - P (Parity): even parity біт
+         * [14]    - EF (Error Flag): помилка
+         * [13:10] - Reserved (завжди 0)
+         * [9:0]   - Position data (10 біт)
+         */
+
+        // Перевірка парності (even parity)
+        uint16_t full_data = ((uint16_t)rx_data[0] << 8) | rx_data[1];
+        uint8_t parity_check = Checksum_EvenParity16(full_data);
+
+        if (parity_check != 0) {
+            // Помилка парності (парність повинна бути парною, тобто 0)
+            driver->error_count++;
+            raw->valid = false;
+            return SERVO_ERROR;
+        }
+
+        // Витягнути прапорець помилки (біт 14)
+        error_flag = (rx_data[0] & (1 << 6)) != 0;  // EF bit
+
+        if (error_flag) {
+            driver->error_count++;
+            raw->valid = false;
+            return SERVO_ERROR;
+        }
+
+        // Витягнути 10-bit позицію (біти [9:0])
+        raw_position = ((uint32_t)(rx_data[0] & 0x03) << 8) |  // Біти [9:8]
+                       rx_data[1];                              // Біти [7:0]
+
+    } else {
+        /* ====================================================================
+         * SPI4-B РОЗПАКОВКА (24-bit з CRC-8)
+         * ====================================================================
+         * Формат відповіді:
+         * Байт 0 [23:16]: Reserved(4) | W | E | Data[17:16]
+         * Байт 1 [15:8]:  Data[15:8]
+         * Байт 2 [7:0]:   CRC-8
+         *
+         * Біти:
+         * [23:22] - Reserved (завжди 0)
+         * [22]    - W (Warning): магніт не в оптимальній позиції
+         * [21]    - E (Error): критична помилка комунікації
+         * [20:5]  - Position data (16 біт для 18-bit роздільності)
+         * [7:0]   - CRC-8 контрольна сума
+         */
+
+        // Перевірка CRC-8
         uint8_t calculated_crc = Checksum_CRC8(rx_data, 2, CRC8_POLY_DEFAULT);
         uint8_t received_crc = rx_data[2];
 
@@ -279,34 +336,35 @@ static Servo_Status_t AEAT9922_HW_ReadRaw(void* driver_data, Position_Raw_Data_t
             raw->valid = false;
             return SERVO_ERROR;
         }
+
+        // Витягнути прапорці W та E
+        bool warning_flag = (rx_data[0] & (1 << 6)) != 0;  // W bit
+        error_flag = (rx_data[0] & (1 << 5)) != 0;         // E bit
+
+        if (error_flag) {
+            driver->error_count++;
+            raw->valid = false;
+            return SERVO_ERROR;
+        }
+
+        if (warning_flag) {
+            // Попередження: магніт не в оптимальній позиції
+            // Можна логувати, але продовжуємо роботу
+        }
+
+        // Витягнути дані позиції (біти [20:5] = 16 біт)
+        // Для 18-bit роздільності: rx_data[0] містить [Data17:Data16], rx_data[1] містить [Data15:Data8]
+        uint32_t position_18bit = ((uint32_t)(rx_data[0] & 0x03) << 16) |  // Біти [17:16]
+                                  ((uint32_t)rx_data[1] << 8);               // Біти [15:8]
+        // Біти [7:0] відсутні в SPI4-B для позиції (CRC займає байт 2)
+
+        raw_position = position_18bit;
     }
-
-    // Витягнути прапорці W та E
-    bool warning_flag = (rx_data[0] & (1 << 6)) != 0;  // W bit
-    bool error_flag   = (rx_data[0] & (1 << 5)) != 0;  // E bit
-
-    // Обробити помилки
-    if (error_flag) {
-        driver->error_count++;
-        raw->valid = false;
-        return SERVO_ERROR;
-    }
-
-    if (warning_flag) {
-        // Попередження: магніт не в оптимальній позиції
-        // Можна логувати, але продовжуємо роботу
-    }
-
-    // Витягнути дані позиції (біти [20:5] = 16 біт)
-    // Для 18-bit роздільності: rx_data[0] містить [Data17:Data16], rx_data[1] містить [Data15:Data8]
-    uint32_t position_18bit = ((uint32_t)(rx_data[0] & 0x03) << 16) |  // Біти [17:16]
-                              ((uint32_t)rx_data[1] << 8);               // Біти [15:8]
-    // Біти [7:0] відсутні в SPI4-B для позиції (CRC займає байт 2)
 
     // Застосувати маску відповідно до налаштованої роздільності
     uint32_t resolution_bits = 18 - (uint8_t)driver->config.general.abs_resolution;
     uint32_t position_mask = (1U << resolution_bits) - 1;
-    uint32_t raw_position = position_18bit & position_mask;
+    raw_position = raw_position & position_mask;
 
     // Заповнити структуру Position_Raw_Data_t
     raw->raw_position = raw_position;
@@ -403,7 +461,7 @@ Servo_Status_t AEAT9922_ReadRegister(AEAT9922_Driver_t* driver,
      */
 
     // Визначити розмір пакету залежно від режиму
-    uint8_t packet_size = 2;  // За замовчуванням SPI3
+    uint8_t packet_size = 2;  // За замовчуванням SPI3 та SPI4-A
     if (driver->config.spi_config.protocol_variant == AEAT9922_PSEL_SPI4_24BIT) {
         packet_size = 3;  // SPI4-B з CRC
     }
@@ -415,11 +473,11 @@ Servo_Status_t AEAT9922_ReadRegister(AEAT9922_Driver_t* driver,
     tx_data[0] = AEAT9922_CMD_READ(address);  // 0x40 (RW=1)
     tx_data[1] = address;                     // Адреса регістру
 
-    // Розрахувати CRC для SPI4-B
-    if (packet_size == 3) {
+    // Розрахувати CRC для TX пакету (тільки для SPI4-B)
+    if (driver->config.spi_config.protocol_variant == AEAT9922_PSEL_SPI4_24BIT) {
         tx_data[2] = Checksum_CRC8(tx_data, 2, CRC8_POLY_DEFAULT);
     } else {
-        tx_data[2] = 0x00;  // Не використовується для SPI3
+        tx_data[2] = 0x00;  // Не використовується для SPI3/SPI4-A
     }
 
     HWD_SPI_CS_Low(&driver->spi_handle);
@@ -453,13 +511,24 @@ Servo_Status_t AEAT9922_ReadRegister(AEAT9922_Driver_t* driver,
         return status;
     }
 
-    // Перевірка CRC для SPI4-B
-    if (packet_size == 3) {
+    // Перевірка CRC для SPI4-B (тільки для 24-bit режиму)
+    if (driver->config.spi_config.protocol_variant == AEAT9922_PSEL_SPI4_24BIT) {
         uint8_t calculated_crc = Checksum_CRC8(rx_data, 2, CRC8_POLY_DEFAULT);
         uint8_t received_crc = rx_data[2];
 
         if (calculated_crc != received_crc) {
             // CRC помилка
+            return SERVO_ERROR;
+        }
+    }
+
+    // Перевірка парності для SPI4-A (16-bit режим з парністю)
+    if (driver->config.spi_config.protocol_variant == AEAT9922_PSEL_SPI4_16BIT) {
+        uint16_t full_data = ((uint16_t)rx_data[0] << 8) | rx_data[1];
+        uint8_t parity_check = Checksum_EvenParity16(full_data);
+
+        if (parity_check != 0) {
+            // Помилка парності
             return SERVO_ERROR;
         }
     }

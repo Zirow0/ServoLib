@@ -55,6 +55,35 @@ extern "C" {
  */
 uint8_t Checksum_CRC8(const uint8_t* data, uint8_t len, uint8_t polynomial);
 
+/**
+ * @brief Обчислення біта парності (Even Parity)
+ *
+ * @param data Вказівник на дані для обчислення
+ * @param num_bits Кількість біт для обчислення парності
+ * @return uint8_t Біт парності (0 або 1)
+ *
+ * Алгоритм Even Parity:
+ * 1. Підрахувати кількість одиниць у вказаній кількості біт
+ * 2. Якщо кількість парна → повернути 0
+ * 3. Якщо кількість непарна → повернути 1
+ *
+ * Використання в SPI4-A (AEAT-9922):
+ * @code
+ * uint8_t rx_data[2];  // [DATA0, DATA1]
+ * // Витягти біт парності з rx_data[0] біт 7
+ * uint8_t received_parity = (rx_data[0] >> 7) & 0x01;
+ *
+ * // Обчислити парність для 16 біт (всі біти включно з P)
+ * uint16_t full_data = ((uint16_t)rx_data[0] << 8) | rx_data[1];
+ * uint8_t calculated_parity = Checksum_EvenParity16(full_data);
+ *
+ * if (calculated_parity == 0) {
+ *     // Парність правильна (парна кількість одиниць)
+ * }
+ * @endcode
+ */
+uint8_t Checksum_EvenParity16(uint16_t data);
+
 #ifdef __cplusplus
 }
 #endif
