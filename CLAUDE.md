@@ -162,8 +162,7 @@ Platform Layer (Board/)        ← STM32F411 implementations
 - `calib.c` - Calibration system
 
 **iface/** - Abstract interfaces defining contracts:
-- `sensor.h` - Position sensor interface (read_angle, get_velocity)
-- `brake.h` - Brake interface (release, engage, notify_activity)
+- Більше не використовується для гальм (перенесено в drv/)
 
 **drv/** - Hardware drivers using HWD abstractions:
 - `drv/motor/motor.h` - **Universal motor interface with hardware callbacks**
@@ -175,9 +174,17 @@ Platform Layer (Board/)        ← STM32F411 implementations
   - Provides hardware callbacks for `Motor_Interface_t`
   - Supports single-channel (PWM+DIR) and dual-channel (H-bridge) modes
   - Create with `PWM_Motor_Create()`, then use `&driver->interface` for motor operations
-- `drv/sensor/aeat9922.c` - AEAT-9922 18-bit magnetic encoder (SPI) - **Currently enabled**
-- `drv/sensor/as5600.c` - AS5600 12-bit magnetic encoder (I2C) - Currently disabled
-- `drv/brake/brake.c` - Electronic brake driver with fail-safe logic
+- `drv/position/aeat9922.c` - AEAT-9922 18-bit magnetic encoder (SPI) - **Currently enabled**
+- `drv/position/as5600.c` - AS5600 12-bit magnetic encoder (I2C) - Currently disabled
+- `drv/brake/brake.h` - **Universal brake interface with hardware callbacks**
+  - Contains `Brake_Interface_t` structure with base logic and hardware callbacks
+  - Supports different brake types (electromagnetic, pneumatic, hydraulic) through universal interface
+  - Base functions: `Brake_Init()`, `Brake_Engage()`, `Brake_Release()`, `Brake_EmergencyEngage()`, `Brake_Update()`
+  - State machine with transitions: ENGAGED, RELEASED, ENGAGING, RELEASING
+- `drv/brake/gpio_brake.c` - GPIO brake driver implementation
+  - Provides hardware callbacks for `Brake_Interface_t`
+  - Controls electromagnetic brakes via GPIO (active high/low configurable)
+  - Create with `GPIO_Brake_Create()`, then use `&driver->interface` for brake operations
 
 **hwd/** - Hardware abstraction layer (declarations only):
 - `hwd_pwm.h` - PWM abstraction
@@ -473,6 +480,169 @@ PWM_Motor_Config_t pwm_config = {
 PWM_Motor_Create(&motor_driver, &pwm_config);
 ```
 
+## Brake Driver Architecture (After Refactoring)
+
+### Key Concepts
+
+**Separation of Concerns:**
+- **Brake_Interface_t** (`drv/brake/brake.h`) - Universal interface containing:
+  - `Brake_Data_t data` - Common logic: state, transition timing, initialization flag
+  - `Brake_Hardware_Callbacks_t hw` - Hardware-specific callbacks
+  - `void* driver_data` - Pointer to specific driver (e.g., `GPIO_Brake_Driver_t`)
+
+- **Specific Driver** (e.g., `GPIO_Brake_Driver_t` in `drv/brake/gpio_brake.h`) - Contains:
+  - `Brake_Interface_t interface` - The universal interface (FIRST field!)
+  - Hardware-specific configuration (GPIO port, pin, active_high)
+  - Provides hardware callbacks to the interface
+
+**State Machine with Transitions:**
+```
+ENGAGED ←→ ENGAGING (transition: release_time_ms)
+RELEASED ←→ RELEASING (transition: engage_time_ms)
+```
+
+**Hardware Callbacks Pattern:**
+```c
+// GPIO driver provides these callbacks
+Brake_Hardware_Callbacks_t hw = {
+    .init = GPIO_Brake_HW_Init,          // Initialize GPIO
+    .deinit = GPIO_Brake_HW_Deinit,      // Deinitialize
+    .engage = GPIO_Brake_HW_Engage,      // Set GPIO to active state
+    .release = GPIO_Brake_HW_Release     // Set GPIO to inactive state
+};
+```
+
+### Common Patterns
+
+#### 1. Creating and Initializing GPIO Brake Driver
+```c
+#include "ctrl/servo.h"
+#include "drv/brake/gpio_brake.h"
+
+GPIO_Brake_Driver_t brake_driver;
+Servo_Controller_t servo;
+
+// Step 1: Create GPIO brake driver (sets up hardware callbacks)
+GPIO_Brake_Config_t brake_config = {
+    .gpio_port = GPIOA,
+    .gpio_pin = GPIO_PIN_8,
+    .active_high = false,           // Active LOW (brake engages when GPIO=LOW)
+    .engage_time_ms = 50,           // 50ms to fully engage
+    .release_time_ms = 30           // 30ms to fully release
+};
+GPIO_Brake_Create(&brake_driver, &brake_config);
+
+// Step 2: Configure servo with brake interface
+Servo_Config_t servo_config = {
+    .update_frequency = 1000.0f,
+    .enable_brake = true,
+    /* ... PID, safety, trajectory params ... */
+};
+Servo_InitWithBrake(&servo, &servo_config, &motor_driver.interface, &brake_driver.interface);
+
+// Main control loop
+while(1) {
+    Servo_Update(&servo);  // Automatically calls Brake_Update()
+    HAL_Delay(1);
+}
+```
+
+#### 2. Direct Brake Control (Without Servo)
+```c
+// Engage brakes (blocking movement)
+Brake_Engage(&brake_driver.interface);
+
+// Check state during transition
+Brake_State_t state = Brake_GetState(&brake_driver.interface);
+if (state == BRAKE_STATE_ENGAGING) {
+    // Brakes are transitioning, wait...
+}
+
+// Update in loop to handle transitions
+while (!Brake_IsEngaged(&brake_driver.interface)) {
+    Brake_Update(&brake_driver.interface);
+    HAL_Delay(1);
+}
+
+// Release brakes (allow movement)
+Brake_Release(&brake_driver.interface);
+
+// Emergency engage (same as Engage for GPIO, but different for pneumatic/hydraulic)
+Brake_EmergencyEngage(&brake_driver.interface);
+```
+
+#### 3. Checking Brake State
+```c
+// Get current state
+Brake_State_t state = Brake_GetState(&brake_driver.interface);
+
+// Check if in stable state
+if (Brake_IsEngaged(&brake_driver.interface)) {
+    // Brakes are fully engaged (stable)
+}
+
+if (Brake_IsReleased(&brake_driver.interface)) {
+    // Brakes are fully released (stable)
+}
+
+// Check if transitioning
+if (Brake_IsTransitioning(&brake_driver.interface)) {
+    // Brakes are ENGAGING or RELEASING
+}
+```
+
+### Brake Driver Development Rules
+
+1. **Never modify Brake_Interface_t directly** - use only through provided functions
+2. **Base logic in brake.c** - State transitions, timing handled by `Brake_Init()`, `Brake_Update()`
+3. **Hardware specifics in callbacks** - Each driver (GPIO, Pneumatic, Hydraulic) provides hardware callbacks
+4. **Driver creation pattern:**
+   - Call `GPIO_Brake_Create()` to set up hardware callbacks
+   - Access interface via `&driver->interface`
+   - Initialize with `Brake_Init()` (called internally by Create)
+   - Update regularly with `Brake_Update()` to process transitions
+
+### Adding New Brake Type Support
+
+To add a new brake type (e.g., Pneumatic, Hydraulic):
+
+1. **Create driver file** `drv/brake/your_brake.h` and `drv/brake/your_brake.c`
+2. **Define driver structure:**
+   ```c
+   typedef struct {
+       Brake_Interface_t interface;  // Universal interface (FIRST!)
+       // Your hardware-specific fields (valve control, pressure sensor, etc.)
+   } YourBrake_Driver_t;
+   ```
+3. **Implement hardware callbacks:**
+   - `YourBrake_HW_Init()` - Initialize hardware (valves, sensors)
+   - `YourBrake_HW_Engage()` - Physically engage brakes
+   - `YourBrake_HW_Release()` - Physically release brakes
+   - `YourBrake_HW_Deinit()` - Cleanup (optional)
+4. **Create factory function:**
+   ```c
+   Servo_Status_t YourBrake_Create(YourBrake_Driver_t* driver, config) {
+       driver->interface.hw.init = YourBrake_HW_Init;
+       driver->interface.hw.engage = YourBrake_HW_Engage;
+       driver->interface.hw.release = YourBrake_HW_Release;
+       driver->interface.driver_data = driver;
+
+       Brake_Params_t params = {
+           .engage_time_ms = config->engage_time_ms,
+           .release_time_ms = config->release_time_ms
+       };
+       return Brake_Init(&driver->interface, &params);
+   }
+   ```
+5. **Use universal interface** - All base logic (state machine, transitions) handled by `brake.c`
+
+### Key Differences from Motor/Position Drivers
+
+- **No automatic mode** - User controls engage/release explicitly (no idle timeout)
+- **Mandatory transitions** - ENGAGING/RELEASING states ensure proper timing for electromagnetic actuation
+- **Fail-safe by default** - Always initializes to ENGAGED state
+- **Emergency engage** - Separate function for critical situations (same as Engage for GPIO)
+
 ## Documentation Files
 
 - `Doc/README.md` - Quick start guide (in Ukrainian)
@@ -506,3 +676,6 @@ The following components are safety-critical and require careful handling:
 - `drv/brake/brake.c` - Fail-safe brake logic (brakes engage on power loss)
 - `Servo_EmergencyStop()` - Must execute within 10ms
 - All error handling paths must ensure safe state (motor stopped, brakes engaged)
+- If you are sure there is a better solution, please tell me.
+- When discussing, don't write code, it's better to describe it in text.
+- When discussing, write concisely, but at the same time do not forget to mention important details.
