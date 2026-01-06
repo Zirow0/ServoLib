@@ -49,21 +49,26 @@ ServoLib - це модульна бібліотека керування DC се
 │   - Генератор траєкторій                        │
 │   - Калібрування                                │
 ├─────────────────────────────────────────────────┤
-│   Interface Layer (iface/)                      │
-│   - Motor Interface                             │
-│   - Sensor Interface                            │
-│   - Brake Interface                             │
-├─────────────────────────────────────────────────┤
-│   Driver Layer (drv/)                           │
-│   - PWM Motor Driver                            │
-│   - AS5600 Sensor Driver                        │
-│   - Brake Driver                                │
-├─────────────────────────────────────────────────┤
+│   Driver Layer (drv/) з Hardware Callbacks      │
+│   ┌───────────────────────────────────────────┐ │
+│   │ Базова логіка:                            │ │
+│   │ - Motor Interface (motor.c)               │ │
+│   │ - Position Sensor Interface (position.c)  │ │
+│   │ - Brake Interface (brake.c)               │ │
+│   └────────────┬──────────────────────────────┘ │
+│                │ викликає callbacks              │
+│                ↓                                 │
+│   ┌───────────────────────────────────────────┐ │
+│   │ Hardware Callbacks:                       │ │
+│   │ - PWM Motor (pwm.c)                       │ │
+│   │ - AEAT-9922 Sensor (aeat9922.c)           │ │
+│   │ - AS5600 Sensor (as5600.c)                │ │
+│   │ - GPIO Brake (gpio_brake.c)               │ │
+│   └────────────┬──────────────────────────────┘ │
+├────────────────┼─────────────────────────────────┤
 │   Hardware Driver Layer (hwd/)                  │
-│   - HWD_PWM                                     │
-│   - HWD_I2C                                     │
-│   - HWD_GPIO                                    │
-│   - HWD_Timer                                   │
+│   - HWD_PWM, HWD_I2C, HWD_SPI                   │
+│   - HWD_GPIO, HWD_Timer                         │
 ├─────────────────────────────────────────────────┤
 │   Platform Layer (Board/STM32F411/)             │
 │   - Реалізація HWD через STM32 HAL              │
@@ -72,11 +77,12 @@ ServoLib - це модульна бібліотека керування DC се
 
 ### 2.2 Принципи дизайну
 
-1. **Розділення відповідальності**: кожен шар має чітко визначені обов'язки
-2. **Залежність від абстракцій**: логіка залежить від HWD, а не від HAL
-3. **Інверсія залежностей**: драйвери реалізують інтерфейси, визначені в iface/
-4. **Відкритість для розширення**: легко додати нові драйвери та датчики
-5. **Закритість для модифікації**: зміна платформи не впливає на логіку
+1. **Hardware Callbacks Pattern**: розділення базової логіки та апаратних операцій через callbacks
+2. **Розділення відповідальності**: кожен шар має чітко визначені обов'язки
+3. **Залежність від абстракцій**: логіка залежить від HWD, а не від HAL
+4. **Універсальні інтерфейси**: motor, position, brake - працюють з будь-якою апаратурою
+5. **Відкритість для розширення**: легко додати нові драйвери (просто реалізувати callbacks)
+6. **Закритість для модифікації**: зміна платформи не впливає на логіку
 
 ---
 
@@ -106,15 +112,20 @@ ServoLib - це модульна бібліотека керування DC се
 ### 3.2 Зчитування датчиків
 
 #### FR-S-001: Магнітні енкодери
-- Підтримка AS5600 (12-біт, I2C)
-- Роздільна здатність: 4096 позицій на оберт
-- Частота оновлення: до 1 kHz
-- Фільтрація шуму та аномальних значень
+- **AEAT-9922** (18-біт, SPI) - основний, поточно активний
+  - Роздільна здатність: 262144 позицій на оберт
+  - Протоколи: SPI4-24bit, SPI4-A 16bit, SPI4-B 24bit
+  - CRC-8 перевірка даних
+- **AS5600** (12-біт, I2C) - доступний, але вимкнений
+  - Роздільна здатність: 4096 позицій на оберт
+  - Частота оновлення: до 1 kHz
 
-#### FR-S-002: Обробка даних
-- Обчислення швидкості за різницею позицій
-- Детекція обертів (handling wraparound)
-- Валідація даних з датчика
+#### FR-S-002: Обробка даних (Universal Position Interface)
+- Обчислення швидкості за різницею позицій (wraparound-safe derivative)
+- Multi-turn tracking (відстеження повних обертів)
+- Prediction (екстраполяція позиції між оновленнями)
+- Конвертація raw → radians → degrees (відбувається в position.c)
+- Валідація даних з датчика (CRC для SPI, checksums для I2C)
 
 ### 3.3 PID регулювання
 
@@ -151,21 +162,24 @@ ServoLib - це модульна бібліотека керування DC се
 
 ### 3.5 Електронні гальма
 
-#### FR-BR-001: Fail-safe логіка
+#### FR-BR-001: Fail-safe логіка (Hardware Callbacks Pattern)
 - Гальма АКТИВНІ за замовчуванням (без живлення)
-- Автоматичне відпускання перед рухом
-- Автоматична активація після таймауту бездіяльності
-- Миттєва активація при аварії
+- State machine з transitions: ENGAGED → ENGAGING → RELEASED → RELEASING → ENGAGED
+- Універсальний інтерфейс підтримує різні типи гальм (electromagnetic, pneumatic, hydraulic)
+- GPIO driver для електромагнітних гальм (gpio_brake.c)
 
-#### FR-BR-002: Режими роботи
-- Ручний режим (manual control)
-- Автоматичний режим (з таймерами)
-- Налаштовувані затримки та таймаути
+#### FR-BR-002: State Machine
+- **ENGAGED** - гальма повністю активні (стабільний стан)
+- **RELEASING** - перехід до відпущення (затримка release_time_ms)
+- **RELEASED** - гальма повністю відпущені (стабільний стан)
+- **ENGAGING** - перехід до блокування (затримка engage_time_ms)
+- Transitions обробляються автоматично в Brake_Update()
 
 #### FR-BR-003: Параметри
-- Затримка відпускання: 50-500 мс (типово 100 мс)
-- Таймаут блокування: 1-10 сек (типово 3 сек)
-- Полярність сигналу: активний HIGH/LOW
+- Затримка engage: 30-200 мс (типово 50 мс для electromagnetic)
+- Затримка release: 30-200 мс (типово 30 мс для electromagnetic)
+- Полярність сигналу: active_high (true/false) - налаштовується
+- Emergency engage: миттєва активація без transition
 
 ### 3.6 Генератор траєкторій
 
@@ -278,10 +292,15 @@ ServoLib - це модульна бібліотека керування DC се
 - **Encoder:** опціонально
 
 #### Датчик положення
-- **AS5600:** 12-біт магнітний енкодер
-- **Інтерфейс:** I2C (адреса 0x36)
-- **Роздільна здатність:** 4096 позицій/оберт
-- **Напруга живлення:** 3.3V або 5V
+- **AEAT-9922:** 18-біт магнітний енкодер (основний, активний)
+  - **Інтерфейс:** SPI (протоколи SPI4-24bit, SPI4-A, SPI4-B)
+  - **Роздільна здатність:** 262144 позицій/оберт
+  - **Напруга живлення:** 5V
+  - **CRC-8:** для перевірки даних
+- **AS5600:** 12-біт магнітний енкодер (доступний, вимкнений)
+  - **Інтерфейс:** I2C (адреса 0x36)
+  - **Роздільна здатність:** 4096 позицій/оберт
+  - **Напруга живлення:** 3.3V або 5V
 
 #### Електронні гальма
 - **Тип:** Електромагнітні fail-safe
@@ -347,10 +366,13 @@ ServoLib - це модульна бібліотека керування DC се
 
 **Основні включення:**
 ```c
-#include "ctrl/servo.h"           // Головний контролер
-#include "drv/motor/pwm.h"        // PWM драйвер мотора
-#include "drv/position/aeat9922.h" // Драйвер енкодера AEAT-9922
-#include "drv/brake/brake.h"      // Драйвер гальм
+#include "ctrl/servo.h"              // Головний контролер
+#include "drv/motor/motor.h"         // Universal motor interface
+#include "drv/motor/pwm.h"           // PWM motor driver
+#include "drv/position/position.h"   // Universal position interface
+#include "drv/position/aeat9922.h"   // AEAT-9922 driver
+#include "drv/brake/brake.h"         // Universal brake interface
+#include "drv/brake/gpio_brake.h"    // GPIO brake driver
 ```
 
 **Типові функції API:**
@@ -373,34 +395,62 @@ float Servo_GetVelocity(const Servo_Controller_t* servo);
 Servo_State_t Servo_GetState(const Servo_Controller_t* servo);
 ```
 
-### 7.2 Внутрішні інтерфейси
+### 7.2 Внутрішні інтерфейси (Hardware Callbacks Pattern)
 
 #### Motor_Interface_t
-Абстракція двигуна для уніфікованого керування.
+Універсальний інтерфейс двигуна з hardware callbacks.
 
 ```c
 typedef struct {
-    void* driver;  // Вказівник на конкретний драйвер
-
-    Servo_Status_t (*init)(void* driver, const Motor_Params_t* params);
-    Servo_Status_t (*set_power)(void* driver, float power);
-    Servo_Status_t (*stop)(void* driver);
-    Servo_Status_t (*emergency_stop)(void* driver);
-    Servo_Status_t (*update)(void* driver);
+    Motor_Data_t data;                     // Базова логіка (state, power, stats)
+    Motor_Hardware_Callbacks_t hw;         // Hardware callbacks
+    void* driver_data;                     // Вказівник на конкретний драйвер
 } Motor_Interface_t;
+
+// Hardware callbacks
+typedef struct {
+    Servo_Status_t (*init)(void* driver_data);
+    Servo_Status_t (*set_power)(void* driver_data, const Motor_Command_t* cmd);
+    Servo_Status_t (*stop)(void* driver_data);
+    Servo_Status_t (*update)(void* driver_data);
+} Motor_Hardware_Callbacks_t;
 ```
 
-#### Sensor_Interface_t
-Абстракція датчика положення.
+#### Position_Sensor_Interface_t
+Універсальний інтерфейс датчика положення з hardware callbacks.
 
 ```c
 typedef struct {
-    void* driver;  // Вказівник на конкретний драйвер
+    Position_Sensor_Data_t data;           // Базова логіка (position, velocity, multi-turn)
+    Position_Sensor_HW_Callbacks_t hw;     // Hardware callbacks
+    void* driver_data;                     // Вказівник на конкретний драйвер
+} Position_Sensor_Interface_t;
 
-    Servo_Status_t (*init)(void* driver);
-    Servo_Status_t (*read_angle)(void* driver, float* angle);
-    Servo_Status_t (*get_velocity)(void* driver, float* velocity);
-} Sensor_Interface_t;
+// Hardware callbacks
+typedef struct {
+    Servo_Status_t (*init)(void* driver_data);
+    Servo_Status_t (*read_raw)(void* driver_data, Position_Raw_Data_t* raw_data);
+    Servo_Status_t (*calibrate)(void* driver_data);
+} Position_Sensor_HW_Callbacks_t;
+```
+
+#### Brake_Interface_t
+Універсальний інтерфейс гальм з hardware callbacks.
+
+```c
+typedef struct {
+    Brake_Data_t data;                     // Базова логіка (state machine, timing)
+    Brake_Hardware_Callbacks_t hw;         // Hardware callbacks
+    void* driver_data;                     // Вказівник на конкретний драйвер
+} Brake_Interface_t;
+
+// Hardware callbacks
+typedef struct {
+    Servo_Status_t (*init)(void* driver_data);
+    Servo_Status_t (*engage)(void* driver_data);
+    Servo_Status_t (*release)(void* driver_data);
+    Servo_Status_t (*deinit)(void* driver_data);
+} Brake_Hardware_Callbacks_t;
 ```
 
 ---
@@ -487,13 +537,15 @@ typedef enum {
 ## 11. Посилання та ресурси
 
 ### 11.1 Документація
-- [README.md](README.md) - Швидкий старт та огляд
+- [../README.md](../README.md) - Швидкий старт та огляд
 - [structure.md](structure.md) - Детальна структура проекту
-- [MOTOR_DRIVER_EXAMPLE.md](MOTOR_DRIVER_EXAMPLE.md) - Приклади драйвера мотора
 - [BRAKE_DRIVER.md](BRAKE_DRIVER.md) - Документація драйвера гальм
+- [AEAT-9922/CONFIGURATION_GUIDE.md](AEAT-9922/CONFIGURATION_GUIDE.md) - Конфігурація AEAT-9922
+- [../CLAUDE.md](../CLAUDE.md) - Інструкції для Claude Code
 
 ### 11.2 Датшити
 - STM32F411CEU6 Reference Manual
+- AEAT-9922 Datasheet (18-bit Magnetic Encoder)
 - AS5600 Magnetic Encoder Datasheet
 - L298N H-Bridge Driver Datasheet
 
