@@ -36,7 +36,7 @@ Servo_Status_t Servo_Init(Servo_Controller_t* servo,
 Servo_Status_t Servo_InitWithBrake(Servo_Controller_t* servo,
                                     const Servo_Config_t* config,
                                     Motor_Interface_t* motor,
-                                    Brake_Driver_t* brake)
+                                    Brake_Interface_t* brake)
 {
     if (servo == NULL || config == NULL || motor == NULL) {
         return SERVO_INVALID;
@@ -172,9 +172,9 @@ Servo_Status_t Servo_SetPosition(Servo_Controller_t* servo, float position)
     servo->state.target_position = position;
     servo->state.mode = SERVO_MODE_POSITION;
 
-    // Повідомити гальма про активність (відпустить їх)
+    // Відпустити гальма перед рухом
     if (servo->brake != NULL && servo->config.enable_brake) {
-        Brake_NotifyActivity(servo->brake);
+        Brake_Release(servo->brake);
     }
 
     // Запуск траєкторії якщо увімкнено
@@ -194,9 +194,9 @@ Servo_Status_t Servo_SetVelocity(Servo_Controller_t* servo, float velocity)
     servo->state.target_velocity = velocity;
     servo->state.mode = SERVO_MODE_VELOCITY;
 
-    // Повідомити гальма про активність
+    // Відпустити гальма перед рухом
     if (servo->brake != NULL && servo->config.enable_brake) {
-        Brake_NotifyActivity(servo->brake);
+        Brake_Release(servo->brake);
     }
 
     return SERVO_OK;
@@ -215,6 +215,11 @@ Servo_Status_t Servo_Stop(Servo_Controller_t* servo)
     Motor_Stop(servo->motor);
     Traj_Stop(&servo->traj);
     PID_Reset(&servo->pid);
+
+    // Активувати гальма після зупинки
+    if (servo->brake != NULL && servo->config.enable_brake) {
+        Brake_Engage(servo->brake);
+    }
 
     return SERVO_OK;
 }

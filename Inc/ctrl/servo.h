@@ -43,8 +43,8 @@ typedef struct {
     /* Параметри траєкторії */
     Trajectory_Params_t traj_params;
 
-    /* Параметри гальм */
-    Brake_Config_t brake_config;
+    /* Параметри гальм (застаріло - налаштовуються в GPIO_Brake_Create) */
+    // Brake_Params_t brake_params;  // Тепер не потрібно, таймінги задаються при створенні GPIO драйвера
 
     /* Частота оновлення (Hz) */
     float update_frequency;
@@ -70,7 +70,7 @@ typedef struct {
     Error_Manager_t error_mgr;      /**< Менеджер помилок */
     Trajectory_Generator_t traj;    /**< Генератор траєкторій */
     Calibration_Data_t calib;       /**< Дані калібрування */
-    Brake_Driver_t* brake;          /**< Драйвер гальм (опціонально) */
+    Brake_Interface_t* brake;       /**< Інтерфейс гальм (опціонально) */
 
     /* Таймінги */
     Periodic_Timer_t update_timer;  /**< Таймер оновлення */
@@ -100,13 +100,13 @@ Servo_Status_t Servo_Init(Servo_Controller_t* servo,
  * @param servo Вказівник на контролер
  * @param config Конфігурація
  * @param motor Інтерфейс двигуна
- * @param brake Драйвер гальм (NULL якщо не використовуються)
+ * @param brake Інтерфейс гальм (NULL якщо не використовуються)
  * @return Servo_Status_t Статус виконання
  */
 Servo_Status_t Servo_InitWithBrake(Servo_Controller_t* servo,
                                     const Servo_Config_t* config,
                                     Motor_Interface_t* motor,
-                                    Brake_Driver_t* brake);
+                                    Brake_Interface_t* brake);
 
 /**
  * @brief Основний цикл оновлення сервоприводу
