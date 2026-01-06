@@ -105,8 +105,12 @@ typedef enum {
     ERR_MOTOR_OVERCURRENT = 0x0001,  /**< Перевантаження по струму */
     ERR_MOTOR_OVERHEAT    = 0x0002,  /**< Перегрів двигуна */
     ERR_MOTOR_STALL       = 0x0003,  /**< Двигун заклинило */
-    ERR_SENSOR_LOST       = 0x0010,  /**< Втрата зв'язку з датчиком */
-    ERR_SENSOR_INVALID    = 0x0011,  /**< Некоректні дані датчика */
+    ERR_SENSOR_LOST         = 0x0010,  /**< Втрата зв'язку з датчиком */
+    ERR_SENSOR_INVALID      = 0x0011,  /**< Некоректні дані датчика */
+    ERR_SENSOR_INIT_FAILED  = 0x0012,  /**< Помилка ініціалізації датчика */
+    ERR_SENSOR_CALIB_FAILED = 0x0013,  /**< Помилка калібрування датчика */
+    ERR_SENSOR_READ_FAILED  = 0x0014,  /**< Помилка зчитування з датчика */
+    ERR_SENSOR_INVALID_DATA = 0x0015,  /**< Невалідні дані від датчика */
     ERR_POSITION_LIMIT    = 0x0020,  /**< Вихід за межі положення */
     ERR_VELOCITY_LIMIT    = 0x0021,  /**< Перевищення швидкості */
     ERR_WATCHDOG          = 0x0030,  /**< Watchdog таймаут */

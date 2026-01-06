@@ -347,10 +347,10 @@ ServoLib - це модульна бібліотека керування DC се
 
 **Основні включення:**
 ```c
-#include "ctrl/servo.h"         // Головний контролер
-#include "drv/motor/pwm.h"      // PWM драйвер мотора
-#include "drv/sensor/as5600.h"  // Драйвер енкодера
-#include "drv/brake/brake.h"    // Драйвер гальм
+#include "ctrl/servo.h"           // Головний контролер
+#include "drv/motor/pwm.h"        // PWM драйвер мотора
+#include "drv/position/aeat9922.h" // Драйвер енкодера AEAT-9922
+#include "drv/brake/brake.h"      // Драйвер гальм
 ```
 
 **Типові функції API:**

@@ -49,7 +49,6 @@ ServoLib використовує **5-шарову архітектуру**:
 
 ### Interface Layer (Інтерфейси)
 - ✅ `iface/motor.h` / `.c` - Уніфікований інтерфейс двигуна
-- ✅ `iface/sensor.h` / `.c` - Інтерфейс датчика положення
 - ✅ `iface/brake.h` / `.c` - Інтерфейс керування гальмами
 
 ### Hardware Driver Layer (HWD)
@@ -62,9 +61,9 @@ ServoLib використовує **5-шарову архітектуру**:
 ### Driver Layer (Драйвери)
 - ✅ `drv/motor/base.h` / `.c` - Базовий драйвер мотора
 - ✅ `drv/motor/pwm.h` / `.c` - PWM драйвер DC мотора
-- ✅ `drv/sensor/as5600.h` / `.c` - Магнітний енкодер AS5600
-- ✅ `drv/sensor/pos.h` / `.c` - Обгортка датчика з фільтрацією
-- ✅ `drv/sensor/i2c.h` / `.c` - Допоміжні I2C функції
+- ✅ `drv/position/position.h` / `.c` - Інтерфейс датчика положення
+- ✅ `drv/position/as5600.h` / `.c` - Магнітний енкодер AS5600 (12-bit I2C)
+- ✅ `drv/position/aeat9922.h` / `.c` - Магнітний енкодер AEAT-9922 (18-bit SPI)
 - ✅ `drv/brake/brake.h` / `.c` - Драйвер електронних гальм
 
 ### Control Layer (Керування)
