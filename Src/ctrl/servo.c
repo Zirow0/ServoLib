@@ -30,13 +30,14 @@ Servo_Status_t Servo_Init(Servo_Controller_t* servo,
                           const Servo_Config_t* config,
                           Motor_Interface_t* motor)
 {
-    return Servo_InitWithBrake(servo, config, motor, NULL);
+    return Servo_InitFull(servo, config, motor, NULL, NULL);
 }
 
-Servo_Status_t Servo_InitWithBrake(Servo_Controller_t* servo,
-                                    const Servo_Config_t* config,
-                                    Motor_Interface_t* motor,
-                                    Brake_Interface_t* brake)
+Servo_Status_t Servo_InitFull(Servo_Controller_t* servo,
+                               const Servo_Config_t* config,
+                               Motor_Interface_t* motor,
+                               Position_Sensor_Interface_t* sensor,
+                               Brake_Interface_t* brake)
 {
     if (servo == NULL || config == NULL || motor == NULL) {
         return SERVO_INVALID;
@@ -47,6 +48,7 @@ Servo_Status_t Servo_InitWithBrake(Servo_Controller_t* servo,
     // Копіювання конфігурації
     servo->config = *config;
     servo->motor = motor;
+    servo->sensor = sensor;
     servo->brake = brake;
 
     // Ініціалізація підсистем
@@ -58,8 +60,6 @@ Servo_Status_t Servo_InitWithBrake(Servo_Controller_t* servo,
     PID_SetMode(&servo->pid, PID_MODE_AUTOMATIC);
 
     Traj_Init(&servo->traj, &config->traj_params);
-
-    Calib_Init(&servo->calib);
 
     // Ініціалізація таймера оновлення
     uint32_t period_ms = Time_FreqToPeriod(config->update_frequency);
@@ -276,9 +276,13 @@ Servo_Status_t Servo_CalibrateZero(Servo_Controller_t* servo)
         return SERVO_INVALID;
     }
 
-    Calib_SetZero(&servo->calib, servo->state.position);
+    // Калібрування через драйвер датчика положення
+    if (servo->sensor != NULL) {
+        return Position_Sensor_Calibrate(servo->sensor);
+    }
 
-    return SERVO_OK;
+    // Якщо датчик не підключено, повертаємо помилку
+    return SERVO_ERROR;
 }
 
 Servo_Status_t Servo_EnableTrajectory(Servo_Controller_t* servo, bool enable)

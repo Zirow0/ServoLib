@@ -159,7 +159,7 @@ Platform Layer (Board/)        ← STM32F411 implementations
 - `traj.c` - Trajectory generator (linear, S-curves)
 - `err.c` - Error handling and logging
 - `time.c` - Timing management
-- `calib.c` - Calibration system
+- `pid_mgr.c` - PID manager for cascade control
 
 **iface/** - Abstract interfaces defining contracts:
 - Більше не використовується (компоненти перенесено в drv/)
