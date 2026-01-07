@@ -64,7 +64,6 @@ typedef struct {
 
     float last_input;        /**< Попереднє значення входу */
     float integral;          /**< Накопичена інтегральна складова */
-    float last_error;        /**< Попередня помилка */
 
     /* Налаштування */
     PID_Mode_t mode;         /**< Режим роботи */
