@@ -7,7 +7,6 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "../../Inc/ctrl/pid.h"
-#include "../../Inc/hwd/hwd_timer.h"
 #include <string.h>
 
 /* Private functions ---------------------------------------------------------*/
@@ -35,9 +34,6 @@ Servo_Status_t PID_Init(PID_Controller_t* pid, const PID_Params_t* params)
 
     // Копіювання параметрів
     pid->params = *params;
-
-    // Ініціалізація таймінгу
-    pid->last_time_us = HWD_Timer_GetMicros();
 
     // Встановлення прапорця
     pid->is_initialized = true;
@@ -86,43 +82,14 @@ Servo_Status_t PID_SetOutputLimits(PID_Controller_t* pid, float min, float max)
     return SERVO_OK;
 }
 
-Servo_Status_t PID_SetDirection(PID_Controller_t* pid, PID_Direction_t direction)
+
+Servo_Status_t PID_Compute(PID_Controller_t* pid, float setpoint, float input, uint32_t current_time_us)
 {
     if (pid == NULL || !pid->is_initialized) {
         return SERVO_INVALID;
     }
 
-    if (direction != pid->params.direction) {
-        // Інвертуємо коефіцієнти
-        pid->params.Kp = -pid->params.Kp;
-        pid->params.Ki = -pid->params.Ki;
-        pid->params.Kd = -pid->params.Kd;
-
-        pid->params.direction = direction;
-    }
-
-    return SERVO_OK;
-}
-
-Servo_Status_t PID_SetSetpoint(PID_Controller_t* pid, float setpoint)
-{
-    if (pid == NULL || !pid->is_initialized) {
-        return SERVO_INVALID;
-    }
-
-    pid->setpoint = setpoint;
-
-    return SERVO_OK;
-}
-
-Servo_Status_t PID_Compute(PID_Controller_t* pid, float input)
-{
-    if (pid == NULL || !pid->is_initialized) {
-        return SERVO_INVALID;
-    }
-
-    // Отримання поточного часу та обчислення дельти
-    uint32_t current_time_us = HWD_Timer_GetMicros();
+    // Обчислення дельти часу
     uint32_t delta_us = current_time_us - pid->last_time_us;
     float dt = delta_us / 1000000.0f;  // Конвертація мкс → секунди
 
@@ -132,24 +99,38 @@ Servo_Status_t PID_Compute(PID_Controller_t* pid, float input)
     pid->input = input;
 
     // Обчислення помилки
-    float error = pid->setpoint - input;
+    float error = setpoint - input;
 
     // Пропорційна складова
-    float p_term = pid->params.Kp * error;
+    if (pid->params.enabled_terms & PID_ENABLE_P) {
+        pid->p_term = pid->params.Kp * error;
+    } else {
+        pid->p_term = 0.0f;
+    }
 
     // Інтегральна складова з масштабуванням за реальним часом
-    float integral_increment = pid->params.Ki * dt * error;
-    pid->integral += integral_increment;
+    if (pid->params.enabled_terms & PID_ENABLE_I) {
+        float integral_increment = pid->params.Ki * dt * error;
+        pid->integral += integral_increment;
 
-    // Anti-windup: обмеження інтегральної складової
-    pid->integral = Clamp(pid->integral, pid->params.out_min, pid->params.out_max);
+        // Anti-windup: обмеження інтегральної складової
+        pid->integral = Clamp(pid->integral, pid->params.out_min, pid->params.out_max);
+        pid->i_term = pid->integral;
+    } else {
+        pid->i_term = 0.0f;
+        pid->integral = 0.0f;  // Скидаємо інтегратор коли вимкнено
+    }
 
     // Диференціальна складова (похідна від входу, а не від помилки)
-    float d_input = input - pid->last_input;
-    float d_term = -(pid->params.Kd / dt) * d_input;  // Мінус, бо рахуємо від входу
+    if (pid->params.enabled_terms & PID_ENABLE_D) {
+        float d_input = input - pid->last_input;
+        pid->d_term = -(pid->params.Kd / dt) * d_input;  // Мінус, бо рахуємо від входу
+    } else {
+        pid->d_term = 0.0f;
+    }
 
     // Підсумковий вихід
-    pid->output = p_term + pid->integral + d_term;
+    pid->output = pid->p_term + pid->i_term + pid->d_term;
 
     // Обмеження виходу
     pid->output = Clamp(pid->output, pid->params.out_min, pid->params.out_max);
@@ -171,14 +152,6 @@ float PID_GetOutput(const PID_Controller_t* pid)
     return pid->output;
 }
 
-float PID_GetError(const PID_Controller_t* pid)
-{
-    if (pid == NULL) {
-        return 0.0f;
-    }
-    return pid->setpoint - pid->input;
-}
-
 Servo_Status_t PID_Reset(PID_Controller_t* pid)
 {
     if (pid == NULL || !pid->is_initialized) {
@@ -198,8 +171,7 @@ float PID_GetPTerm(const PID_Controller_t* pid)
     if (pid == NULL) {
         return 0.0f;
     }
-    float error = pid->setpoint - pid->input;
-    return pid->params.Kp * error;
+    return pid->p_term;
 }
 
 float PID_GetITerm(const PID_Controller_t* pid)
@@ -207,7 +179,7 @@ float PID_GetITerm(const PID_Controller_t* pid)
     if (pid == NULL) {
         return 0.0f;
     }
-    return pid->integral;
+    return pid->i_term;
 }
 
 float PID_GetDTerm(const PID_Controller_t* pid)
@@ -215,6 +187,5 @@ float PID_GetDTerm(const PID_Controller_t* pid)
     if (pid == NULL) {
         return 0.0f;
     }
-    float d_input = pid->input - pid->last_input;
-    return -pid->params.Kd * d_input;
+    return pid->d_term;
 }
