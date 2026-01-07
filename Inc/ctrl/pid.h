@@ -22,14 +22,6 @@ extern "C" {
 /* Exported types ------------------------------------------------------------*/
 
 /**
- * @brief Режим роботи PID регулятора
- */
-typedef enum {
-    PID_MODE_MANUAL    = 0,  /**< Ручний режим (PID не активний) */
-    PID_MODE_AUTOMATIC = 1   /**< Автоматичний режим */
-} PID_Mode_t;
-
-/**
  * @brief Напрямок дії регулятора
  */
 typedef enum {
@@ -44,7 +36,6 @@ typedef struct {
     float Kp;                /**< Пропорційний коефіцієнт */
     float Ki;                /**< Інтегральний коефіцієнт */
     float Kd;                /**< Диференціальний коефіцієнт */
-    float sample_time;       /**< Час вибірки (секунди) */
     float out_min;           /**< Мінімальне значення виходу */
     float out_max;           /**< Максимальне значення виходу */
     PID_Direction_t direction; /**< Напрямок дії */
@@ -65,13 +56,14 @@ typedef struct {
     float last_input;        /**< Попереднє значення входу */
     float integral;          /**< Накопичена інтегральна складова */
 
+    /* Таймінг */
+    uint32_t last_time_us;   /**< Час останнього виклику Compute (мкс) */
+
     /* Налаштування */
-    PID_Mode_t mode;         /**< Режим роботи */
     bool is_initialized;     /**< Прапорець ініціалізації */
 
     /* Статистика */
     uint32_t compute_count;  /**< Кількість обчислень */
-    float last_compute_time; /**< Час останнього обчислення */
 } PID_Controller_t;
 
 /* Exported functions --------------------------------------------------------*/
@@ -107,15 +99,6 @@ Servo_Status_t PID_SetTunings(PID_Controller_t* pid, float Kp, float Ki, float K
 Servo_Status_t PID_SetOutputLimits(PID_Controller_t* pid, float min, float max);
 
 /**
- * @brief Встановлення режиму роботи
- *
- * @param pid Вказівник на структуру PID
- * @param mode Режим (MANUAL або AUTOMATIC)
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t PID_SetMode(PID_Controller_t* pid, PID_Mode_t mode);
-
-/**
  * @brief Встановлення напрямку дії
  *
  * @param pid Вказівник на структуру PID
@@ -132,15 +115,6 @@ Servo_Status_t PID_SetDirection(PID_Controller_t* pid, PID_Direction_t direction
  * @return Servo_Status_t Статус виконання
  */
 Servo_Status_t PID_SetSetpoint(PID_Controller_t* pid, float setpoint);
-
-/**
- * @brief Встановлення часу вибірки
- *
- * @param pid Вказівник на структуру PID
- * @param sample_time Час вибірки (секунди)
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t PID_SetSampleTime(PID_Controller_t* pid, float sample_time);
 
 /**
  * @brief Обчислення виходу PID регулятора

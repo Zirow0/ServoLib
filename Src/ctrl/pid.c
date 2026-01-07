@@ -7,6 +7,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "../../Inc/ctrl/pid.h"
+#include "../../Inc/hwd/hwd_timer.h"
 #include <string.h>
 
 /* Private functions ---------------------------------------------------------*/
@@ -35,8 +36,10 @@ Servo_Status_t PID_Init(PID_Controller_t* pid, const PID_Params_t* params)
     // Копіювання параметрів
     pid->params = *params;
 
-    // Ініціалізація за замовчуванням
-    pid->mode = PID_MODE_MANUAL;
+    // Ініціалізація таймінгу
+    pid->last_time_us = HWD_Timer_GetMicros();
+
+    // Встановлення прапорця
     pid->is_initialized = true;
 
     // Скидання внутрішнього стану
@@ -83,24 +86,6 @@ Servo_Status_t PID_SetOutputLimits(PID_Controller_t* pid, float min, float max)
     return SERVO_OK;
 }
 
-Servo_Status_t PID_SetMode(PID_Controller_t* pid, PID_Mode_t mode)
-{
-    if (pid == NULL || !pid->is_initialized) {
-        return SERVO_INVALID;
-    }
-
-    // Перехід з MANUAL в AUTOMATIC
-    if (mode == PID_MODE_AUTOMATIC && pid->mode == PID_MODE_MANUAL) {
-        // Обнулення інтегралу для чистого старту
-        pid->integral = 0.0f;
-        pid->last_input = pid->input;
-    }
-
-    pid->mode = mode;
-
-    return SERVO_OK;
-}
-
 Servo_Status_t PID_SetDirection(PID_Controller_t* pid, PID_Direction_t direction)
 {
     if (pid == NULL || !pid->is_initialized) {
@@ -130,29 +115,19 @@ Servo_Status_t PID_SetSetpoint(PID_Controller_t* pid, float setpoint)
     return SERVO_OK;
 }
 
-Servo_Status_t PID_SetSampleTime(PID_Controller_t* pid, float sample_time)
-{
-    if (pid == NULL || !pid->is_initialized || sample_time <= 0.0f) {
-        return SERVO_INVALID;
-    }
-
-    // Просто зберігаємо новий час вибірки
-    // Масштабування виконується при обчисленні в PID_Compute
-    pid->params.sample_time = sample_time;
-
-    return SERVO_OK;
-}
-
 Servo_Status_t PID_Compute(PID_Controller_t* pid, float input)
 {
     if (pid == NULL || !pid->is_initialized) {
         return SERVO_INVALID;
     }
 
-    // Якщо режим ручний, нічого не робимо
-    if (pid->mode == PID_MODE_MANUAL) {
-        return SERVO_OK;
-    }
+    // Отримання поточного часу та обчислення дельти
+    uint32_t current_time_us = HWD_Timer_GetMicros();
+    uint32_t delta_us = current_time_us - pid->last_time_us;
+    float dt = delta_us / 1000000.0f;  // Конвертація мкс → секунди
+
+    // Збереження поточного часу для наступної ітерації
+    pid->last_time_us = current_time_us;
 
     pid->input = input;
 
@@ -162,16 +137,16 @@ Servo_Status_t PID_Compute(PID_Controller_t* pid, float input)
     // Пропорційна складова
     float p_term = pid->params.Kp * error;
 
-    // Інтегральна складова з масштабуванням за часом вибірки
-    float integral_increment = pid->params.Ki * pid->params.sample_time * error;
+    // Інтегральна складова з масштабуванням за реальним часом
+    float integral_increment = pid->params.Ki * dt * error;
     pid->integral += integral_increment;
 
     // Anti-windup: обмеження інтегральної складової
     pid->integral = Clamp(pid->integral, pid->params.out_min, pid->params.out_max);
 
-    // Диференціальна складова (похідна від входу, а не від помилки, щоб уникнути стрибків)
+    // Диференціальна складова (похідна від входу, а не від помилки)
     float d_input = input - pid->last_input;
-    float d_term = -(pid->params.Kd / pid->params.sample_time) * d_input;  // Мінус, бо рахуємо від входу
+    float d_term = -(pid->params.Kd / dt) * d_input;  // Мінус, бо рахуємо від входу
 
     // Підсумковий вихід
     pid->output = p_term + pid->integral + d_term;
