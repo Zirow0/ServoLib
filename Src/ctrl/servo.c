@@ -57,7 +57,6 @@ Servo_Status_t Servo_InitFull(Servo_Controller_t* servo,
     Safety_Init(&servo->safety, &config->safety_config, &servo->error_mgr);
 
     PID_Init(&servo->pid, &config->pid_params);
-    PID_SetMode(&servo->pid, PID_MODE_AUTOMATIC);
 
     Traj_Init(&servo->traj, &config->traj_params);
 
@@ -119,8 +118,13 @@ Servo_Status_t Servo_Update(Servo_Controller_t* servo)
 
     // PID регулювання в позиційному режимі
     if (servo->state.mode == SERVO_MODE_POSITION) {
-        PID_SetSetpoint(&servo->pid, servo->state.target_position);
-        PID_Compute(&servo->pid, servo->state.position);
+        // Отримання поточного часу для PID
+        uint32_t current_time_us = Time_GetMicros();
+
+        PID_Compute(&servo->pid,
+                    servo->state.target_position,  // setpoint
+                    servo->state.position,          // input
+                    current_time_us);               // час
 
         float pid_output = PID_GetOutput(&servo->pid);
 
