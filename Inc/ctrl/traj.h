@@ -24,10 +24,8 @@ extern "C" {
  * @brief Тип траєкторії
  */
 typedef enum {
-    TRAJ_TYPE_LINEAR  = 0,  /**< Лінійна траєкторія */
-    TRAJ_TYPE_SCURVE  = 1,  /**< S-подібна траєкторія */
-    TRAJ_TYPE_CUBIC   = 2,  /**< Кубічна траєкторія */
-    TRAJ_TYPE_QUINTIC = 3   /**< Квінтична траєкторія */
+    TRAJ_TYPE_LINEAR  = 0,  /**< Лінійна (трапецоїдальна) траєкторія */
+    TRAJ_TYPE_SCURVE  = 1   /**< S-подібна траєкторія з обмеженням ривка */
 } Trajectory_Type_t;
 
 /**
