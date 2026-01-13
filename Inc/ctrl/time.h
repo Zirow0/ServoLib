@@ -44,16 +44,6 @@ typedef struct {
     uint32_t measurement_count;  /**< Кількість вимірювань */
 } Execution_Timer_t;
 
-/**
- * @brief Структура для Rate Limiter (обмежувач частоти)
- */
-typedef struct {
-    float max_rate;              /**< Максимальна швидкість зміни (одиниць/с) */
-    float last_value;            /**< Попереднє значення */
-    uint32_t last_time_ms;       /**< Час останнього оновлення (мс) */
-    bool is_initialized;         /**< Прапорець ініціалізації */
-} Rate_Limiter_t;
-
 /* Exported functions --------------------------------------------------------*/
 
 /**
@@ -128,24 +118,6 @@ uint32_t Time_GetAverageDuration(const Execution_Timer_t* timer);
  * @return Servo_Status_t Статус виконання
  */
 Servo_Status_t Time_ResetMeasurements(Execution_Timer_t* timer);
-
-/**
- * @brief Ініціалізація обмежувача швидкості
- *
- * @param limiter Вказівник на структуру обмежувача
- * @param max_rate Максимальна швидкість зміни (одиниць/секунду)
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t Time_InitRateLimiter(Rate_Limiter_t* limiter, float max_rate);
-
-/**
- * @brief Застосування обмеження швидкості
- *
- * @param limiter Вказівник на структуру обмежувача
- * @param target Цільове значення
- * @return float Обмежене значення
- */
-float Time_ApplyRateLimit(Rate_Limiter_t* limiter, float target);
 
 /**
  * @brief Затримка в мілісекундах

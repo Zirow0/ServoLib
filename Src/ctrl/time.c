@@ -150,57 +150,6 @@ Servo_Status_t Time_ResetMeasurements(Execution_Timer_t* timer)
     return SERVO_OK;
 }
 
-Servo_Status_t Time_InitRateLimiter(Rate_Limiter_t* limiter, float max_rate)
-{
-    if (limiter == NULL || max_rate <= 0.0f) {
-        return SERVO_INVALID;
-    }
-
-    memset(limiter, 0, sizeof(Rate_Limiter_t));
-
-    limiter->max_rate = max_rate;
-    limiter->last_time_ms = HWD_Timer_GetMillis();
-    limiter->is_initialized = true;
-
-    return SERVO_OK;
-}
-
-float Time_ApplyRateLimit(Rate_Limiter_t* limiter, float target)
-{
-    if (limiter == NULL || !limiter->is_initialized) {
-        return target;
-    }
-
-    uint32_t current_time = HWD_Timer_GetMillis();
-    float dt = (float)(current_time - limiter->last_time_ms) / 1000.0f;
-
-    if (dt <= 0.0f) {
-        return limiter->last_value;
-    }
-
-    // Максимальна зміна за цей інтервал часу
-    float max_change = limiter->max_rate * dt;
-
-    // Різниця між цільовим і поточним значенням
-    float difference = target - limiter->last_value;
-
-    // Обмеження зміни
-    float limited_value;
-    if (difference > max_change) {
-        limited_value = limiter->last_value + max_change;
-    } else if (difference < -max_change) {
-        limited_value = limiter->last_value - max_change;
-    } else {
-        limited_value = target;
-    }
-
-    // Оновлення стану
-    limiter->last_value = limited_value;
-    limiter->last_time_ms = current_time;
-
-    return limited_value;
-}
-
 void Time_DelayMs(uint32_t ms)
 {
     HWD_Timer_DelayMs(ms);
