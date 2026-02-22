@@ -144,8 +144,8 @@ typedef struct {
 typedef struct {
     HWD_SPI_Config_t spi_config;             /**< Апаратна конфігурація SPI */
 
-    void* msel_port;                          /**< GPIO порт для MSEL (GPIOA, etc.) */
-    uint16_t msel_pin;                        /**< GPIO пін для MSEL (GPIO_PIN_x) */
+    void* msel_port;                          /**< Базова адреса GPIO порту для MSEL */
+    uint16_t msel_pin;                        /**< Бітова маска піна MSEL */
 
     AEAT9922_Protocol_Variant_t protocol_variant;  /**< Варіант протоколу (16-bit або 24-bit) */
 } AEAT9922_SPI_Config_t;

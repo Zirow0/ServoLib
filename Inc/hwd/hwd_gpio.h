@@ -50,7 +50,7 @@ typedef enum {
  * @brief Дескриптор GPIO піна
  */
 typedef struct {
-    void* port;          /**< Вказівник на порт (GPIO_TypeDef*) */
+    void* port;          /**< Базова адреса GPIO порту (платформо-специфічна) */
     uint16_t pin;        /**< Номер піна */
     HWD_GPIO_Mode_t mode;/**< Режим роботи */
     HWD_GPIO_Pull_t pull;/**< Підтяжка */

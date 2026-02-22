@@ -25,7 +25,7 @@ extern "C" {
  */
 typedef struct {
     /* GPIO параметри */
-    void* gpio_port;            /**< Порт GPIO (GPIO_TypeDef*) */
+    void* gpio_port;            /**< Базова адреса GPIO порту (платформо-специфічна) */
     uint16_t gpio_pin;          /**< Номер піна */
     bool active_high;           /**< true = активний HIGH, false = активний LOW */
 

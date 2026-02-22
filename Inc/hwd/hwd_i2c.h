@@ -35,7 +35,7 @@ typedef enum {
  */
 typedef struct {
     HWD_I2C_Speed_t speed;   /**< Швидкість */
-    void* hw_handle;         /**< Вказівник на апаратний дескриптор (I2C_HandleTypeDef) */
+    void* hw_handle;         /**< Базова адреса I2C периферії (платформо-специфічна) */
     uint32_t timeout_ms;     /**< Таймаут операцій (мс) */
 } HWD_I2C_Config_t;
 
