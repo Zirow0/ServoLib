@@ -20,8 +20,8 @@
 
 #include "drv/position/aeat9922.h"
 #include "hwd/hwd_timer.h"
+#include "hwd/hwd_gpio.h"
 #include "util/checksum.h"
-#include "stm32f4xx_hal.h"
 #include <string.h>
 
 /* Private defines -----------------------------------------------------------*/
@@ -67,11 +67,11 @@ static Servo_Status_t AEAT9922_HW_Init(void* driver_data, const Position_Params_
 
     // 1. Встановити MSEL відповідно до режимів
     // MSEL=1 для SPI4/PWM/UVW, MSEL=0 для SPI3/SSI
-    GPIO_PinState msel_state = GPIO_PIN_RESET;
+    HWD_GPIO_PinState_t msel_state = HWD_GPIO_PIN_RESET;
     if (modes & (AEAT9922_MODE_SPI4 | AEAT9922_MODE_PWM | AEAT9922_MODE_UVW)) {
-        msel_state = GPIO_PIN_SET;
+        msel_state = HWD_GPIO_PIN_SET;
     }
-    HAL_GPIO_WritePin((GPIO_TypeDef*)driver->config.spi_config.msel_port,
+    HWD_GPIO_WritePin(driver->config.spi_config.msel_port,
                       driver->config.spi_config.msel_pin, msel_state);
 
     // 2. Ініціалізація SPI (якщо використовується будь-який SPI режим)
@@ -83,7 +83,7 @@ static Servo_Status_t AEAT9922_HW_Init(void* driver_data, const Position_Params_
     }
 
     // 3. Зачекати Power-Up час (10 ms)
-    HAL_Delay(AEAT9922_POWERUP_TIME_MS);
+    HWD_Timer_DelayMs(AEAT9922_POWERUP_TIME_MS);
 
     // 4. Перевірити статус енкодера (якщо SPI доступний)
     if (modes & (AEAT9922_MODE_SPI3 | AEAT9922_MODE_SPI4)) {
@@ -165,12 +165,11 @@ static Servo_Status_t AEAT9922_HW_Init(void* driver_data, const Position_Params_
 
     // 8. Ініціалізувати апаратний таймер для ABI (якщо використовується)
     if ((modes & AEAT9922_MODE_ABI) && driver->config.abi.enable_incremental) {
-        if (driver->config.abi.encoder_timer_handle != NULL) {
-            TIM_HandleTypeDef* htim = (TIM_HandleTypeDef*)driver->config.abi.encoder_timer_handle;
-            HAL_TIM_Encoder_Start(htim, TIM_CHANNEL_ALL);
-            driver->incremental_count = 0;
-            driver->last_incremental_count = 0;
+        if (driver->config.abi.encoder_start != NULL) {
+            driver->config.abi.encoder_start(driver->config.abi.encoder_ctx);
         }
+        driver->incremental_count = 0;
+        driver->last_incremental_count = 0;
     }
 
     // 9. Перевірка готовності датчика до роботи
@@ -190,9 +189,8 @@ static Servo_Status_t AEAT9922_HW_DeInit(void* driver_data)
 
     // Зупинити інкрементальний таймер (якщо ABI увімкнений)
     if ((modes & AEAT9922_MODE_ABI) && driver->config.abi.enable_incremental) {
-        if (driver->config.abi.encoder_timer_handle != NULL) {
-            TIM_HandleTypeDef* htim = (TIM_HandleTypeDef*)driver->config.abi.encoder_timer_handle;
-            HAL_TIM_Encoder_Stop(htim, TIM_CHANNEL_ALL);
+        if (driver->config.abi.encoder_stop != NULL) {
+            driver->config.abi.encoder_stop(driver->config.abi.encoder_ctx);
         }
     }
 
@@ -620,7 +618,7 @@ Servo_Status_t AEAT9922_WriteRegister(AEAT9922_Driver_t* driver,
     }
 
     // Час на обробку запису (мінімум 1 ms)
-    HAL_Delay(1);
+    HWD_Timer_DelayMs(1);
 
     return SERVO_OK;
 }
@@ -643,7 +641,7 @@ Servo_Status_t AEAT9922_ProgramEEPROM(AEAT9922_Driver_t* driver)
     }
 
     // Зачекати завершення (40 ms)
-    HAL_Delay(AEAT9922_EEPROM_WRITE_TIME_MS);
+    HWD_Timer_DelayMs(AEAT9922_EEPROM_WRITE_TIME_MS);
 
     // Перевірити статус пам'яті
     status = AEAT9922_ReadStatus(driver);
@@ -676,7 +674,7 @@ Servo_Status_t AEAT9922_CalibrateAccuracy(AEAT9922_Driver_t* driver)
     }
 
     // Зачекати завершення калібрування (~2 секунди)
-    HAL_Delay(AEAT9922_CALIB_TIME_MS);
+    HWD_Timer_DelayMs(AEAT9922_CALIB_TIME_MS);
 
     // Перевірити статус калібрування
     uint8_t calib_status;
@@ -717,7 +715,7 @@ Servo_Status_t AEAT9922_CalibrateZero(AEAT9922_Driver_t* driver)
     }
 
     // Зачекати завершення
-    HAL_Delay(100);
+    HWD_Timer_DelayMs(100);
 
     // Перевірити статус
     uint8_t calib_status;
@@ -752,13 +750,12 @@ Servo_Status_t AEAT9922_UpdateIncrementalCount(AEAT9922_Driver_t* driver)
         return SERVO_INVALID;
     }
 
-    TIM_HandleTypeDef* htim = (TIM_HandleTypeDef*)driver->config.abi.encoder_timer_handle;
-    if (htim == NULL) {
+    if (driver->config.abi.encoder_read == NULL) {
         return SERVO_INVALID;
     }
 
-    // Зчитати поточний лічильник з таймера
-    int32_t current_count = (int32_t)__HAL_TIM_GET_COUNTER(htim);
+    // Зчитати поточний лічильник через callback
+    int32_t current_count = driver->config.abi.encoder_read(driver->config.abi.encoder_ctx);
 
     // Обчислити різницю
     int32_t delta = current_count - driver->last_incremental_count;

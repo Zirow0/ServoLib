@@ -152,6 +152,15 @@ typedef struct {
 
 /**
  * @brief Конфігурація ABI інкрементального виходу
+ *
+ * Для апаратного підрахунку імпульсів надайте три callbacks:
+ *   encoder_start — запускає таймер у режимі лічильника енкодера
+ *   encoder_stop  — зупиняє таймер
+ *   encoder_read  — повертає поточне значення лічильника (знакове)
+ *   encoder_ctx   — довільний контекст (наприклад, базова адреса таймера)
+ *
+ * Якщо callbacks не потрібні (ABI використовується без апаратного підрахунку),
+ * встановіть enable_incremental = false або залиште callbacks = NULL.
  */
 typedef struct {
     uint16_t incremental_cpr;                 /**< Counts Per Revolution (1-10000) */
@@ -160,7 +169,18 @@ typedef struct {
     AEAT9922_Index_State_t index_state;       /**< Позиція імпульсу Index */
 
     bool enable_incremental;                  /**< Використовувати апаратний підрахунок */
-    void* encoder_timer_handle;               /**< TIM handle для Encoder Mode (NULL якщо не використовується) */
+
+    /** @brief Callback: запуск апаратного таймера у режимі лічильника енкодера */
+    Servo_Status_t (*encoder_start)(void* ctx);
+
+    /** @brief Callback: зупинка апаратного таймера */
+    Servo_Status_t (*encoder_stop)(void* ctx);
+
+    /** @brief Callback: читання поточного значення лічильника */
+    int32_t (*encoder_read)(void* ctx);
+
+    /** @brief Контекст для callbacks (наприклад, базова адреса таймера) */
+    void* encoder_ctx;
 } AEAT9922_ABI_Config_t;
 
 /**
