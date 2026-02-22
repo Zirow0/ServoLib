@@ -1,0 +1,19 @@
+# Normalize line endings to LF in repository
+* text=auto eol=lf
+
+# C source files
+*.c text eol=lf
+*.h text eol=lf
+
+# Documentation and config
+*.md text eol=lf
+*.txt text eol=lf
+*.py text eol=lf
+*.json text eol=lf
+
+# Binary files - no conversion
+*.bin binary
+*.hex binary
+*.elf binary
+*.a binary
+*.o binary

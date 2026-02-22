@@ -17,12 +17,12 @@ extern "C" {
 /* Includes ------------------------------------------------------------------*/
 #include "../core.h"
 #include "../drv/motor/motor.h"
+#include "../drv/position/position.h"
 #include "../drv/brake/brake.h"
 #include "pid.h"
 #include "safety.h"
 #include "err.h"
 #include "traj.h"
-#include "calib.h"
 #include "time.h"
 
 /* Exported types ------------------------------------------------------------*/
@@ -64,13 +64,13 @@ typedef struct {
     Axis_State_t state;
 
     /* Компоненти */
-    Motor_Interface_t* motor;       /**< Інтерфейс двигуна */
-    PID_Controller_t pid;           /**< PID регулятор */
-    Safety_System_t safety;         /**< Система безпеки */
-    Error_Manager_t error_mgr;      /**< Менеджер помилок */
-    Trajectory_Generator_t traj;    /**< Генератор траєкторій */
-    Calibration_Data_t calib;       /**< Дані калібрування */
-    Brake_Interface_t* brake;       /**< Інтерфейс гальм (опціонально) */
+    Motor_Interface_t* motor;               /**< Інтерфейс двигуна */
+    Position_Sensor_Interface_t* sensor;    /**< Інтерфейс датчика положення (опціонально) */
+    PID_Controller_t pid;                   /**< PID регулятор */
+    Safety_System_t safety;                 /**< Система безпеки */
+    Error_Manager_t error_mgr;              /**< Менеджер помилок */
+    Trajectory_Generator_t traj;            /**< Генератор траєкторій */
+    Brake_Interface_t* brake;               /**< Інтерфейс гальм (опціонально) */
 
     /* Таймінги */
     Periodic_Timer_t update_timer;  /**< Таймер оновлення */
@@ -95,18 +95,20 @@ Servo_Status_t Servo_Init(Servo_Controller_t* servo,
                           Motor_Interface_t* motor);
 
 /**
- * @brief Ініціалізація сервоприводу з гальмами
+ * @brief Повна ініціалізація сервоприводу з усіма компонентами
  *
  * @param servo Вказівник на контролер
  * @param config Конфігурація
  * @param motor Інтерфейс двигуна
+ * @param sensor Інтерфейс датчика положення (NULL якщо не використовується)
  * @param brake Інтерфейс гальм (NULL якщо не використовуються)
  * @return Servo_Status_t Статус виконання
  */
-Servo_Status_t Servo_InitWithBrake(Servo_Controller_t* servo,
-                                    const Servo_Config_t* config,
-                                    Motor_Interface_t* motor,
-                                    Brake_Interface_t* brake);
+Servo_Status_t Servo_InitFull(Servo_Controller_t* servo,
+                               const Servo_Config_t* config,
+                               Motor_Interface_t* motor,
+                               Position_Sensor_Interface_t* sensor,
+                               Brake_Interface_t* brake);
 
 /**
  * @brief Основний цикл оновлення сервоприводу

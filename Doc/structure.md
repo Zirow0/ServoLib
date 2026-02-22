@@ -41,7 +41,7 @@ ServoLib/
 │   │   ├── traj.h              # Генератор траєкторій
 │   │   ├── err.h               # Обробка помилок та кодів
 │   │   ├── time.h              # Керування таймінгами та частотою
-│   │   └── calib.h             # Калібрування (нульова точка, масштаб)
+│   │   └── pid_mgr.h           # Менеджер PID регуляторів (каскадне керування)
 │   │
 │   └── util/                   # Універсальні допоміжні утиліти
 │       ├── math.h              # Математичні функції
@@ -73,7 +73,7 @@ ServoLib/
 │   │   ├── traj.c
 │   │   ├── err.c
 │   │   ├── time.c
-│   │   └── calib.c
+│   │   └── pid_mgr.c
 │   └── util/
 │       ├── math.c
 │       ├── buf.c
@@ -190,7 +190,7 @@ ServoLib/
 | `traj.h` / `traj.c` | Генератор траєкторій руху | `Trajectory_Generate()`, `Trajectory_Update()` |
 | `err.h` / `err.c` | Обробка помилок та логування | `Error_Log()`, `Error_GetLast()`, `Error_Clear()` |
 | `time.h` / `time.c` | Керування таймінгами та частотою оновлення | `Timer_Init()`, `Timer_Elapsed()` |
-| `calib.h` / `calib.c` | Система калібрування (нуль, діапазон) | `Calib_SetZero()`, `Calib_AutoCalibrate()` |
+| `pid_mgr.h` / `pid_mgr.c` | Менеджер PID регуляторів (каскадне керування) | `PID_Manager_Add()`, `PID_Manager_UpdateAll()` |
 
 ### util/ (Утиліти)
 

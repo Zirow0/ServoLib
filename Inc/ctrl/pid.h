@@ -22,20 +22,16 @@ extern "C" {
 /* Exported types ------------------------------------------------------------*/
 
 /**
- * @brief Режим роботи PID регулятора
+ * @brief Прапорці увімкнення складових PID регулятора
  */
 typedef enum {
-    PID_MODE_MANUAL    = 0,  /**< Ручний режим (PID не активний) */
-    PID_MODE_AUTOMATIC = 1   /**< Автоматичний режим */
-} PID_Mode_t;
-
-/**
- * @brief Напрямок дії регулятора
- */
-typedef enum {
-    PID_DIRECTION_DIRECT  = 0,  /**< Прямий (збільшення виходу при збільшенні помилки) */
-    PID_DIRECTION_REVERSE = 1   /**< Зворотний (зменшення виходу при збільшенні помилки) */
-} PID_Direction_t;
+    PID_ENABLE_P = (1 << 0),  /**< Увімкнути пропорційну складову (0x01) */
+    PID_ENABLE_I = (1 << 1),  /**< Увімкнути інтегральну складову (0x02) */
+    PID_ENABLE_D = (1 << 2),  /**< Увімкнути диференціальну складову (0x04) */
+    // Резерв для майбутніх розширень:
+    // PID_ENABLE_FF = (1 << 3),  /**< Feed-forward складова */
+    // PID_ENABLE_DF = (1 << 4),  /**< Derivative filter */
+} PID_Enable_Flags_t;
 
 /**
  * @brief Параметри PID регулятора
@@ -44,10 +40,9 @@ typedef struct {
     float Kp;                /**< Пропорційний коефіцієнт */
     float Ki;                /**< Інтегральний коефіцієнт */
     float Kd;                /**< Диференціальний коефіцієнт */
-    float sample_time;       /**< Час вибірки (секунди) */
     float out_min;           /**< Мінімальне значення виходу */
     float out_max;           /**< Максимальне значення виходу */
-    PID_Direction_t direction; /**< Напрямок дії */
+    uint8_t enabled_terms;   /**< Увімкнені складові (комбінація PID_Enable_Flags_t) */
 } PID_Params_t;
 
 /**
@@ -58,21 +53,25 @@ typedef struct {
     PID_Params_t params;
 
     /* Внутрішній стан */
-    float setpoint;          /**< Задане значення */
     float input;             /**< Поточне значення входу */
     float output;            /**< Вихід регулятора */
 
     float last_input;        /**< Попереднє значення входу */
     float integral;          /**< Накопичена інтегральна складова */
-    float last_error;        /**< Попередня помилка */
+
+    /* Збережені складові */
+    float p_term;            /**< Остання пропорційна складова */
+    float i_term;            /**< Остання інтегральна складова */
+    float d_term;            /**< Остання диференціальна складова */
+
+    /* Таймінг */
+    uint32_t last_time_us;   /**< Час останнього виклику Compute (мкс) */
 
     /* Налаштування */
-    PID_Mode_t mode;         /**< Режим роботи */
     bool is_initialized;     /**< Прапорець ініціалізації */
 
     /* Статистика */
     uint32_t compute_count;  /**< Кількість обчислень */
-    float last_compute_time; /**< Час останнього обчислення */
 } PID_Controller_t;
 
 /* Exported functions --------------------------------------------------------*/
@@ -108,51 +107,17 @@ Servo_Status_t PID_SetTunings(PID_Controller_t* pid, float Kp, float Ki, float K
 Servo_Status_t PID_SetOutputLimits(PID_Controller_t* pid, float min, float max);
 
 /**
- * @brief Встановлення режиму роботи
- *
- * @param pid Вказівник на структуру PID
- * @param mode Режим (MANUAL або AUTOMATIC)
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t PID_SetMode(PID_Controller_t* pid, PID_Mode_t mode);
-
-/**
- * @brief Встановлення напрямку дії
- *
- * @param pid Вказівник на структуру PID
- * @param direction Напрямок (DIRECT або REVERSE)
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t PID_SetDirection(PID_Controller_t* pid, PID_Direction_t direction);
-
-/**
- * @brief Встановлення заданого значення
- *
- * @param pid Вказівник на структуру PID
- * @param setpoint Задане значення
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t PID_SetSetpoint(PID_Controller_t* pid, float setpoint);
-
-/**
- * @brief Встановлення часу вибірки
- *
- * @param pid Вказівник на структуру PID
- * @param sample_time Час вибірки (секунди)
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t PID_SetSampleTime(PID_Controller_t* pid, float sample_time);
-
-/**
  * @brief Обчислення виходу PID регулятора
  *
- * Основна функція, яка виконує PID обчислення на основі поточного входу
+ * Основна функція, яка виконує PID обчислення на основі бажаного та поточного стану
  *
  * @param pid Вказівник на структуру PID
+ * @param setpoint Бажане значення (уставка)
  * @param input Поточне значення процесної змінної
+ * @param current_time_us Поточний час в мікросекундах
  * @return Servo_Status_t Статус виконання
  */
-Servo_Status_t PID_Compute(PID_Controller_t* pid, float input);
+Servo_Status_t PID_Compute(PID_Controller_t* pid, float setpoint, float input, uint32_t current_time_us);
 
 /**
  * @brief Отримання виходу регулятора
@@ -161,14 +126,6 @@ Servo_Status_t PID_Compute(PID_Controller_t* pid, float input);
  * @return float Вихідне значення
  */
 float PID_GetOutput(const PID_Controller_t* pid);
-
-/**
- * @brief Отримання поточної помилки
- *
- * @param pid Вказівник на структуру PID
- * @return float Поточна помилка (setpoint - input)
- */
-float PID_GetError(const PID_Controller_t* pid);
 
 /**
  * @brief Скидання регулятора
