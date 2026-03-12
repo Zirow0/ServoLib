@@ -1,0 +1,63 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 20, "patch": 0 },
+
+  "configurePresets": [
+    {
+      "name": "base-stm32f411-ocm3",
+      "hidden": true,
+      "generator": "Ninja",
+      "toolchainFile": "${sourceDir}/cmake/toolchain/arm-none-eabi.cmake",
+      "cacheVariables": {
+        "BOARD": "STM32F411_OCM3"
+      }
+    },
+    {
+      "name": "debug_encoder",
+      "displayName": "Debug: Encoder (STM32F411_OCM3)",
+      "inherits": "base-stm32f411-ocm3",
+      "binaryDir": "${sourceDir}/build/debug_encoder",
+      "cacheVariables": {
+        "APP": "debug_encoder",
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "debug_motor",
+      "displayName": "Debug: Motor (STM32F411_OCM3)",
+      "inherits": "base-stm32f411-ocm3",
+      "binaryDir": "${sourceDir}/build/debug_motor",
+      "cacheVariables": {
+        "APP": "debug_motor",
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "debug_brake",
+      "displayName": "Debug: Brake (STM32F411_OCM3)",
+      "inherits": "base-stm32f411-ocm3",
+      "binaryDir": "${sourceDir}/build/debug_brake",
+      "cacheVariables": {
+        "APP": "debug_brake",
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "servo_full",
+      "displayName": "Full Servo (STM32F411_OCM3)",
+      "inherits": "base-stm32f411-ocm3",
+      "binaryDir": "${sourceDir}/build/servo_full",
+      "cacheVariables": {
+        "APP": "servo_full",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    }
+  ],
+
+  "buildPresets": [
+    { "name": "debug_encoder", "configurePreset": "debug_encoder" },
+    { "name": "debug_motor",   "configurePreset": "debug_motor"   },
+    { "name": "debug_brake",   "configurePreset": "debug_brake"   },
+    { "name": "servo_full",    "configurePreset": "servo_full"    }
+  ]
+}
