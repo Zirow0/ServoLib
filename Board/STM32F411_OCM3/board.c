@@ -31,6 +31,7 @@
 #include <libopencm3/stm32/timer.h>
 #include <libopencm3/stm32/spi.h>
 #include <libopencm3/cm3/systick.h>
+#include <libopencm3/stm32/common/flash_common_idcache.h>  /* FLASH_ACR_DCEN, FLASH_ACR_ICEN */
 
 /* Private functions ---------------------------------------------------------*/
 
@@ -58,7 +59,7 @@ static void clock_setup(void)
         .hpre       = RCC_CFGR_HPRE_NODIV,     /* AHB  = 100 MHz */
         .ppre1      = RCC_CFGR_PPRE_DIV2,       /* APB1 = 50 MHz  */
         .ppre2      = RCC_CFGR_PPRE_NODIV,      /* APB2 = 100 MHz */
-        .voltage_scale = POWER_SCALE1,
+        .voltage_scale = PWR_SCALE1,
         .flash_config  = FLASH_ACR_DCEN | FLASH_ACR_ICEN | FLASH_ACR_LATENCY_3WS,
         .ahb_frequency  = 100000000U,
         .apb1_frequency = 50000000U,

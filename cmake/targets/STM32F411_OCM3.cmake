@@ -19,7 +19,6 @@ add_link_options(
     -nostartfiles
     -Wl,--gc-sections
     -Wl,--print-memory-usage
-    -Wl,--start-group -lc -lgcc -lnosys -Wl,--end-group
 )
 
 # ─── libopencm3 ───────────────────────────────────────────────────────────────
@@ -65,7 +64,8 @@ function(stm32_add_executable TARGET)
         ${OCM3_DIR}/lib
     )
 
-    target_link_libraries(${TARGET} PRIVATE opencm3_stm32f4)
+    # Порядок бібліотек важливий: opencm3 → m → c → gcc → nosys
+    target_link_libraries(${TARGET} PRIVATE opencm3_stm32f4 m c gcc nosys)
 
     target_link_options(${TARGET} PRIVATE
         -T${LINKER_SCRIPT}

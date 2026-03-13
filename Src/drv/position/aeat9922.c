@@ -294,8 +294,6 @@ static Servo_Status_t AEAT9922_HW_ReadRaw(void* driver_data, Position_Raw_Data_t
         uint16_t full_data = ((uint16_t)rx_data[0] << 8) | rx_data[1];
         uint8_t parity_check = Checksum_EvenParity16(full_data);
 
-        printf("input raw data:        %d raw\n", full_data);
-
         if (parity_check != 0) {
             // Помилка парності (парність повинна бути парною, тобто 0)
             driver->error_count++;
@@ -315,7 +313,6 @@ static Servo_Status_t AEAT9922_HW_ReadRaw(void* driver_data, Position_Raw_Data_t
         // Витягнути 10-bit позицію (біти [9:0])
         raw_position = ((uint32_t)(full_data & 0x3fff));  // Біти [13:0]
 
-        printf("input raw position:        %d raw\n", raw_position);
     } else {
         /* ====================================================================
          * SPI4-B РОЗПАКОВКА (24-bit з CRC-8)
