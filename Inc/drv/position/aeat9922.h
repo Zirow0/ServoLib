@@ -144,14 +144,23 @@ typedef struct {
 typedef struct {
     HWD_SPI_Config_t spi_config;             /**< Апаратна конфігурація SPI */
 
-    void* msel_port;                          /**< GPIO порт для MSEL (GPIOA, etc.) */
-    uint16_t msel_pin;                        /**< GPIO пін для MSEL (GPIO_PIN_x) */
+    void* msel_port;                          /**< Базова адреса GPIO порту для MSEL */
+    uint16_t msel_pin;                        /**< Бітова маска піна MSEL */
 
     AEAT9922_Protocol_Variant_t protocol_variant;  /**< Варіант протоколу (16-bit або 24-bit) */
 } AEAT9922_SPI_Config_t;
 
 /**
  * @brief Конфігурація ABI інкрементального виходу
+ *
+ * Для апаратного підрахунку імпульсів надайте три callbacks:
+ *   encoder_start — запускає таймер у режимі лічильника енкодера
+ *   encoder_stop  — зупиняє таймер
+ *   encoder_read  — повертає поточне значення лічильника (знакове)
+ *   encoder_ctx   — довільний контекст (наприклад, базова адреса таймера)
+ *
+ * Якщо callbacks не потрібні (ABI використовується без апаратного підрахунку),
+ * встановіть enable_incremental = false або залиште callbacks = NULL.
  */
 typedef struct {
     uint16_t incremental_cpr;                 /**< Counts Per Revolution (1-10000) */
@@ -160,7 +169,18 @@ typedef struct {
     AEAT9922_Index_State_t index_state;       /**< Позиція імпульсу Index */
 
     bool enable_incremental;                  /**< Використовувати апаратний підрахунок */
-    void* encoder_timer_handle;               /**< TIM handle для Encoder Mode (NULL якщо не використовується) */
+
+    /** @brief Callback: запуск апаратного таймера у режимі лічильника енкодера */
+    Servo_Status_t (*encoder_start)(void* ctx);
+
+    /** @brief Callback: зупинка апаратного таймера */
+    Servo_Status_t (*encoder_stop)(void* ctx);
+
+    /** @brief Callback: читання поточного значення лічильника */
+    int32_t (*encoder_read)(void* ctx);
+
+    /** @brief Контекст для callbacks (наприклад, базова адреса таймера) */
+    void* encoder_ctx;
 } AEAT9922_ABI_Config_t;
 
 /**

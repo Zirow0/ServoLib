@@ -47,7 +47,7 @@ typedef struct {
     uint32_t frequency;          /**< Частота PWM (Hz) */
     uint32_t resolution;         /**< Роздільна здатність (кількість кроків) */
     HWD_PWM_Channel_t channel;   /**< Номер каналу */
-    void* hw_handle;             /**< Вказівник на апаратний дескриптор (TIM_HandleTypeDef) */
+    void* hw_handle;             /**< Базова адреса таймера (платформо-специфічна) */
     uint32_t hw_channel;         /**< Апаратний канал таймера */
 } HWD_PWM_Config_t;
 

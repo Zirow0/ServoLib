@@ -20,8 +20,8 @@
 
 #include "drv/position/aeat9922.h"
 #include "hwd/hwd_timer.h"
+#include "hwd/hwd_gpio.h"
 #include "util/checksum.h"
-#include "stm32f4xx_hal.h"
 #include <string.h>
 
 /* Private defines -----------------------------------------------------------*/
@@ -67,11 +67,11 @@ static Servo_Status_t AEAT9922_HW_Init(void* driver_data, const Position_Params_
 
     // 1. Встановити MSEL відповідно до режимів
     // MSEL=1 для SPI4/PWM/UVW, MSEL=0 для SPI3/SSI
-    GPIO_PinState msel_state = GPIO_PIN_RESET;
+    HWD_GPIO_PinState_t msel_state = HWD_GPIO_PIN_RESET;
     if (modes & (AEAT9922_MODE_SPI4 | AEAT9922_MODE_PWM | AEAT9922_MODE_UVW)) {
-        msel_state = GPIO_PIN_SET;
+        msel_state = HWD_GPIO_PIN_SET;
     }
-    HAL_GPIO_WritePin((GPIO_TypeDef*)driver->config.spi_config.msel_port,
+    HWD_GPIO_WritePin(driver->config.spi_config.msel_port,
                       driver->config.spi_config.msel_pin, msel_state);
 
     // 2. Ініціалізація SPI (якщо використовується будь-який SPI режим)
@@ -83,7 +83,7 @@ static Servo_Status_t AEAT9922_HW_Init(void* driver_data, const Position_Params_
     }
 
     // 3. Зачекати Power-Up час (10 ms)
-    HAL_Delay(AEAT9922_POWERUP_TIME_MS);
+    HWD_Timer_DelayMs(AEAT9922_POWERUP_TIME_MS);
 
     // 4. Перевірити статус енкодера (якщо SPI доступний)
     if (modes & (AEAT9922_MODE_SPI3 | AEAT9922_MODE_SPI4)) {
@@ -165,12 +165,11 @@ static Servo_Status_t AEAT9922_HW_Init(void* driver_data, const Position_Params_
 
     // 8. Ініціалізувати апаратний таймер для ABI (якщо використовується)
     if ((modes & AEAT9922_MODE_ABI) && driver->config.abi.enable_incremental) {
-        if (driver->config.abi.encoder_timer_handle != NULL) {
-            TIM_HandleTypeDef* htim = (TIM_HandleTypeDef*)driver->config.abi.encoder_timer_handle;
-            HAL_TIM_Encoder_Start(htim, TIM_CHANNEL_ALL);
-            driver->incremental_count = 0;
-            driver->last_incremental_count = 0;
+        if (driver->config.abi.encoder_start != NULL) {
+            driver->config.abi.encoder_start(driver->config.abi.encoder_ctx);
         }
+        driver->incremental_count = 0;
+        driver->last_incremental_count = 0;
     }
 
     // 9. Перевірка готовності датчика до роботи
@@ -190,9 +189,8 @@ static Servo_Status_t AEAT9922_HW_DeInit(void* driver_data)
 
     // Зупинити інкрементальний таймер (якщо ABI увімкнений)
     if ((modes & AEAT9922_MODE_ABI) && driver->config.abi.enable_incremental) {
-        if (driver->config.abi.encoder_timer_handle != NULL) {
-            TIM_HandleTypeDef* htim = (TIM_HandleTypeDef*)driver->config.abi.encoder_timer_handle;
-            HAL_TIM_Encoder_Stop(htim, TIM_CHANNEL_ALL);
+        if (driver->config.abi.encoder_stop != NULL) {
+            driver->config.abi.encoder_stop(driver->config.abi.encoder_ctx);
         }
     }
 
@@ -296,8 +294,6 @@ static Servo_Status_t AEAT9922_HW_ReadRaw(void* driver_data, Position_Raw_Data_t
         uint16_t full_data = ((uint16_t)rx_data[0] << 8) | rx_data[1];
         uint8_t parity_check = Checksum_EvenParity16(full_data);
 
-        printf("input raw data:        %d raw\n", full_data);
-
         if (parity_check != 0) {
             // Помилка парності (парність повинна бути парною, тобто 0)
             driver->error_count++;
@@ -317,38 +313,35 @@ static Servo_Status_t AEAT9922_HW_ReadRaw(void* driver_data, Position_Raw_Data_t
         // Витягнути 10-bit позицію (біти [9:0])
         raw_position = ((uint32_t)(full_data & 0x3fff));  // Біти [13:0]
 
-        printf("input raw position:        %d raw\n", raw_position);
     } else {
         /* ====================================================================
-         * SPI4-B РОЗПАКОВКА (24-bit з CRC-8)
+         * SPI4-B РОЗПАКОВКА (24-bit з парністю)
          * ====================================================================
-         * Формат відповіді:
-         * Байт 0 [23:16]: Reserved(4) | W | E | Data[17:16]
-         * Байт 1 [15:8]:  Data[15:8]
-         * Байт 2 [7:0]:   CRC-8
+         * Формат відповіді (підтверджено логічним аналізатором):
+         * Байт 0 [23:16]: P | W | E | Pos[17:13]
+         * Байт 1 [15:8]:  Pos[12:5]
+         * Байт 2 [7:0]:   Pos[4:0] | pad(3)
          *
-         * Біти:
-         * [23:22] - Reserved (завжди 0)
-         * [22]    - W (Warning): магніт не в оптимальній позиції
-         * [21]    - E (Error): критична помилка комунікації
-         * [20:5]  - Position data (16 біт для 18-bit роздільності)
-         * [7:0]   - CRC-8 контрольна сума
+         * P   = bit 23 — парність (even parity над Байт0[6:0]+Байт1+Байт2)
+         * W   = bit 22 — Warning (магніт поза оптимальним діапазоном)
+         * E   = bit 21 — Error (критична помилка)
+         * Pos = 18 біт позиції в бітах [20:3]
          */
 
-        // Перевірка CRC-8
-        uint8_t calculated_crc = Checksum_CRC8(rx_data, 2, CRC8_POLY_DEFAULT);
-        uint8_t received_crc = rx_data[2];
+        // Перевірка парності: P = even parity над BYTE0[6:0] + BYTE1 + BYTE2
+        uint8_t received_parity = (rx_data[0] >> 7) & 1;
+        uint16_t w0 = ((uint16_t)(rx_data[0] & 0x7F) << 8) | rx_data[1];
+        uint8_t calc_parity = Checksum_EvenParity16(w0) ^
+                              Checksum_EvenParity16((uint16_t)rx_data[2]);
 
-        if (calculated_crc != received_crc) {
-            // CRC помилка
+        if (calc_parity != received_parity) {
             driver->error_count++;
             raw->valid = false;
             return SERVO_ERROR;
         }
 
-        // Витягнути прапорці W та E
-        bool warning_flag = (rx_data[0] & (1 << 6)) != 0;  // W bit
-        error_flag = (rx_data[0] & (1 << 5)) != 0;         // E bit
+        bool warning_flag = (rx_data[0] & 0x40) != 0;  // W = bit 6
+        error_flag        = (rx_data[0] & 0x20) != 0;  // E = bit 5
 
         if (error_flag) {
             driver->error_count++;
@@ -356,16 +349,12 @@ static Servo_Status_t AEAT9922_HW_ReadRaw(void* driver_data, Position_Raw_Data_t
             return SERVO_ERROR;
         }
 
-        if (warning_flag) {
-            // Попередження: магніт не в оптимальній позиції
-            // Можна логувати, але продовжуємо роботу
-        }
+        (void)warning_flag;  // Продовжуємо навіть при попередженні
 
-        // Витягнути дані позиції (біти [20:5] = 16 біт)
-        // Для 18-bit роздільності: rx_data[0] містить [Data17:Data16], rx_data[1] містить [Data15:Data8]
-        uint32_t position_18bit = ((uint32_t)(rx_data[0] & 0x03) << 16) |  // Біти [17:16]
-                                  ((uint32_t)rx_data[1] << 8);               // Біти [15:8]
-        // Біти [7:0] відсутні в SPI4-B для позиції (CRC займає байт 2)
+        // Витягнути 18-bit позицію
+        uint32_t position_18bit = ((uint32_t)(rx_data[0] & 0x1F) << 13) |  // Pos[17:13]
+                                  ((uint32_t)rx_data[1] << 5)              |  // Pos[12:5]
+                                  ((rx_data[2] >> 3) & 0x1F);                // Pos[4:0]
 
         raw_position = position_18bit;
     }
@@ -526,13 +515,28 @@ Servo_Status_t AEAT9922_ReadRegister(AEAT9922_Driver_t* driver,
         return status;
     }
 
-    // Перевірка CRC для SPI4-B (тільки для 24-bit режиму)
+    /*
+     * SPI4-B фрейм відповіді для 8-bit регістрів (підтверджено логічним аналізатором):
+     *   rx_data[0] = значення регістру (DATA)
+     *   rx_data[1] = W(1) | E(1) | CRC6(6)
+     *   rx_data[2] = 0x00 (паддінг)
+     *
+     * CRC-6: polynomial=0x04, init=0x04, MSB-first, над rx_data[0] (1 байт).
+     * W=bit7 (Warning: магніт не в оптимальному діапазоні)
+     * E=bit6 (Error: критична помилка)
+     */
     if (driver->config.spi_config.protocol_variant == AEAT9922_PSEL_SPI4_24BIT) {
-        uint8_t calculated_crc = Checksum_CRC8(rx_data, 2, CRC8_POLY_DEFAULT);
-        uint8_t received_crc = rx_data[2];
+        uint8_t calculated_crc = Checksum_CRC6(&rx_data[0], 1, CRC6_POLY_AEAT9922);
+        uint8_t received_crc   = rx_data[1] & 0x3F;
 
         if (calculated_crc != received_crc) {
-            // CRC помилка
+            driver->error_count++;
+            return SERVO_ERROR;
+        }
+
+        bool error_bit = (rx_data[1] & 0x40) != 0;  // E = bit 6
+        if (error_bit) {
+            driver->error_count++;
             return SERVO_ERROR;
         }
     }
@@ -543,13 +547,12 @@ Servo_Status_t AEAT9922_ReadRegister(AEAT9922_Driver_t* driver,
         uint8_t parity_check = Checksum_EvenParity16(full_data);
 
         if (parity_check != 0) {
-            // Помилка парності
             return SERVO_ERROR;
         }
     }
 
-    // Витягнути дані (перший байт містить регістр)
-    *value = rx_data[1];
+    // Дані знаходяться в першому байті відповіді
+    *value = rx_data[0];
 
     return SERVO_OK;
 }
@@ -620,7 +623,7 @@ Servo_Status_t AEAT9922_WriteRegister(AEAT9922_Driver_t* driver,
     }
 
     // Час на обробку запису (мінімум 1 ms)
-    HAL_Delay(1);
+    HWD_Timer_DelayMs(1);
 
     return SERVO_OK;
 }
@@ -643,7 +646,7 @@ Servo_Status_t AEAT9922_ProgramEEPROM(AEAT9922_Driver_t* driver)
     }
 
     // Зачекати завершення (40 ms)
-    HAL_Delay(AEAT9922_EEPROM_WRITE_TIME_MS);
+    HWD_Timer_DelayMs(AEAT9922_EEPROM_WRITE_TIME_MS);
 
     // Перевірити статус пам'яті
     status = AEAT9922_ReadStatus(driver);
@@ -676,7 +679,7 @@ Servo_Status_t AEAT9922_CalibrateAccuracy(AEAT9922_Driver_t* driver)
     }
 
     // Зачекати завершення калібрування (~2 секунди)
-    HAL_Delay(AEAT9922_CALIB_TIME_MS);
+    HWD_Timer_DelayMs(AEAT9922_CALIB_TIME_MS);
 
     // Перевірити статус калібрування
     uint8_t calib_status;
@@ -717,7 +720,7 @@ Servo_Status_t AEAT9922_CalibrateZero(AEAT9922_Driver_t* driver)
     }
 
     // Зачекати завершення
-    HAL_Delay(100);
+    HWD_Timer_DelayMs(100);
 
     // Перевірити статус
     uint8_t calib_status;
@@ -752,13 +755,12 @@ Servo_Status_t AEAT9922_UpdateIncrementalCount(AEAT9922_Driver_t* driver)
         return SERVO_INVALID;
     }
 
-    TIM_HandleTypeDef* htim = (TIM_HandleTypeDef*)driver->config.abi.encoder_timer_handle;
-    if (htim == NULL) {
+    if (driver->config.abi.encoder_read == NULL) {
         return SERVO_INVALID;
     }
 
-    // Зчитати поточний лічильник з таймера
-    int32_t current_count = (int32_t)__HAL_TIM_GET_COUNTER(htim);
+    // Зчитати поточний лічильник через callback
+    int32_t current_count = driver->config.abi.encoder_read(driver->config.abi.encoder_ctx);
 
     // Обчислити різницю
     int32_t delta = current_count - driver->last_incremental_count;

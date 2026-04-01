@@ -7,6 +7,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "../../Inc/ctrl/err.h"
+#include "../../Inc/hwd/hwd_timer.h"
 #include <string.h>
 
 /* Private variables ---------------------------------------------------------*/
@@ -35,15 +36,6 @@ static const char* GetErrorDescription(Servo_Error_t error)
 }
 
 /* Private function prototypes -----------------------------------------------*/
-#ifdef PC_EMULATION
-    // Mock implementation for PC Emulation
-    #include <windows.h>
-    uint32_t HAL_GetTick(void) {
-        return (uint32_t)GetTickCount();
-    }
-#else
-    extern uint32_t HAL_GetTick(void);
-#endif
 
 /* Exported functions --------------------------------------------------------*/
 
@@ -79,7 +71,7 @@ Servo_Status_t Error_Log(Error_Manager_t* manager,
         if (manager->log[last_idx].code == error) {
             // Збільшуємо лічильник повторень
             manager->log[last_idx].count++;
-            manager->log[last_idx].timestamp = HAL_GetTick();
+            manager->log[last_idx].timestamp = HWD_Timer_GetMillis();
             return SERVO_OK;
         }
     }
@@ -89,7 +81,7 @@ Servo_Status_t Error_Log(Error_Manager_t* manager,
 
     record->code = error;
     record->severity = severity;
-    record->timestamp = HAL_GetTick();
+    record->timestamp = HWD_Timer_GetMillis();
     record->count = 1;
 
     // Копіювання повідомлення

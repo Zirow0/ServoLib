@@ -318,7 +318,7 @@ Servo_Status_t AS5600_BurnSettings(AS5600_Driver_t* driver)
     }
 
     // Зачекати ~10мс для запису в EEPROM
-    HAL_Delay(10);
+    HWD_Timer_DelayMs(10);
 
     return SERVO_OK;
 }

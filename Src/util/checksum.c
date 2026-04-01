@@ -72,6 +72,38 @@ uint8_t Checksum_CRC8(const uint8_t* data, uint8_t len, uint8_t polynomial)
 }
 
 /**
+ * @brief Обчислення CRC-6 для AEAT-9922 RX регістрових фреймів
+ *
+ * Алгоритм (AEAT-9922 SPI4-B, підтверджено логічним аналізатором):
+ *   Polynomial: 0x04, Initial: 0x04, MSB-first, без фінального XOR.
+ *
+ * Верифікація:
+ *   CRC6([0xC0], poly=0x04) = 0x34  → STATUS  BYTE1=0xB4, BYTE1[5:0]=0x34 ✓
+ *   CRC6([0x80], poly=0x04) = 0x24  → CONFIG1 BYTE1=0xA4, BYTE1[5:0]=0x24 ✓
+ */
+uint8_t Checksum_CRC6(const uint8_t* data, uint8_t len, uint8_t polynomial)
+{
+    if (data == NULL || len == 0) {
+        return 0x00;
+    }
+
+    uint8_t crc = CRC6_INIT_AEAT9922;  // 0x04
+
+    for (uint8_t i = 0; i < len; i++) {
+        for (int8_t bit = 7; bit >= 0; bit--) {
+            uint8_t data_bit = (data[i] >> bit) & 1;
+            uint8_t crc_msb  = (crc >> 5) & 1;       // MSB of 6-bit register
+            crc = (crc << 1) & 0x3F;                  // shift left, keep 6 bits
+            if (data_bit ^ crc_msb) {
+                crc ^= polynomial;
+            }
+        }
+    }
+
+    return crc;
+}
+
+/**
  * @brief Обчислення біта парності для 16-bit значення (Even Parity)
  *
  * Even Parity означає, що загальна кількість одиниць (включно з бітом парності)

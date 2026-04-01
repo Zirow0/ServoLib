@@ -32,7 +32,10 @@ extern "C" {
 
 /* Exported defines ----------------------------------------------------------*/
 
-#define CRC8_POLY_DEFAULT       0x07    /**< CRC-8 поліном за замовчуванням */
+#define CRC8_POLY_DEFAULT       0x07    /**< CRC-8/SMBUS поліном (x^8+x^2+x+1) */
+
+#define CRC6_POLY_AEAT9922      0x04    /**< CRC-6 поліном для AEAT-9922 RX регістрових фреймів */
+#define CRC6_INIT_AEAT9922      0x04    /**< Початкове значення CRC-6 для AEAT-9922 */
 
 /* Exported functions --------------------------------------------------------*/
 
@@ -54,6 +57,28 @@ extern "C" {
  * 3. Повернути CRC
  */
 uint8_t Checksum_CRC8(const uint8_t* data, uint8_t len, uint8_t polynomial);
+
+/**
+ * @brief Обчислення CRC-6 для AEAT-9922 RX фреймів
+ *
+ * @param data Вказівник на дані
+ * @param len Довжина даних в байтах
+ * @param polynomial Поліном CRC-6 (для AEAT-9922: CRC6_POLY_AEAT9922 = 0x04)
+ * @return uint8_t CRC-6 (значення в діапазоні 0x00..0x3F)
+ *
+ * Параметри (AEAT-9922 SPI4-B):
+ *   - Polynomial: 0x04 (x^6 + x^2)
+ *   - Initial value: 0x04 (CRC6_INIT_AEAT9922)
+ *   - MSB-first, no final XOR
+ *
+ * Використання для регістрових фреймів:
+ * @code
+ * // RX: [DATA(8) | W(1)|E(1)|CRC6(6) | 0x00(8)]
+ * uint8_t crc = Checksum_CRC6(&rx_data[0], 1, CRC6_POLY_AEAT9922);
+ * if (crc != (rx_data[1] & 0x3F)) { // помилка CRC }
+ * @endcode
+ */
+uint8_t Checksum_CRC6(const uint8_t* data, uint8_t len, uint8_t polynomial);
 
 /**
  * @brief Обчислення біта парності (Even Parity)
