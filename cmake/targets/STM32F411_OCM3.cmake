@@ -43,6 +43,7 @@ set(BOARD_SRCS
     ${BOARD_DIR}/hwd_i2c.c
     ${BOARD_DIR}/hwd_gpio.c
     ${BOARD_DIR}/hwd_timer.c
+    ${BOARD_DIR}/hwd_uart.c
 )
 
 set(LINKER_SCRIPT ${BOARD_DIR}/STM32F411CE.ld)

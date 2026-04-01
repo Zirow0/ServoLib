@@ -315,35 +315,33 @@ static Servo_Status_t AEAT9922_HW_ReadRaw(void* driver_data, Position_Raw_Data_t
 
     } else {
         /* ====================================================================
-         * SPI4-B РОЗПАКОВКА (24-bit з CRC-8)
+         * SPI4-B РОЗПАКОВКА (24-bit з парністю)
          * ====================================================================
-         * Формат відповіді:
-         * Байт 0 [23:16]: Reserved(4) | W | E | Data[17:16]
-         * Байт 1 [15:8]:  Data[15:8]
-         * Байт 2 [7:0]:   CRC-8
+         * Формат відповіді (підтверджено логічним аналізатором):
+         * Байт 0 [23:16]: P | W | E | Pos[17:13]
+         * Байт 1 [15:8]:  Pos[12:5]
+         * Байт 2 [7:0]:   Pos[4:0] | pad(3)
          *
-         * Біти:
-         * [23:22] - Reserved (завжди 0)
-         * [22]    - W (Warning): магніт не в оптимальній позиції
-         * [21]    - E (Error): критична помилка комунікації
-         * [20:5]  - Position data (16 біт для 18-bit роздільності)
-         * [7:0]   - CRC-8 контрольна сума
+         * P   = bit 23 — парність (even parity над Байт0[6:0]+Байт1+Байт2)
+         * W   = bit 22 — Warning (магніт поза оптимальним діапазоном)
+         * E   = bit 21 — Error (критична помилка)
+         * Pos = 18 біт позиції в бітах [20:3]
          */
 
-        // Перевірка CRC-8
-        uint8_t calculated_crc = Checksum_CRC8(rx_data, 2, CRC8_POLY_DEFAULT);
-        uint8_t received_crc = rx_data[2];
+        // Перевірка парності: P = even parity над BYTE0[6:0] + BYTE1 + BYTE2
+        uint8_t received_parity = (rx_data[0] >> 7) & 1;
+        uint16_t w0 = ((uint16_t)(rx_data[0] & 0x7F) << 8) | rx_data[1];
+        uint8_t calc_parity = Checksum_EvenParity16(w0) ^
+                              Checksum_EvenParity16((uint16_t)rx_data[2]);
 
-        if (calculated_crc != received_crc) {
-            // CRC помилка
+        if (calc_parity != received_parity) {
             driver->error_count++;
             raw->valid = false;
             return SERVO_ERROR;
         }
 
-        // Витягнути прапорці W та E
-        bool warning_flag = (rx_data[0] & (1 << 6)) != 0;  // W bit
-        error_flag = (rx_data[0] & (1 << 5)) != 0;         // E bit
+        bool warning_flag = (rx_data[0] & 0x40) != 0;  // W = bit 6
+        error_flag        = (rx_data[0] & 0x20) != 0;  // E = bit 5
 
         if (error_flag) {
             driver->error_count++;
@@ -351,16 +349,12 @@ static Servo_Status_t AEAT9922_HW_ReadRaw(void* driver_data, Position_Raw_Data_t
             return SERVO_ERROR;
         }
 
-        if (warning_flag) {
-            // Попередження: магніт не в оптимальній позиції
-            // Можна логувати, але продовжуємо роботу
-        }
+        (void)warning_flag;  // Продовжуємо навіть при попередженні
 
-        // Витягнути дані позиції (біти [20:5] = 16 біт)
-        // Для 18-bit роздільності: rx_data[0] містить [Data17:Data16], rx_data[1] містить [Data15:Data8]
-        uint32_t position_18bit = ((uint32_t)(rx_data[0] & 0x03) << 16) |  // Біти [17:16]
-                                  ((uint32_t)rx_data[1] << 8);               // Біти [15:8]
-        // Біти [7:0] відсутні в SPI4-B для позиції (CRC займає байт 2)
+        // Витягнути 18-bit позицію
+        uint32_t position_18bit = ((uint32_t)(rx_data[0] & 0x1F) << 13) |  // Pos[17:13]
+                                  ((uint32_t)rx_data[1] << 5)              |  // Pos[12:5]
+                                  ((rx_data[2] >> 3) & 0x1F);                // Pos[4:0]
 
         raw_position = position_18bit;
     }
@@ -521,13 +515,28 @@ Servo_Status_t AEAT9922_ReadRegister(AEAT9922_Driver_t* driver,
         return status;
     }
 
-    // Перевірка CRC для SPI4-B (тільки для 24-bit режиму)
+    /*
+     * SPI4-B фрейм відповіді для 8-bit регістрів (підтверджено логічним аналізатором):
+     *   rx_data[0] = значення регістру (DATA)
+     *   rx_data[1] = W(1) | E(1) | CRC6(6)
+     *   rx_data[2] = 0x00 (паддінг)
+     *
+     * CRC-6: polynomial=0x04, init=0x04, MSB-first, над rx_data[0] (1 байт).
+     * W=bit7 (Warning: магніт не в оптимальному діапазоні)
+     * E=bit6 (Error: критична помилка)
+     */
     if (driver->config.spi_config.protocol_variant == AEAT9922_PSEL_SPI4_24BIT) {
-        uint8_t calculated_crc = Checksum_CRC8(rx_data, 2, CRC8_POLY_DEFAULT);
-        uint8_t received_crc = rx_data[2];
+        uint8_t calculated_crc = Checksum_CRC6(&rx_data[0], 1, CRC6_POLY_AEAT9922);
+        uint8_t received_crc   = rx_data[1] & 0x3F;
 
         if (calculated_crc != received_crc) {
-            // CRC помилка
+            driver->error_count++;
+            return SERVO_ERROR;
+        }
+
+        bool error_bit = (rx_data[1] & 0x40) != 0;  // E = bit 6
+        if (error_bit) {
+            driver->error_count++;
             return SERVO_ERROR;
         }
     }
@@ -538,13 +547,12 @@ Servo_Status_t AEAT9922_ReadRegister(AEAT9922_Driver_t* driver,
         uint8_t parity_check = Checksum_EvenParity16(full_data);
 
         if (parity_check != 0) {
-            // Помилка парності
             return SERVO_ERROR;
         }
     }
 
-    // Витягнути дані (перший байт містить регістр)
-    *value = rx_data[1];
+    // Дані знаходяться в першому байті відповіді
+    *value = rx_data[0];
 
     return SERVO_OK;
 }

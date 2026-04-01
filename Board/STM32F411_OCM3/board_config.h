@@ -11,8 +11,8 @@
  *   TIM3 CH1 (PWM FWD) → PA6  (AF2)
  *   TIM3 CH2 (PWM BWD) → PA7  (AF2)
  *   SPI1 SCK            → PA5  (AF5)
- *   SPI1 MISO           → PA6  (AF5)   ← спільний з TIM3 CH1!
- *   SPI1 MOSI           → PA7  (AF5)   ← спільний з TIM3 CH2!
+ *   SPI1 MISO           → PB4  (AF5)
+ *   SPI1 MOSI           → PB5  (AF5)
  *   SPI1 CS (AEAT-9922) → PA4  (GPIO OUT)
  *   AEAT MSEL           → PB0  (GPIO OUT)
  *   Brake               → PA8  (GPIO OUT)
@@ -52,6 +52,8 @@ extern "C" {
 /* I2C та AS5600 вимкнено */
 // #define USE_HWD_I2C
 // #define USE_SENSOR_AS5600
+
+#define USE_HWD_UART
 
 /* System Configuration ------------------------------------------------------*/
 
@@ -99,12 +101,17 @@ extern "C" {
 /** @brief RCC для SPI1 */
 #define ENCODER_SPI_RCC         RCC_SPI1
 
-/** @brief GPIO для SPI1 */
-#define ENCODER_SPI_GPIO_PORT   GPIOA
-#define ENCODER_SPI_GPIO_RCC    RCC_GPIOA
+/** @brief GPIO для SPI1 SCK — PA5 */
+#define ENCODER_SPI_SCK_PORT    GPIOA
+#define ENCODER_SPI_SCK_RCC     RCC_GPIOA
 #define ENCODER_SPI_SCK         GPIO5   /**< PA5 → SPI1 SCK */
-#define ENCODER_SPI_MISO        GPIO6   /**< PA6 → SPI1 MISO */
-#define ENCODER_SPI_MOSI        GPIO7   /**< PA7 → SPI1 MOSI */
+
+/** @brief GPIO для SPI1 MISO/MOSI — PB4/PB5 */
+#define ENCODER_SPI_DATA_PORT   GPIOB
+#define ENCODER_SPI_DATA_RCC    RCC_GPIOB
+#define ENCODER_SPI_MISO        GPIO4   /**< PB4 → SPI1 MISO */
+#define ENCODER_SPI_MOSI        GPIO5   /**< PB5 → SPI1 MOSI */
+
 #define ENCODER_SPI_GPIO_AF     GPIO_AF5
 
 /** @brief CS пін AEAT-9922 */
@@ -139,6 +146,36 @@ extern "C" {
 #define LED_GPIO_PORT           GPIOC
 #define LED_GPIO_RCC            RCC_GPIOC
 #define LED_PIN                 GPIO13
+
+/* UART Configuration (USART1) -----------------------------------------------*/
+
+#ifdef USE_HWD_UART
+
+#include <libopencm3/stm32/usart.h>
+
+/** @brief Базова адреса USART для відлагодження */
+#define UART_DEBUG              USART1
+
+/** @brief RCC для USART1 */
+#define UART_DEBUG_RCC          RCC_USART1
+
+/** @brief GPIO порт для PA9/PA10 */
+#define UART_DEBUG_GPIO_PORT    GPIOA
+#define UART_DEBUG_GPIO_RCC     RCC_GPIOA
+
+/** @brief PA9 → USART1 TX */
+#define UART_DEBUG_TX_PIN       GPIO9
+
+/** @brief PA10 → USART1 RX */
+#define UART_DEBUG_RX_PIN       GPIO10
+
+/** @brief Alternate function для USART1 */
+#define UART_DEBUG_GPIO_AF      GPIO_AF7
+
+/** @brief Швидкість UART (бод) */
+#define UART_DEBUG_BAUDRATE     115200U
+
+#endif /* USE_HWD_UART */
 
 /* I2C Configuration (вимкнено) ----------------------------------------------*/
 #ifdef USE_HWD_I2C

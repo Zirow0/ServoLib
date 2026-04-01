@@ -61,4 +61,5 @@ SECTIONS
     } >ram
 }
 
+PROVIDE(end = _ebss);           /* Початок купи для _sbrk (newlib) */
 PROVIDE(_stack = ORIGIN(ram) + LENGTH(ram));

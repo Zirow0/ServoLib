@@ -32,6 +32,7 @@
 #include <libopencm3/stm32/spi.h>
 #include <libopencm3/cm3/systick.h>
 #include <libopencm3/stm32/common/flash_common_idcache.h>  /* FLASH_ACR_DCEN, FLASH_ACR_ICEN */
+#include <libopencm3/stm32/usart.h>
 
 /* Private functions ---------------------------------------------------------*/
 
@@ -123,14 +124,20 @@ static void pwm_gpio_setup(void)
 static void spi_setup(void)
 {
     rcc_periph_clock_enable(ENCODER_SPI_RCC);
+    rcc_periph_clock_enable(ENCODER_SPI_DATA_RCC);
 
-    /* SPI1 GPIO: PA5 SCK, PA6 MISO, PA7 MOSI — AF5 */
-    gpio_mode_setup(ENCODER_SPI_GPIO_PORT, GPIO_MODE_AF, GPIO_PUPD_NONE,
-                    ENCODER_SPI_SCK | ENCODER_SPI_MISO | ENCODER_SPI_MOSI);
-    gpio_set_output_options(ENCODER_SPI_GPIO_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_25MHZ,
-                            ENCODER_SPI_SCK | ENCODER_SPI_MISO | ENCODER_SPI_MOSI);
-    gpio_set_af(ENCODER_SPI_GPIO_PORT, ENCODER_SPI_GPIO_AF,
-                ENCODER_SPI_SCK | ENCODER_SPI_MISO | ENCODER_SPI_MOSI);
+    /* PA5 → SCK */
+    gpio_mode_setup(ENCODER_SPI_SCK_PORT, GPIO_MODE_AF, GPIO_PUPD_NONE, ENCODER_SPI_SCK);
+    gpio_set_output_options(ENCODER_SPI_SCK_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_25MHZ, ENCODER_SPI_SCK);
+    gpio_set_af(ENCODER_SPI_SCK_PORT, ENCODER_SPI_GPIO_AF, ENCODER_SPI_SCK);
+
+    /* PB4 → MISO, PB5 → MOSI */
+    gpio_mode_setup(ENCODER_SPI_DATA_PORT, GPIO_MODE_AF, GPIO_PUPD_NONE,
+                    ENCODER_SPI_MISO | ENCODER_SPI_MOSI);
+    gpio_set_output_options(ENCODER_SPI_DATA_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_25MHZ,
+                            ENCODER_SPI_MISO | ENCODER_SPI_MOSI);
+    gpio_set_af(ENCODER_SPI_DATA_PORT, ENCODER_SPI_GPIO_AF,
+                ENCODER_SPI_MISO | ENCODER_SPI_MOSI);
 
     /* CS — PA4, вихід, початково HIGH (неактивний) */
     gpio_mode_setup(ENCODER_CS_GPIO_PORT, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, ENCODER_CS_PIN);
@@ -160,6 +167,35 @@ static void spi_setup(void)
     spi_enable(ENCODER_SPI);
 }
 #endif /* USE_HWD_SPI */
+
+/**
+ * @brief Ініціалізація USART1 для відлагодження (якщо USE_HWD_UART).
+ *
+ * PA9 (TX) / PA10 (RX) — AF7, 115200 8N1.
+ * Тактування від APB2 (100 MHz).
+ */
+#ifdef USE_HWD_UART
+static void uart_setup(void)
+{
+    rcc_periph_clock_enable(UART_DEBUG_RCC);
+
+    /* PA9 TX, PA10 RX — AF7, push-pull */
+    gpio_mode_setup(UART_DEBUG_GPIO_PORT, GPIO_MODE_AF, GPIO_PUPD_NONE,
+                    UART_DEBUG_TX_PIN | UART_DEBUG_RX_PIN);
+    gpio_set_output_options(UART_DEBUG_GPIO_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_25MHZ,
+                            UART_DEBUG_TX_PIN | UART_DEBUG_RX_PIN);
+    gpio_set_af(UART_DEBUG_GPIO_PORT, UART_DEBUG_GPIO_AF,
+                UART_DEBUG_TX_PIN | UART_DEBUG_RX_PIN);
+
+    usart_set_baudrate(UART_DEBUG, UART_DEBUG_BAUDRATE);
+    usart_set_databits(UART_DEBUG, 8);
+    usart_set_stopbits(UART_DEBUG, USART_STOPBITS_1);
+    usart_set_parity(UART_DEBUG, USART_PARITY_NONE);
+    usart_set_flow_control(UART_DEBUG, USART_FLOWCONTROL_NONE);
+    usart_set_mode(UART_DEBUG, USART_MODE_TX_RX);
+    usart_enable(UART_DEBUG);
+}
+#endif /* USE_HWD_UART */
 
 /**
  * @brief Ініціалізація I2C1 для AS5600 (якщо USE_HWD_I2C).
@@ -246,6 +282,10 @@ Servo_Status_t Board_Init(void)
 
     micros_timer_setup();
     systick_setup();
+
+#ifdef USE_HWD_UART
+    uart_setup();
+#endif
 
     return SERVO_OK;
 }

@@ -3,6 +3,9 @@
 #include "drv/position/aeat9922.h"
 #include "hwd/hwd_timer.h"
 #include "hwd/hwd_gpio.h"
+#include "hwd/hwd_uart.h"
+
+#include <stdio.h>  /* snprintf */
 
 static AEAT9922_Driver_t encoder;
 
@@ -16,6 +19,8 @@ static const HWD_GPIO_Pin_t led_pin = {
 int main(void)
 {
     Board_Init();
+
+    HWD_UART_WriteString("ServoLib encoder debug\r\n");
 
     AEAT9922_Config_t enc_cfg = {
         .enabled_modes = AEAT9922_MODE_SPI4,
@@ -46,6 +51,8 @@ int main(void)
     };
     Position_Sensor_Init(&encoder.interface, &params);
 
+    char buf[48];
+
     while (1) {
         Position_Sensor_Update(&encoder.interface);
 
@@ -53,7 +60,18 @@ int main(void)
         Position_Sensor_GetPosition(&encoder.interface, &pos);
         Position_Sensor_GetVelocity(&encoder.interface, &vel);
 
-        /* TODO: вивести pos/vel через UART або зберегти у кільцевий буфер */
+        /* Вивід: "pos:123.45 vel:-67.89\r\n" */
+        int pos_int = (int)pos;
+        int pos_frac = (int)((pos - (float)pos_int) * 100.0f);
+        int vel_int = (int)vel;
+        int vel_frac = (int)((vel - (float)vel_int) * 100.0f);
+        if (vel_frac < 0) { vel_frac = -vel_frac; }
+        if (pos_frac < 0) { pos_frac = -pos_frac; }
+
+        snprintf(buf, sizeof(buf), "pos:%d.%02d vel:%d.%02d\r\n",
+                 pos_int, pos_frac, vel_int, vel_frac);
+        HWD_UART_WriteString(buf);
+
         HWD_GPIO_TogglePin(&led_pin);
         HWD_Timer_DelayMs(100);
     }
