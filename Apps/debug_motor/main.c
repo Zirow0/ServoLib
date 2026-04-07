@@ -32,7 +32,6 @@ static const char* motor_dir_str(Motor_Direction_t dir)
 }
 
 static HWD_PWM_Handle_t   pwm_fwd;
-static HWD_PWM_Handle_t   pwm_bwd;
 
 static const HWD_GPIO_Pin_t led_pin = {
     .port = (void*)LED_GPIO_PORT,
@@ -55,21 +54,13 @@ int main(void)
     };
     HWD_PWM_Init(&pwm_fwd, &fwd_cfg);
 
-    HWD_PWM_Config_t bwd_cfg = {
-        .frequency  = MOTOR_PWM_FREQ,
-        .resolution = MOTOR_PWM_PERIOD,
-        .channel    = HWD_PWM_CHANNEL_2,
-        .hw_handle  = (void*)MOTOR_PWM_TIMER,
-        .hw_channel = MOTOR_PWM_OC_BWD,
-    };
-    HWD_PWM_Init(&pwm_bwd, &bwd_cfg);
-
     /* ── Двигун ─────────────────────────────────────────────────────────── */
     PWM_Motor_Config_t mot_cfg = {
-        .type    = PWM_MOTOR_TYPE_DUAL_PWM,
-        .pwm_fwd = &pwm_fwd,
-        .pwm_bwd = &pwm_bwd,
-        .gpio_dir = NULL,
+        .type     = PWM_MOTOR_TYPE_SINGLE_PWM_DIR,
+        .pwm_fwd  = &pwm_fwd,
+        .pwm_bwd  = NULL,
+        .gpio_dir = (void*)MOTOR_DIR_GPIO_PORT,
+        .gpio_pin = MOTOR_DIR_PIN,
     };
     PWM_Motor_Create(&motor, &mot_cfg);
 
