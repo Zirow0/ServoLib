@@ -75,11 +75,8 @@ extern "C" {
 /** @brief PWM канал 1 (прямий хід) — PA6, AF2 */
 #define MOTOR_PWM_OC_FWD        TIM_OC1
 
-/** @brief PWM канал 2 (зворотний хід) — PA7, AF2 */
-#define MOTOR_PWM_OC_BWD        TIM_OC2
-
 /** @brief Частота PWM (Hz) */
-#define MOTOR_PWM_FREQ          1000U
+#define MOTOR_PWM_FREQ          20000U
 
 /** @brief Кількість кроків роздільної здатності (0..999) */
 #define MOTOR_PWM_PERIOD        999U
@@ -87,9 +84,13 @@ extern "C" {
 /* GPIO для TIM3 PWM */
 #define MOTOR_PWM_GPIO_PORT     GPIOA
 #define MOTOR_PWM_GPIO_RCC      RCC_GPIOA
-#define MOTOR_PWM_GPIO_CH1      GPIO6   /**< PA6 → TIM3 CH1 */
-#define MOTOR_PWM_GPIO_CH2      GPIO7   /**< PA7 → TIM3 CH2 */
+#define MOTOR_PWM_GPIO_CH1      GPIO6   /**< PA6 → TIM3 CH1 (PWM) */
 #define MOTOR_PWM_GPIO_AF       GPIO_AF2
+
+/** @brief GPIO для напрямку (DIR) — PA7, вихід */
+#define MOTOR_DIR_GPIO_PORT     GPIOA
+#define MOTOR_DIR_GPIO_RCC      RCC_GPIOA
+#define MOTOR_DIR_PIN           GPIO7
 
 /* Incremental Encoder (TIM2, quadrature x4) ---------------------------------*/
 

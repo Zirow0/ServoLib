@@ -93,6 +93,13 @@ static void gpio_misc_setup(void)
     gpio_mode_setup(BRAKE_CTRL_GPIO_PORT, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, BRAKE_CTRL_PIN);
     gpio_set_output_options(BRAKE_CTRL_GPIO_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_2MHZ, BRAKE_CTRL_PIN);
     gpio_clear(BRAKE_CTRL_GPIO_PORT, BRAKE_CTRL_PIN);
+
+#if defined(USE_MOTOR_PWM) && !defined(USE_HWD_SPI)
+    /* Motor DIR — PA7, вихід push-pull, за замовчуванням LOW */
+    gpio_mode_setup(MOTOR_DIR_GPIO_PORT, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, MOTOR_DIR_PIN);
+    gpio_set_output_options(MOTOR_DIR_GPIO_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_25MHZ, MOTOR_DIR_PIN);
+    gpio_clear(MOTOR_DIR_GPIO_PORT, MOTOR_DIR_PIN);
+#endif
 }
 
 /**
@@ -105,11 +112,11 @@ static void gpio_misc_setup(void)
 static void pwm_gpio_setup(void)
 {
     gpio_mode_setup(MOTOR_PWM_GPIO_PORT, GPIO_MODE_AF, GPIO_PUPD_NONE,
-                    MOTOR_PWM_GPIO_CH1 | MOTOR_PWM_GPIO_CH2);
-    gpio_set_output_options(MOTOR_PWM_GPIO_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_2MHZ,
-                            MOTOR_PWM_GPIO_CH1 | MOTOR_PWM_GPIO_CH2);
+                    MOTOR_PWM_GPIO_CH1);
+    gpio_set_output_options(MOTOR_PWM_GPIO_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_25MHZ,
+                            MOTOR_PWM_GPIO_CH1);
     gpio_set_af(MOTOR_PWM_GPIO_PORT, MOTOR_PWM_GPIO_AF,
-                MOTOR_PWM_GPIO_CH1 | MOTOR_PWM_GPIO_CH2);
+                MOTOR_PWM_GPIO_CH1);
 }
 #endif /* USE_MOTOR_PWM && !USE_HWD_SPI */
 
