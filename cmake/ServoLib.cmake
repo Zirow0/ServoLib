@@ -24,8 +24,7 @@ set(SERVOLIB_MOTOR
 # Підсистема датчика положення
 set(SERVOLIB_POSITION
     ${SL}/drv/position/position.c
-    ${SL}/drv/position/aeat9922.c
-    ${SL}/drv/position/as5600.c
+    ${SL}/drv/position/incremental_encoder.c
 )
 
 # Підсистема гальма

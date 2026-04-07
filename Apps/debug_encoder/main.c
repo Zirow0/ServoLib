@@ -1,13 +1,13 @@
 #include "board_config.h"
 #include "drv/position/position.h"
-#include "drv/position/aeat9922.h"
+#include "drv/position/incremental_encoder.h"
 #include "hwd/hwd_timer.h"
 #include "hwd/hwd_gpio.h"
 #include "hwd/hwd_uart.h"
 
 #include <stdio.h>  /* snprintf */
 
-static AEAT9922_Driver_t encoder;
+static Incremental_Encoder_Driver_t encoder;
 
 static const HWD_GPIO_Pin_t led_pin = {
     .port = (void*)LED_GPIO_PORT,
@@ -22,29 +22,26 @@ int main(void)
 
     HWD_UART_WriteString("ServoLib encoder debug\r\n");
 
-    AEAT9922_Config_t enc_cfg = {
-        .enabled_modes = AEAT9922_MODE_SPI4,
-        .general = {
-            .abs_resolution     = AEAT9922_ABS_RES_18BIT,
-            .direction_ccw      = false,
-            .auto_zero_on_init  = false,
-        },
-        .spi_config = {
-            .spi_config = {
-                .spi_handle = (void*)ENCODER_SPI,
-                .cs_port    = (void*)ENCODER_CS_GPIO_PORT,
-                .cs_pin     = ENCODER_CS_PIN,
-                .timeout_ms = 10,
-            },
-            .msel_port        = (void*)ENCODER_MSEL_GPIO_PORT,
-            .msel_pin         = ENCODER_MSEL_PIN,
-            .protocol_variant = AEAT9922_PSEL_SPI4_24BIT,
+    Incremental_Encoder_Config_t enc_cfg = {
+        .cpr = ENCODER_CPR,
+        .hw  = {
+            .timer_base  = ENCODER_TIMER_BASE,
+            .rcc_timer   = ENCODER_TIMER_RCC,
+            .gpio_port_a = ENCODER_GPIO_PORT_A,
+            .gpio_pin_a  = ENCODER_GPIO_PIN_A,
+            .rcc_gpio_a  = ENCODER_GPIO_RCC_A,
+            .gpio_port_b = ENCODER_GPIO_PORT_B,
+            .gpio_pin_b  = ENCODER_GPIO_PIN_B,
+            .rcc_gpio_b  = ENCODER_GPIO_RCC_B,
+            .gpio_af     = ENCODER_GPIO_AF,
+            .invert_a    = false,
+            .invert_b    = false,
         },
     };
-    AEAT9922_Create(&encoder, &enc_cfg);
+    Incremental_Encoder_Create(&encoder, &enc_cfg);
 
     Position_Params_t params = {
-        .type        = SENSOR_TYPE_ENCODER_MAG,
+        .type        = SENSOR_TYPE_ENCODER_OPT,
         .min_angle   = 0.0f,
         .max_angle   = 360.0f,
         .update_rate = 1000,

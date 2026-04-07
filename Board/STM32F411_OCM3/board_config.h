@@ -8,17 +8,14 @@
  * з використанням libopencm3 замість STM32 HAL.
  *
  * Підключення:
- *   TIM3 CH1 (PWM FWD) → PA6  (AF2)
- *   TIM3 CH2 (PWM BWD) → PA7  (AF2)
- *   SPI1 SCK            → PA5  (AF5)
- *   SPI1 MISO           → PB4  (AF5)
- *   SPI1 MOSI           → PB5  (AF5)
- *   SPI1 CS (AEAT-9922) → PA4  (GPIO OUT)
- *   AEAT MSEL           → PB0  (GPIO OUT)
- *   Brake               → PA8  (GPIO OUT)
- *   I2C1 SCL            → PB6  (AF4)
- *   I2C1 SDA            → PB7  (AF4)
- *   TIM5 (мікросекунди) → внутрішній (без пінів)
+ *   TIM3 CH1 (PWM)            → PA6  (AF2)
+ *   PA7      (DIR)             → PA7  (GPIO OUT)
+ *   TIM2 CH1 (Encoder A)      → PA0  (AF1)
+ *   TIM2 CH2 (Encoder B)      → PA1  (AF1)
+ *   Brake                     → PA8  (GPIO OUT)
+ *   I2C1 SCL                  → PB6  (AF4)
+ *   I2C1 SDA                  → PB7  (AF4)
+ *   TIM5 (мікросекунди)       → внутрішній (без пінів)
  */
 
 #ifndef SERVOCORE_BOARD_CONFIG_H
@@ -45,11 +42,12 @@ extern "C" {
 #define USE_MOTOR_PWM       1
 #define USE_BRAKE           1
 
-#define USE_HWD_SPI
 #define USE_SENSOR_POSITION
-#define USE_SENSOR_AEAT9922
+#define USE_SENSOR_INCREMENTAL
 
-/* I2C та AS5600 вимкнено */
+/* SPI/I2C та відповідні датчики вимкнено */
+// #define USE_HWD_SPI
+// #define USE_SENSOR_AEAT9922
 // #define USE_HWD_I2C
 // #define USE_SENSOR_AS5600
 
@@ -93,36 +91,29 @@ extern "C" {
 #define MOTOR_PWM_GPIO_CH2      GPIO7   /**< PA7 → TIM3 CH2 */
 #define MOTOR_PWM_GPIO_AF       GPIO_AF2
 
-/* SPI Configuration (SPI1 для AEAT-9922) ------------------------------------*/
+/* Incremental Encoder (TIM2, quadrature x4) ---------------------------------*/
 
-/** @brief Базова адреса SPI */
-#define ENCODER_SPI             SPI1
+/** @brief Базова адреса таймера-енкодера (32-bit) */
+#define ENCODER_TIMER_BASE      TIM2
 
-/** @brief RCC для SPI1 */
-#define ENCODER_SPI_RCC         RCC_SPI1
+/** @brief RCC для TIM2 */
+#define ENCODER_TIMER_RCC       RCC_TIM2
 
-/** @brief GPIO для SPI1 SCK — PA5 */
-#define ENCODER_SPI_SCK_PORT    GPIOA
-#define ENCODER_SPI_SCK_RCC     RCC_GPIOA
-#define ENCODER_SPI_SCK         GPIO5   /**< PA5 → SPI1 SCK */
+/** @brief GPIO канал A — PA0, AF1 (TIM2 CH1) */
+#define ENCODER_GPIO_PORT_A     GPIOA
+#define ENCODER_GPIO_PIN_A      GPIO0
+#define ENCODER_GPIO_RCC_A      RCC_GPIOA
 
-/** @brief GPIO для SPI1 MISO/MOSI — PB4/PB5 */
-#define ENCODER_SPI_DATA_PORT   GPIOB
-#define ENCODER_SPI_DATA_RCC    RCC_GPIOB
-#define ENCODER_SPI_MISO        GPIO4   /**< PB4 → SPI1 MISO */
-#define ENCODER_SPI_MOSI        GPIO5   /**< PB5 → SPI1 MOSI */
+/** @brief GPIO канал B — PA1, AF1 (TIM2 CH2) */
+#define ENCODER_GPIO_PORT_B     GPIOA
+#define ENCODER_GPIO_PIN_B      GPIO1
+#define ENCODER_GPIO_RCC_B      RCC_GPIOA
 
-#define ENCODER_SPI_GPIO_AF     GPIO_AF5
+/** @brief Alternate Function для TIM2 */
+#define ENCODER_GPIO_AF         GPIO_AF1
 
-/** @brief CS пін AEAT-9922 */
-#define ENCODER_CS_GPIO_PORT    GPIOA
-#define ENCODER_CS_GPIO_RCC     RCC_GPIOA
-#define ENCODER_CS_PIN          GPIO4   /**< PA4 → SPI1 CS (ручне керування) */
-
-/** @brief MSEL пін AEAT-9922 */
-#define ENCODER_MSEL_GPIO_PORT  GPIOB
-#define ENCODER_MSEL_GPIO_RCC   RCC_GPIOB
-#define ENCODER_MSEL_PIN        GPIO0   /**< PB0 → MSEL */
+/** @brief Кількість відліків за оберт після x4 квадратури */
+#define ENCODER_CPR             4000U
 
 /* Microsecond Timer (TIM5) --------------------------------------------------*/
 
