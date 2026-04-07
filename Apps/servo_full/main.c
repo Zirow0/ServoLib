@@ -97,7 +97,41 @@ int main(void)
     /* ── Сервоконтролер ──────────────────────────────────────────────────── */
     Servo_Config_t srv_cfg = {
         .update_frequency = 1000.0f,
-        /* TODO: заповнити PID, safety, trajectory параметри */
+        .enable_brake     = true,
+
+        .pid_params = {
+            .Kp           = 1.0f,
+            .Ki           = 0.1f,
+            .Kd           = 0.05f,
+            .out_min      = -100.0f,
+            .out_max      =  100.0f,
+            .enabled_terms = PID_ENABLE_P | PID_ENABLE_I | PID_ENABLE_D,
+        },
+
+        .safety_config = {
+            .min_position          = 0.0f,
+            .max_position          = 360.0f,
+            .enable_position_limits = true,
+
+            .max_velocity          = 360.0f,   /* grad/s */
+            .enable_velocity_limit  = true,
+
+            .max_acceleration      = 720.0f,
+            .enable_acceleration_limit = false,
+
+            .enable_current_protection  = false,
+            .enable_thermal_protection  = false,
+
+            .watchdog_timeout_ms   = 500,
+            .enable_watchdog       = true,
+        },
+
+        .traj_params = {
+            .type             = TRAJ_TYPE_LINEAR,
+            .max_velocity     = 180.0f,    /* grad/s */
+            .max_acceleration = 360.0f,    /* grad/s^2 */
+            .max_jerk         = 0.0f,
+        },
     };
     Servo_InitFull(&servo, &srv_cfg,
                    &motor.interface,
