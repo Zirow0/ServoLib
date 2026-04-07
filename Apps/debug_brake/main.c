@@ -56,7 +56,6 @@ int main(void)
             HWD_UART_WriteString(buf);
             HWD_Timer_DelayMs(10);
         }
-        HWD_UART_WriteString("   state: RELEASED\r\n");
         HWD_Timer_DelayMs(2000);
 
         HWD_UART_WriteString("-> ENGAGE\r\n");
@@ -68,7 +67,6 @@ int main(void)
             HWD_UART_WriteString(buf);
             HWD_Timer_DelayMs(10);
         }
-        HWD_UART_WriteString("   state: ENGAGED\r\n");
         HWD_Timer_DelayMs(2000);
 
         snprintf(buf, sizeof(buf), "cycle: %lu\r\n", (unsigned long)++cycle);
