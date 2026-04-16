@@ -53,10 +53,10 @@ int main(void)
     while (1) {
         Position_Sensor_Update(&encoder.interface);
 
-        float pos = 0.0f, vel = 0.0f;
+        float pos = 0.0f, vel = 0.0f, pos_absolut = 0.0f;
         Position_Sensor_GetPosition(&encoder.interface, &pos);
         Position_Sensor_GetVelocity(&encoder.interface, &vel);
-
+        Position_Sensor_GetAbsolutePosition(&encoder.interface, &pos_absolut);
         /* Вивід: "pos:123.45 vel:-67.89\r\n" */
         int pos_int = (int)pos;
         int pos_frac = (int)((pos - (float)pos_int) * 100.0f);
@@ -65,8 +65,8 @@ int main(void)
         if (vel_frac < 0) { vel_frac = -vel_frac; }
         if (pos_frac < 0) { pos_frac = -pos_frac; }
 
-        snprintf(buf, sizeof(buf), "pos:%d.%02d vel:%d.%02d\r\n",
-                 pos_int, pos_frac, vel_int, vel_frac);
+        snprintf(buf, sizeof(buf), "pos:%d.%02d vel:%d.%02d a_pos:%d\r\n",
+                 pos_int, pos_frac, vel_int, vel_frac, (int)pos_absolut);
         HWD_UART_WriteString(buf);
 
         HWD_GPIO_TogglePin(&led_pin);
