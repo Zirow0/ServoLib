@@ -13,13 +13,17 @@
 /* Private functions ---------------------------------------------------------*/
 
 /**
- * @brief Оновлення стану з датчиків (поки заглушка)
+ * @brief Оновлення стану з датчика положення
  */
 static Servo_Status_t UpdateSensorData(Servo_Controller_t* servo)
 {
-    // TODO: Читання з реального датчика AS5600
-    // Поки просто використовуємо цільове положення для тестування
-    // servo->state.position = read_from_sensor();
+    if (servo->sensor == NULL) {
+        return SERVO_OK;
+    }
+
+    Position_Sensor_Update(servo->sensor);
+    Position_Sensor_GetPosition(servo->sensor, &servo->state.position);
+    Position_Sensor_GetVelocity(servo->sensor, &servo->state.velocity);
 
     return SERVO_OK;
 }

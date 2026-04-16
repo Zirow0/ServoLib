@@ -130,6 +130,10 @@ Servo_Status_t HWD_Timer_EncoderInit(HWD_Encoder_Handle_t* handle,
 
     /* Скидання лічильника та запуск */
     timer_set_counter(config->timer_base, 0);
+    
+    timer_ic_set_filter(TIM3, TIM_IC1, TIM_IC_OFF);
+    timer_ic_set_filter(TIM3, TIM_IC2, TIM_IC_OFF);
+
     timer_enable_counter(config->timer_base);
 
     handle->timer_base = config->timer_base;
