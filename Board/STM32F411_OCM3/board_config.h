@@ -51,6 +51,11 @@ extern "C" {
 // #define USE_HWD_I2C
 // #define USE_SENSOR_AS5600
 
+/* АЦП та датчик струму вимкнено (розкоментувати для ACS712) */
+// #define USE_HWD_ADC
+// #define USE_SENSOR_CURRENT
+// #define USE_SENSOR_ACS712
+
 #define USE_HWD_UART
 
 /* System Configuration ------------------------------------------------------*/
@@ -168,6 +173,30 @@ extern "C" {
 #define UART_DEBUG_BAUDRATE     115200U
 
 #endif /* USE_HWD_UART */
+
+/* ADC Configuration (ACS712 current sensor) ---------------------------------*/
+#ifdef USE_HWD_ADC
+
+#include <libopencm3/stm32/adc.h>
+
+/** @brief АЦП для датчика струму */
+#define CURRENT_ADC_PERIPH          ADC1
+
+/** @brief RCC для ADC1 */
+#define CURRENT_ADC_RCC             RCC_ADC1
+
+/** @brief GPIO порт для аналогового входу — PA4 (ADC1_IN4) */
+#define CURRENT_ADC_GPIO_PORT       GPIOA
+#define CURRENT_ADC_GPIO_RCC        RCC_GPIOA
+#define CURRENT_ADC_GPIO_PIN        GPIO4
+
+/** @brief Номер каналу АЦП */
+#define CURRENT_ADC_CHANNEL         4U
+
+/** @brief Опорна напруга АЦП (В) */
+#define CURRENT_ADC_VREF_V          3.3f
+
+#endif /* USE_HWD_ADC */
 
 /* I2C Configuration (вимкнено) ----------------------------------------------*/
 #ifdef USE_HWD_I2C
