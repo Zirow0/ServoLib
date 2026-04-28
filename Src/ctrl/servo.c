@@ -136,7 +136,7 @@ Servo_Status_t Servo_Update(Servo_Controller_t* servo)
         pid_output = Safety_ClampVelocity(&servo->safety, pid_output);
 
         // Керування мотором
-        Motor_SetPower_DC(servo->motor, pid_output);
+        Motor_SetPower(servo->motor, pid_output);
 
         servo->state.state = SERVO_STATE_RUNNING;
     }
@@ -146,7 +146,7 @@ Servo_Status_t Servo_Update(Servo_Controller_t* servo)
         velocity = Safety_ClampVelocity(&servo->safety, velocity);
 
         // Пряме керування швидкістю
-        Motor_SetPower_DC(servo->motor, velocity);
+        Motor_SetPower(servo->motor, velocity);
 
         servo->state.state = SERVO_STATE_RUNNING;
     }
@@ -155,9 +155,6 @@ Servo_Status_t Servo_Update(Servo_Controller_t* servo)
         Motor_Stop(servo->motor);
         servo->state.state = SERVO_STATE_READY;
     }
-
-    // Оновлення мотора
-    Motor_Update(servo->motor);
 
     // Watchdog
     Safety_WatchdogKick(&servo->safety);
@@ -284,12 +281,6 @@ Servo_Status_t Servo_CalibrateZero(Servo_Controller_t* servo)
         return SERVO_INVALID;
     }
 
-    // Калібрування через драйвер датчика положення
-    if (servo->sensor != NULL) {
-        return Position_Sensor_Calibrate(servo->sensor);
-    }
-
-    // Якщо датчик не підключено, повертаємо помилку
     return SERVO_ERROR;
 }
 
