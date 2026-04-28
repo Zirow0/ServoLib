@@ -52,9 +52,8 @@ Servo_Status_t HWD_ADC_Init(HWD_ADC_Handle_t* handle, const HWD_ADC_Config_t* co
     if (config->vref_v <= 0.0f)          return SERVO_INVALID;
     if (s_channel_count >= HWD_ADC_MAX_CHANNELS) return SERVO_INVALID;
 
-    handle->config         = *config;
-    handle->raw            = &s_dma_buf[s_channel_count];
-    handle->is_initialized = true;
+    handle->config = *config;
+    handle->raw    = &s_dma_buf[s_channel_count];
 
     /* GPIO у режимі аналогового входу */
     rcc_periph_clock_enable((enum rcc_periph_clken)config->rcc_gpio);

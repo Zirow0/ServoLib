@@ -45,9 +45,8 @@ typedef struct {
  * @brief Дескриптор каналу АЦП
  */
 typedef struct {
-    HWD_ADC_Config_t  config;  /**< Конфігурація */
-    volatile uint16_t* raw;    /**< Вказівник на слот у DMA буфері (після Init) */
-    bool     is_initialized;   /**< Прапорець ініціалізації */
+    HWD_ADC_Config_t   config;  /**< Конфігурація */
+    volatile uint16_t* raw;     /**< Вказівник на слот у DMA буфері (після Init) */
 } HWD_ADC_Handle_t;
 
 /* Exported functions --------------------------------------------------------*/
