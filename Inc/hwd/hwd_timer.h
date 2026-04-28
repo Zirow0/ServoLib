@@ -59,30 +59,6 @@ void HWD_Timer_DelayMs(uint32_t ms);
  */
 void HWD_Timer_DelayUs(uint32_t us);
 
-/**
- * @brief Перевірка чи минув інтервал часу
- *
- * Допоміжна функція для неблокуючих затримок.
- * Правильно обробляє переповнення лічильника.
- *
- * @param start Початковий час (GetMillis)
- * @param interval Інтервал в мілісекундах
- * @return bool true якщо інтервал минув
- */
-bool HWD_Timer_IsElapsed(uint32_t start, uint32_t interval);
-
-/**
- * @brief Обчислення різниці часу
- *
- * Обчислює різницю між двома моментами часу.
- * Правильно обробляє переповнення лічильника.
- *
- * @param start Початковий час
- * @param end Кінцевий час
- * @return uint32_t Різниця в мілісекундах
- */
-uint32_t HWD_Timer_GetElapsed(uint32_t start, uint32_t end);
-
 
 #ifdef __cplusplus
 }
