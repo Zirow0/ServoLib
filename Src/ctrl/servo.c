@@ -100,8 +100,7 @@ Servo_Status_t Servo_Update(Servo_Controller_t* servo)
     Servo_Status_t safety_status = Safety_Update(&servo->safety,
                                                   servo->state.position,
                                                   servo->state.velocity,
-                                                  0,  // TODO: Реальний струм
-                                                  0); // TODO: Реальна температура
+                                                  0.0f); // TODO: Реальний струм
 
     if (safety_status != SERVO_OK) {
         // Аварійна зупинка при порушенні безпеки

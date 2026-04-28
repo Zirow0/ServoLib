@@ -42,8 +42,7 @@ Servo_Status_t Safety_Init(Safety_System_t* safety,
 Servo_Status_t Safety_Update(Safety_System_t* safety,
                              float position,
                              float velocity,
-                             uint32_t current,
-                             uint32_t temperature)
+                             float current_a)
 {
     if (safety == NULL || !safety->is_initialized) {
         return SERVO_INVALID;
@@ -52,8 +51,7 @@ Servo_Status_t Safety_Update(Safety_System_t* safety,
     uint32_t current_time = Time_GetMillis();
     safety->state.current_position = position;
     safety->state.current_velocity = velocity;
-    safety->state.current_draw = current;
-    safety->state.current_temperature = temperature;
+    safety->state.current_a = current_a;
 
     bool violation = false;
 
@@ -77,7 +75,7 @@ Servo_Status_t Safety_Update(Safety_System_t* safety,
 
     // Перевірка струму
     if (safety->config.enable_current_protection) {
-        if (current > safety->config.max_current) {
+        if (current_a > safety->config.max_current_a) {
             if (safety->state.overcurrent_start == 0) {
                 safety->state.overcurrent_start = current_time;
             }
@@ -90,15 +88,6 @@ Servo_Status_t Safety_Update(Safety_System_t* safety,
             }
         } else {
             safety->state.overcurrent_start = 0;
-        }
-    }
-
-    // Перевірка температури
-    if (safety->config.enable_thermal_protection) {
-        if (temperature > safety->config.max_temperature) {
-            safety->state.thermal_violated = true;
-            safety->state.last_violation = ERR_MOTOR_OVERHEAT;
-            violation = true;
         }
     }
 
@@ -181,7 +170,6 @@ Servo_Status_t Safety_ClearViolations(Safety_System_t* safety)
     safety->state.velocity_violated = false;
     safety->state.current_violated = false;
     safety->state.watchdog_violated = false;
-    safety->state.thermal_violated = false;
     safety->state.is_safe = true;
     safety->state.last_violation = ERR_NONE;
     safety->state.overcurrent_start = 0;

@@ -49,17 +49,13 @@ typedef struct {
     bool enable_acceleration_limit; /**< Увімкнути обмеження прискорення */
 
     /* Струмовий захист */
-    uint32_t max_current;        /**< Максимальний струм (mA) */
+    float    max_current_a;      /**< Максимальний струм (А) */
     uint32_t current_timeout_ms; /**< Таймаут перевантаження (мс) */
     bool enable_current_protection; /**< Увімкнути струмовий захист */
 
     /* Watchdog */
     uint32_t watchdog_timeout_ms; /**< Таймаут watchdog (мс) */
     bool enable_watchdog;         /**< Увімкнути watchdog */
-
-    /* Температурний захист */
-    uint32_t max_temperature;     /**< Максимальна температура (°C) */
-    bool enable_thermal_protection; /**< Увімкнути температурний захист */
 } Safety_Config_t;
 
 /**
@@ -69,15 +65,13 @@ typedef struct {
     /* Поточні значення */
     float current_position;       /**< Поточне положення */
     float current_velocity;       /**< Поточна швидкість */
-    uint32_t current_draw;        /**< Поточний струм */
-    uint32_t current_temperature; /**< Поточна температура */
+    float current_a;              /**< Поточний струм (А) */
 
     /* Прапорці порушень */
     bool position_violated;       /**< Порушення межі положення */
     bool velocity_violated;       /**< Порушення межі швидкості */
     bool current_violated;        /**< Порушення межі струму */
     bool watchdog_violated;       /**< Порушення watchdog */
-    bool thermal_violated;        /**< Порушення температури */
 
     /* Таймінги */
     uint32_t last_update_time;    /**< Час останнього оновлення */
@@ -115,15 +109,13 @@ Servo_Status_t Safety_Init(Safety_System_t* safety,
  * @param safety Вказівник на систему безпеки
  * @param position Поточне положення (град)
  * @param velocity Поточна швидкість (град/с)
- * @param current Поточний струм (mA)
- * @param temperature Поточна температура (°C)
+ * @param current_a Поточний струм (А)
  * @return Servo_Status_t SERVO_OK якщо безпечно, SERVO_ERROR при порушенні
  */
 Servo_Status_t Safety_Update(Safety_System_t* safety,
                              float position,
                              float velocity,
-                             uint32_t current,
-                             uint32_t temperature);
+                             float current_a);
 
 /**
  * @brief Перевірка положення
