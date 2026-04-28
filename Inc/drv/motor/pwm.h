@@ -1,11 +1,8 @@
 /**
  * @file pwm.h
- * @brief PWM драйвер двигуна
- * @author ServoCore Team
- * @date 2025
+ * @brief PWM драйвер DC двигуна
  *
- * Драйвер для керування DC двигуном через PWM сигнали.
- * Підтримує одноканальне та двоканальне керування (H-bridge).
+ * Підтримує одноканальне (PWM + DIR) та двоканальне (H-bridge) керування.
  */
 
 #ifndef SERVOCORE_DRV_MOTOR_PWM_H
@@ -35,26 +32,20 @@ typedef enum {
  * @brief Конфігурація PWM двигуна
  */
 typedef struct {
-    PWM_Motor_Type_t type;       /**< Тип керування */
-    HWD_PWM_Handle_t* pwm_fwd;   /**< PWM канал для прямого ходу */
-    HWD_PWM_Handle_t* pwm_bwd;   /**< PWM канал для зворотного ходу (або NULL) */
-    void* gpio_dir;              /**< GPIO для напрямку (опціонально) */
-    uint32_t gpio_pin;           /**< Пін GPIO для напрямку */
+    PWM_Motor_Type_t  type;      /**< Тип керування */
+    HWD_PWM_Handle_t* pwm_fwd;  /**< PWM канал для прямого ходу */
+    HWD_PWM_Handle_t* pwm_bwd;  /**< PWM канал для зворотного ходу (або NULL) */
+    void*             gpio_dir; /**< GPIO порт для напрямку (опціонально) */
+    uint32_t          gpio_pin; /**< Пін GPIO для напрямку */
 } PWM_Motor_Config_t;
 
 /**
  * @brief Структура PWM драйвера двигуна
- *
- * Містить тільки апаратну специфіку (PWM, GPIO).
- * Вся логіка (стан, потужність, статистика) в Motor_Interface_t.base
  */
 typedef struct {
-    Motor_Interface_t interface; /**< Інтерфейс двигуна (містить Motor_Base_Data_t) */
-    PWM_Motor_Config_t config;   /**< Конфігурація PWM */
-
-    HWD_GPIO_Pin_t gpio_dir;     /**< HWD дескриптор для GPIO напрямку */
-    float current_duty_percent;  /**< Поточний duty cycle (%) */
-    bool is_braking;             /**< Прапорець гальмування */
+    Motor_Interface_t  interface; /**< Інтерфейс двигуна (перше поле — обов'язково) */
+    PWM_Motor_Config_t config;    /**< Конфігурація PWM */
+    HWD_GPIO_Pin_t     gpio_dir;  /**< HWD дескриптор GPIO напрямку */
 } PWM_Motor_Driver_t;
 
 /* Exported functions --------------------------------------------------------*/
@@ -62,8 +53,8 @@ typedef struct {
 /**
  * @brief Створення PWM драйвера двигуна
  *
- * Ініціалізує структуру інтерфейсу з функціями PWM драйвера.
- * Після створення використовуйте &driver->interface для доступу до Motor_Interface_t.
+ * Заповнює hardware callbacks в interface. Після виклику передайте
+ * &driver->interface до Motor_Init().
  *
  * @param driver Вказівник на структуру драйвера
  * @param config Вказівник на конфігурацію PWM
