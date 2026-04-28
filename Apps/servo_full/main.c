@@ -33,7 +33,6 @@ int main(void)
     HWD_PWM_Config_t fwd_cfg = {
         .frequency  = MOTOR_PWM_FREQ,
         .resolution = MOTOR_PWM_PERIOD,
-        .channel    = HWD_PWM_CHANNEL_1,
         .hw_handle  = (void*)MOTOR_PWM_TIMER,
         .hw_channel = MOTOR_PWM_OC_FWD,
     };
