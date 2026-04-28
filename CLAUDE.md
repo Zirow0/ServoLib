@@ -46,14 +46,16 @@ Inc/hwd/ + Board/STM32F411_OCM3/  ← HWD declarations + libopencm3 implementati
 
 ### Universal Interface Pattern
 
-All three driver types (Motor, Position, Brake) share the same pattern:
+Всі чотири типи драйверів (Motor, Position, Brake, Current) використовують однаковий патерн:
 
-1. **Universal interface struct** (`Motor_Interface_t`, `Position_Sensor_Interface_t`, `Brake_Interface_t`) — contains common data + hardware callback function pointers
-2. **Specific driver struct** (e.g., `PWM_Motor_Driver_t`) — has the interface as its **first field**, plus hardware-specific state
-3. **Factory function** (e.g., `PWM_Motor_Create()`) — fills in the hardware callbacks
-4. **Base functions** in `motor.c`/`position.c`/`brake.c` — implement common logic, call callbacks for hardware ops
+1. **Universal interface struct** (`Motor_Interface_t`, `Position_Sensor_Interface_t`, `Brake_Interface_t`, `Current_Sensor_Interface_t`) — спільні дані + hw callback function pointers
+2. **Specific driver struct** (напр. `PWM_Motor_Driver_t`, `ACS712_Driver_t`) — interface як **перше поле**, плюс апаратний стан
+3. **Factory function** (напр. `PWM_Motor_Create()`, `ACS712_Create()`) — заповнює hw callbacks, викликає базовий Init
+4. **Base functions** у `motor.c`/`position.c`/`brake.c`/`current.c` — спільна логіка, викликають callbacks для апаратних операцій
 
-Access the universal interface via `&driver->interface`. The specific driver struct can be safely cast to/from `Motor_Interface_t*` because interface is the first field.
+Доступ до universal interface через `&driver->interface`. Specific driver struct безпечно кастується до/від interface pointer бо interface — перше поле.
+
+**Видалені з усіх драйверів:** `DeInit`/`deinit` callbacks, `is_initialized` поля.
 
 ### Servo Initialization
 
@@ -85,23 +87,60 @@ In this repository, `config_user.h` lives inside `Inc/`. The template at `Templa
 
 | Sensor | Resolution | Interface | Status |
 |--------|-----------|-----------|--------|
-| AEAT-9922 | 18-bit (262144 cpr) | SPI | **Active** |
-| AS5600 | 12-bit (4096 cpr) | I2C | Available, disabled |
-| Incremental | Quadrature via TIM2 | GPIO | Available |
+| AS5600 | 12-bit (4096 cpr) | I2C IT continuous read | Available |
+| Incremental | Quadrature EXTI X4 + IC timer | GPIO/TIM | Available |
 
-**Critical:** `HW_ReadRaw()` callbacks must return **only raw counts** — never degrees. All conversion (raw→degrees, velocity, multi-turn, prediction) is done in `position.c`.
+AEAT-9922 видалено повністю.
 
-### Motor Drivers
+**AS5600:** `HWD_I2C_StartContinuousRead()` запускає фоновий I2C IT цикл, дані постійно оновлюються у `volatile raw_buf[2]`. `HW_ReadRaw()` читає буфер миттєво.
 
-PWM motor supports two modes:
-- `PWM_MOTOR_TYPE_SINGLE_PWM_DIR` — one PWM channel + DIR GPIO
-- `PWM_MOTOR_TYPE_DUAL_PWM` — two PWM channels (H-bridge like L298N, TB6612)
+**Incremental encoder:** Software EXTI X4 state machine → `volatile int32_t count` (32-bit, необмежений, підтримує 6+ датчиків). IC timer вимірює `volatile uint32_t period_us` для прямого розрахунку швидкості без диференціювання. Board ISR викликає:
+```c
+Incremental_Encoder_EXTI_Handler(driver, pin_a, pin_b);  // оновлює count
+Incremental_Encoder_IC_Handler(driver, period_us);        // оновлює period_us
+```
+
+**Critical:** `HW_ReadRaw()` повертає лише сирі дані — ніколи градуси. Конвертація у `position.c`.
+
+`Position_Sensor_Init(sensor, bool multi_turn)` — другий параметр замість `Position_Params_t`.
+
+### Motor Driver
+
+PWM мотор підтримує два режими:
+- `PWM_MOTOR_TYPE_SINGLE_PWM_DIR` — один PWM канал + DIR GPIO
+- `PWM_MOTOR_TYPE_DUAL_PWM` — два PWM канали (H-bridge: L298N, TB6612)
+
+**Power rate limiting:** `Motor_Params_t.max_power_rate` обмежує швидкість зміни потужності (захист від PID-осциляцій). `Motor_EmergencyStop()` обходить rate limiting напряму.
+
+API: `Motor_Init`, `Motor_SetPower(motor, float power)`, `Motor_Stop`, `Motor_EmergencyStop`.
+`Motor_Update()` не існує — оновлення відбувається всередині `Motor_SetPower`.
 
 ### Brake Driver
 
 State machine: `ENGAGED ↔ ENGAGING ↔ RELEASING ↔ RELEASED`
 
-Brake always initializes to `ENGAGED` (fail-safe). Call `Brake_Update()` in the control loop to process timed transitions.
+Brake завжди ініціалізується у `ENGAGED` (fail-safe). Викликати `Brake_Update()` у control loop для обробки переходів.
+
+API: `Brake_Init`, `Brake_Engage`, `Brake_Release`, `Brake_Update`, `Brake_GetState`, `Brake_IsEngaged`, `Brake_IsReleased`.
+`Brake_DeInit`, `Brake_EmergencyEngage`, `Brake_IsTransitioning` — **не існують**. Для аварійної зупинки використовувати `Brake_Engage` напряму.
+
+### Current Sensor Driver
+
+**ACS712T** (ефект Хола, аналоговий вихід): варіанти 5A/20A/30A.
+
+```c
+// Ініціалізація:
+HWD_ADC_Init(&adc, &adc_cfg);     // реєстрація каналу
+HWD_ADC_StartScan();               // один раз після всіх ADC Init
+ACS712_Create(&driver, &config);   // factory
+Current_Sensor_Calibrate(&driver.interface);  // при нульовому струмі
+
+// У control loop:
+Current_Sensor_Update(&driver.interface);
+Current_Sensor_GetCurrent(&driver.interface, &current_a);
+```
+
+`Current_Sensor_GetStats`, `Current_Sensor_DeInit` — **не існують**.
 
 ## HWD Layer
 
@@ -115,7 +154,22 @@ uint32_t HWD_Timer_GetMillis(void);
 uint32_t HWD_Timer_GetMicros(void);
 ```
 
-Hardware pin assignments are in `Board/STM32F411_OCM3/board_config.h`. Driver selection macros (`USE_MOTOR_PWM`, `USE_BRAKE`, `USE_SENSOR_AEAT9922`, etc.) are also defined there.
+**ADC DMA scan mode:**
+```c
+// HWD_ADC_Init() реєструє канал, присвоює handle->raw → слот у DMA буфері
+// HWD_ADC_StartScan() конфігурує ADC1 scan+continuous + DMA2 Stream0 Ch0 circular
+// HWD_ADC_ReadVoltage() читає *handle->raw — миттєво, без blocking
+// Підтримка довільної кількості каналів (струм + напруга) до HWD_ADC_MAX_CHANNELS=8
+// Усі канали мають використовувати один adc_base (ADC1)
+```
+
+**I2C continuous read:**
+```c
+HWD_I2C_StartContinuousRead(handle, dev_addr, reg, volatile_buf, size);
+// Запускає I2C IT цикл: TC IRQ копіює дані в buf та перезапускає читання
+```
+
+Hardware pin assignments are in `Board/STM32F411_OCM3/board_config.h`. Driver selection macros (`USE_MOTOR_PWM`, `USE_BRAKE`, `USE_SENSOR_AS5600`, `USE_SENSOR_ACS712`, etc.) are defined there.
 
 ## Technical Specifications
 
