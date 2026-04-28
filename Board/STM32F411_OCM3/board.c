@@ -1,55 +1,13 @@
-/**
- * @file board.c
- * @brief Ініціалізація апаратного забезпечення STM32F411 (libopencm3)
- * @author ServoCore Team
- * @date 2025
- *
- * Виконує всю ініціалізацію периферії замість CubeMX:
- *   1. Системний клок 100 MHz (HSE 25 MHz → PLL)
- *   2. RCC clock enables для всіх використовуваних периферій
- *   3. GPIO alternate functions (TIM3 PWM, SPI1)
- *   4. TIM5 — мікросекундний таймер (32-bit, 1 MHz)
- *   5. SPI1 — для AEAT-9922 (MODE1: CPOL=0, CPHA=1, 8-bit, MSB first)
- *   6. I2C1 — для AS5600 (умовно, #ifdef USE_HWD_I2C)
- *   7. SysTick — 1 kHz для g_uptime_ms
- *
- * Конфлікт пінів PA6/PA7:
- *   PA6 і PA7 використовуються і TIM3 (AF2), і SPI1 (AF5).
- *   Одночасно активними бути не можуть. Board_Init() налаштовує
- *   піни відповідно до активних макросів USE_MOTOR_PWM / USE_HWD_SPI.
- *   Якщо увімкнено обидва — пріоритет має USE_HWD_SPI (поточна конфігурація).
- *
- * Виклик: один раз на початку main() до будь-якого HWD драйвера.
- */
-
 /* Includes ------------------------------------------------------------------*/
 #include "./board_config.h"
-#include "../../Inc/core.h"
-
-#include <libopencm3/stm32/rcc.h>
-#include <libopencm3/stm32/gpio.h>
-#include <libopencm3/stm32/timer.h>
-#include <libopencm3/stm32/spi.h>
-#include <libopencm3/cm3/systick.h>
-#include <libopencm3/stm32/common/flash_common_idcache.h>  /* FLASH_ACR_DCEN, FLASH_ACR_ICEN */
-#include <libopencm3/stm32/usart.h>
+#include <libopencm3/stm32/common/flash_common_idcache.h>
 
 /* Private functions ---------------------------------------------------------*/
 
-/**
- * @brief Налаштування системного клоку 100 MHz через HSE 25 MHz + PLL.
- *
- * STM32F411 BlackPill: HSE = 25 MHz кварц.
- * PLL: M=25, N=200, P=2 → VCO=200 MHz, SYSCLK=100 MHz
- * APB1 prescaler=2 → APB1=50 MHz (таймери APB1 = 100 MHz завдяки ×2)
- * APB2 prescaler=1 → APB2=100 MHz
- */
+/* STM32F411 BlackPill: HSE=25 MHz, PLL → SYSCLK=100 MHz
+ * APB1=50 MHz (таймери APB1 = 100 MHz ×2), APB2=100 MHz */
 static void clock_setup(void)
 {
-    /*
-     * libopencm3 надає готову конфігурацію для STM32F411 @ 100 MHz
-     * з HSE 25 MHz через rcc_clock_setup_pll().
-     */
     const struct rcc_clock_scale hse25_100mhz = {
         .pllm       = 25,
         .plln       = 200,
@@ -70,19 +28,13 @@ static void clock_setup(void)
     rcc_clock_setup_pll(&hse25_100mhz);
 }
 
-/**
- * @brief Увімкнення тактування всіх використовуваних GPIO портів.
- */
 static void gpio_rcc_setup(void)
 {
-    rcc_periph_clock_enable(RCC_GPIOA);   /* PA4..PA8, PA5/PA6/PA7 SPI+PWM */
-    rcc_periph_clock_enable(RCC_GPIOB);   /* PB0 MSEL, PB6/PB7 I2C */
-    rcc_periph_clock_enable(RCC_GPIOC);   /* PC13 LED */
+    rcc_periph_clock_enable(RCC_GPIOA);
+    rcc_periph_clock_enable(RCC_GPIOB);
+    rcc_periph_clock_enable(RCC_GPIOC);
 }
 
-/**
- * @brief Ініціалізація GPIO пінів не пов'язаних з SPI/I2C/PWM.
- */
 static void gpio_misc_setup(void)
 {
     /* LED — PC13, вихід push-pull */
@@ -102,12 +54,7 @@ static void gpio_misc_setup(void)
 #endif
 }
 
-/**
- * @brief Ініціалізація TIM3 для PWM (якщо USE_MOTOR_PWM і !USE_HWD_SPI).
- *
- * PA6 (CH1) і PA7 (CH2) конфліктують з SPI1.
- * Якщо USE_HWD_SPI активний — ці піни займає SPI, PWM недоступний.
- */
+/* PA6 конфліктує з SPI1 (AF5) — одночасно не можна */
 #if defined(USE_MOTOR_PWM) && !defined(USE_HWD_SPI)
 static void pwm_gpio_setup(void)
 {
@@ -120,13 +67,6 @@ static void pwm_gpio_setup(void)
 }
 #endif /* USE_MOTOR_PWM && !USE_HWD_SPI */
 
-/**
- * @brief Ініціалізація SPI1 для AEAT-9922.
- *
- * AEAT-9922 SPI режим: CPOL=0, CPHA=1 (MODE 1), 8-bit, MSB first, ~1 MHz.
- * CS (PA4) керується вручну через GPIO.
- * MSEL (PB0) — вихід для вибору режиму роботи AEAT-9922.
- */
 #ifdef USE_HWD_SPI
 static void spi_setup(void)
 {
@@ -156,12 +96,7 @@ static void spi_setup(void)
     gpio_set_output_options(ENCODER_MSEL_GPIO_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_2MHZ, ENCODER_MSEL_PIN);
     gpio_set(ENCODER_MSEL_GPIO_PORT, ENCODER_MSEL_PIN);
 
-    /*
-     * SPI1 ініціалізація:
-     *   CPOL=0 (clock idle LOW), CPHA=1 (data on falling edge) → MODE 1
-     *   Baudrate: APB2 (100 MHz) / 128 ≈ 781 kHz (AEAT max ~2 MHz)
-     *   8-bit, MSB first, software NSS
-     */
+    /* CPOL=0, CPHA=1 (MODE 1), APB2/128 ≈ 781 kHz, 8-bit MSB first */
     spi_init_master(ENCODER_SPI,
                     SPI_CR1_BAUDRATE_FPCLK_DIV_128,
                     SPI_CR1_CPOL_CLK_TO_0_WHEN_IDLE,
@@ -175,12 +110,6 @@ static void spi_setup(void)
 }
 #endif /* USE_HWD_SPI */
 
-/**
- * @brief Ініціалізація USART1 для відлагодження (якщо USE_HWD_UART).
- *
- * PA9 (TX) / PA10 (RX) — AF7, 115200 8N1.
- * Тактування від APB2 (100 MHz).
- */
 #ifdef USE_HWD_UART
 static void uart_setup(void)
 {
@@ -204,9 +133,6 @@ static void uart_setup(void)
 }
 #endif /* USE_HWD_UART */
 
-/**
- * @brief Ініціалізація I2C1 для AS5600 (якщо USE_HWD_I2C).
- */
 #ifdef USE_HWD_I2C
 static void i2c_setup(void)
 {
@@ -232,12 +158,6 @@ static void i2c_setup(void)
 }
 #endif /* USE_HWD_I2C */
 
-/**
- * @brief Ініціалізація TIM5 як мікросекундного таймера.
- *
- * 32-bit таймер, prescaler=99 → 1 MHz (1 тік = 1 мкс).
- * Переповнення через ~71 хвилин — безпечно для вимірювань коротких інтервалів.
- */
 static void micros_timer_setup(void)
 {
     rcc_periph_clock_enable(MICROS_TIMER_RCC);
@@ -247,26 +167,18 @@ static void micros_timer_setup(void)
                    TIM_CR1_CMS_EDGE,
                    TIM_CR1_DIR_UP);
 
-    /* APB1 timer clock = 100 MHz (×2 від APB1=50 MHz) */
-    timer_set_prescaler(MICROS_TIMER, MICROS_TIMER_PRESCALER);  /* 100-1=99 */
-    timer_set_period(MICROS_TIMER, 0xFFFFFFFFU);                 /* 32-bit max */
+    timer_set_prescaler(MICROS_TIMER, MICROS_TIMER_PRESCALER);
+    timer_set_period(MICROS_TIMER, 0xFFFFFFFFU);
 
     timer_enable_counter(MICROS_TIMER);
 }
 
-/**
- * @brief Налаштування SysTick для генерації 1 ms переривань.
- *
- * sys_tick_handler() в hwd_timer.c інкрементує g_uptime_ms.
- */
 static void systick_setup(void)
 {
     systick_set_frequency(SYSTICK_FREQ, SYSTEM_CORE_CLOCK);
     systick_counter_enable();
     systick_interrupt_enable();
 }
-
-/* Exported functions --------------------------------------------------------*/
 
 Servo_Status_t Board_Init(void)
 {
@@ -292,24 +204,6 @@ Servo_Status_t Board_Init(void)
 
 #ifdef USE_HWD_UART
     uart_setup();
-#endif
-
-    return SERVO_OK;
-}
-
-Servo_Status_t Board_DeInit(void)
-{
-    systick_interrupt_disable();
-    systick_counter_disable();
-
-    timer_disable_counter(MICROS_TIMER);
-
-#ifdef USE_HWD_SPI
-    spi_disable(ENCODER_SPI);
-#endif
-
-#ifdef USE_HWD_I2C
-    i2c_peripheral_disable(SENSOR_I2C);
 #endif
 
     return SERVO_OK;
