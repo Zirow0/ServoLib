@@ -32,13 +32,7 @@ Servo_Status_t PID_Init(PID_Controller_t* pid, const PID_Params_t* params)
     // Очищення структури
     memset(pid, 0, sizeof(PID_Controller_t));
 
-    // Копіювання параметрів
     pid->params = *params;
-
-    // Встановлення прапорця
-    pid->is_initialized = true;
-
-    // Скидання внутрішнього стану
     PID_Reset(pid);
 
     return SERVO_OK;
@@ -46,16 +40,10 @@ Servo_Status_t PID_Init(PID_Controller_t* pid, const PID_Params_t* params)
 
 Servo_Status_t PID_SetTunings(PID_Controller_t* pid, float Kp, float Ki, float Kd)
 {
-    if (pid == NULL || !pid->is_initialized) {
-        return SERVO_INVALID;
+    if (pid == NULL) {
+        return SERVO_ERROR_NULL_PTR;
     }
 
-    if (Kp < 0.0f || Ki < 0.0f || Kd < 0.0f) {
-        return SERVO_INVALID;
-    }
-
-    // Зберігаємо оригінальні значення
-    // Масштабування виконується при обчисленні в PID_Compute
     pid->params.Kp = Kp;
     pid->params.Ki = Ki;
     pid->params.Kd = Kd;
@@ -65,8 +53,8 @@ Servo_Status_t PID_SetTunings(PID_Controller_t* pid, float Kp, float Ki, float K
 
 Servo_Status_t PID_SetOutputLimits(PID_Controller_t* pid, float min, float max)
 {
-    if (pid == NULL || !pid->is_initialized) {
-        return SERVO_INVALID;
+    if (pid == NULL) {
+        return SERVO_ERROR_NULL_PTR;
     }
 
     if (min >= max) {
@@ -85,61 +73,54 @@ Servo_Status_t PID_SetOutputLimits(PID_Controller_t* pid, float min, float max)
 
 Servo_Status_t PID_Compute(PID_Controller_t* pid, float setpoint, float input, uint32_t current_time_us)
 {
-    if (pid == NULL || !pid->is_initialized) {
-        return SERVO_INVALID;
+    if (pid == NULL) {
+        return SERVO_ERROR_NULL_PTR;
     }
 
-    // Обчислення дельти часу
-    uint32_t delta_us = current_time_us - pid->last_time_us;
-    float dt = delta_us / 1000000.0f;  // Конвертація мкс → секунди
+    /* Перший виклик після Init/Reset — ініціалізуємо стан без обчислення.
+     * Захищає від D-spike (last_input=0) та некоректного dt. */
+    if (pid->last_time_us == 0) {
+        pid->last_time_us = current_time_us;
+        pid->last_input   = input;
+        return SERVO_OK;
+    }
 
-    // Збереження поточного часу для наступної ітерації
+    uint32_t delta_us = current_time_us - pid->last_time_us;
+    float dt = (float)delta_us / 1000000.0f;
+
+    if (dt <= 0.0f) {
+        return SERVO_OK;
+    }
+
     pid->last_time_us = current_time_us;
 
-    pid->input = input;
-
-    // Обчислення помилки
     float error = setpoint - input;
 
-    // Пропорційна складова
-    if (pid->params.enabled_terms & PID_ENABLE_P) {
-        pid->p_term = pid->params.Kp * error;
-    } else {
-        pid->p_term = 0.0f;
-    }
+    /* Пропорційна складова */
+    pid->p_term = (pid->params.enabled_terms & PID_ENABLE_P)
+                ? pid->params.Kp * error
+                : 0.0f;
 
-    // Інтегральна складова з масштабуванням за реальним часом
+    /* Інтегральна складова (anti-windup через clamp інтегратора) */
     if (pid->params.enabled_terms & PID_ENABLE_I) {
-        float integral_increment = pid->params.Ki * dt * error;
-        pid->integral += integral_increment;
-
-        // Anti-windup: обмеження інтегральної складової
-        pid->integral = Clamp(pid->integral, pid->params.out_min, pid->params.out_max);
-        pid->i_term = pid->integral;
+        pid->integral += pid->params.Ki * dt * error;
+        pid->integral  = Clamp(pid->integral, pid->params.out_min, pid->params.out_max);
+        pid->i_term    = pid->integral;
     } else {
-        pid->i_term = 0.0f;
-        pid->integral = 0.0f;  // Скидаємо інтегратор коли вимкнено
+        pid->integral = 0.0f;
+        pid->i_term   = 0.0f;
     }
 
-    // Диференціальна складова (похідна від входу, а не від помилки)
+    /* Диференціальна складова — derivative on measurement (без D-spike при зміні setpoint) */
     if (pid->params.enabled_terms & PID_ENABLE_D) {
-        float d_input = input - pid->last_input;
-        pid->d_term = -(pid->params.Kd / dt) * d_input;  // Мінус, бо рахуємо від входу
+        pid->d_term = -(pid->params.Kd / dt) * (input - pid->last_input);
     } else {
         pid->d_term = 0.0f;
     }
 
-    // Підсумковий вихід
-    pid->output = pid->p_term + pid->i_term + pid->d_term;
-
-    // Обмеження виходу
-    pid->output = Clamp(pid->output, pid->params.out_min, pid->params.out_max);
-
-    // Збереження для наступної ітерації
+    pid->output    = Clamp(pid->p_term + pid->i_term + pid->d_term,
+                           pid->params.out_min, pid->params.out_max);
     pid->last_input = input;
-
-    // Статистика
-    pid->compute_count++;
 
     return SERVO_OK;
 }
@@ -154,14 +135,17 @@ float PID_GetOutput(const PID_Controller_t* pid)
 
 Servo_Status_t PID_Reset(PID_Controller_t* pid)
 {
-    if (pid == NULL || !pid->is_initialized) {
-        return SERVO_INVALID;
+    if (pid == NULL) {
+        return SERVO_ERROR_NULL_PTR;
     }
 
-    pid->integral = 0.0f;
-    pid->last_input = 0.0f;
-    pid->output = 0.0f;
-    pid->compute_count = 0;
+    pid->integral     = 0.0f;
+    pid->last_input   = 0.0f;
+    pid->output       = 0.0f;
+    pid->p_term       = 0.0f;
+    pid->i_term       = 0.0f;
+    pid->d_term       = 0.0f;
+    pid->last_time_us = 0;  /* Наступний Compute — перший виклик */
 
     return SERVO_OK;
 }

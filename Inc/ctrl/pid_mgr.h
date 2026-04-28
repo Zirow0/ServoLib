@@ -1,10 +1,17 @@
 /**
  * @file pid_mgr.h
- * @brief Менеджер PID регуляторів
+ * @brief Менеджер каскадних PID регуляторів
  * @author ServoCore Team
  * @date 2025
  *
- * Керування кількома PID регуляторами (каскадне керування)
+ * Каскадне керування: вихід зовнішнього контуру є уставкою для внутрішнього.
+ *
+ *   Setpoint → [PID1] → [PID2] → output          (2 контури, pid3 = NULL)
+ *   Setpoint → [PID1] → [PID2] → [PID3] → output  (3 контури)
+ *
+ * Приклади:
+ *   2 контури: Position → Velocity → PWM
+ *   3 контури: Position → Velocity → Current → PWM
  */
 
 #ifndef SERVOCORE_CTRL_PID_MGR_H
@@ -22,93 +29,44 @@ extern "C" {
 
 /**
  * @brief Менеджер каскадних PID регуляторів
- *
- * Реалізує каскадне управління, де вихід одного регулятора
- * є уставкою для наступного:
- *
- * Setpoint → [PID1] → output1 → [PID2] → output2 → [PID3] → final_output
- *             ↑ input1           ↑ input2           ↑ input3
- *
- * Приклади використання:
- * - 2 контролери: Position → Velocity → PWM
- * - 3 контролери: Position → Velocity → Current → PWM
  */
 typedef struct {
-    PID_Controller_t* pid1;  /**< Зовнішній контур (наприклад, позиція) */
-    PID_Controller_t* pid2;  /**< Внутрішній контур (наприклад, швидкість) */
-    PID_Controller_t* pid3;  /**< Найглибший контур (опціонально, наприклад струм) */
-
-    uint8_t cascade_depth;   /**< Глибина каскаду: 2 або 3 контролери */
-    bool is_initialized;     /**< Прапорець ініціалізації */
+    PID_Controller_t* pid1;  /**< Зовнішній контур (напр. позиція) */
+    PID_Controller_t* pid2;  /**< Середній контур (напр. швидкість) */
+    PID_Controller_t* pid3;  /**< Внутрішній контур (напр. струм), NULL = 2 контури */
 } PID_Manager_t;
 
 /* Exported functions --------------------------------------------------------*/
 
 /**
- * @brief Ініціалізація каскаду з 2 PID контролерів
+ * @brief Ініціалізація каскаду PID регуляторів
  *
- * @param mgr Вказівник на менеджер
- * @param pid1 Зовнішній контур (наприклад, позиція)
- * @param pid2 Внутрішній контур (наприклад, швидкість)
+ * @param mgr  Вказівник на менеджер
+ * @param pid1 Зовнішній контур
+ * @param pid2 Середній/внутрішній контур
+ * @param pid3 Найглибший контур (NULL для 2-контурного каскаду)
  * @return Servo_Status_t Статус виконання
  */
-Servo_Status_t PID_Manager_Init2(PID_Manager_t* mgr,
-                                  PID_Controller_t* pid1,
-                                  PID_Controller_t* pid2);
+Servo_Status_t PID_Manager_Init(PID_Manager_t* mgr,
+                                 PID_Controller_t* pid1,
+                                 PID_Controller_t* pid2,
+                                 PID_Controller_t* pid3);
 
 /**
- * @brief Ініціалізація каскаду з 3 PID контролерів
+ * @brief Оновлення каскаду
  *
- * @param mgr Вказівник на менеджер
- * @param pid1 Зовнішній контур (наприклад, позиція)
- * @param pid2 Середній контур (наприклад, швидкість)
- * @param pid3 Внутрішній контур (наприклад, струм)
- * @return Servo_Status_t Статус виконання
+ * Якщо pid3 != NULL — виконує 3 контури, інакше 2.
+ * input3 ігнорується якщо pid3 == NULL.
+ *
+ * @param mgr            Вказівник на менеджер
+ * @param setpoint       Уставка для pid1
+ * @param input1         Зворотній зв'язок для pid1
+ * @param input2         Зворотній зв'язок для pid2
+ * @param input3         Зворотній зв'язок для pid3 (ігнорується якщо pid3=NULL)
+ * @param current_time_us Поточний час (мкс)
+ * @return float         Вихід останнього контуру
  */
-Servo_Status_t PID_Manager_Init3(PID_Manager_t* mgr,
-                                  PID_Controller_t* pid1,
-                                  PID_Controller_t* pid2,
-                                  PID_Controller_t* pid3);
-
-/**
- * @brief Оновлення каскаду з 2 контролерів
- *
- * Логіка:
- *   output1 = PID1(setpoint, input1)
- *   output2 = PID2(output1, input2)
- *   return output2
- *
- * @param mgr Вказівник на менеджер
- * @param setpoint Бажане значення для PID1 (наприклад, цільова позиція)
- * @param input1 Виміряне значення для PID1 (наприклад, поточна позиція)
- * @param input2 Виміряне значення для PID2 (наприклад, поточна швидкість)
- * @param current_time_us Поточний час в мікросекундах
- * @return float Вихід з останнього контролера (PID2)
- */
-float PID_Manager_Update2(PID_Manager_t* mgr,
-                          float setpoint,
-                          float input1,
-                          float input2,
-                          uint32_t current_time_us);
-
-/**
- * @brief Оновлення каскаду з 3 контролерів
- *
- * Логіка:
- *   output1 = PID1(setpoint, input1)
- *   output2 = PID2(output1, input2)
- *   output3 = PID3(output2, input3)
- *   return output3
- *
- * @param mgr Вказівник на менеджер
- * @param setpoint Бажане значення для PID1 (наприклад, цільова позиція)
- * @param input1 Виміряне значення для PID1 (наприклад, поточна позиція)
- * @param input2 Виміряне значення для PID2 (наприклад, поточна швидкість)
- * @param input3 Виміряне значення для PID3 (наприклад, поточний струм)
- * @param current_time_us Поточний час в мікросекундах
- * @return float Вихід з останнього контролера (PID3)
- */
-float PID_Manager_Update3(PID_Manager_t* mgr,
+float PID_Manager_Update(PID_Manager_t* mgr,
                           float setpoint,
                           float input1,
                           float input2,
