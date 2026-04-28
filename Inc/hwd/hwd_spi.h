@@ -17,7 +17,6 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 #include "../core.h"
-#include "../config.h"
 #include <stdint.h>
 #include <stdbool.h>
 
