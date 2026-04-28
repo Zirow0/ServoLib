@@ -21,7 +21,6 @@ extern "C" {
 #include "../drv/brake/brake.h"
 #include "pid.h"
 #include "safety.h"
-#include "err.h"
 #include "traj.h"
 #include "time.h"
 
@@ -68,7 +67,6 @@ typedef struct {
     Position_Sensor_Interface_t* sensor;    /**< Інтерфейс датчика положення (опціонально) */
     PID_Controller_t pid;                   /**< PID регулятор */
     Safety_System_t safety;                 /**< Система безпеки */
-    Error_Manager_t error_mgr;              /**< Менеджер помилок */
     Trajectory_Generator_t traj;            /**< Генератор траєкторій */
     Brake_Interface_t* brake;               /**< Інтерфейс гальм (опціонально) */
 

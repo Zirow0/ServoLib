@@ -17,7 +17,6 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 #include "../core.h"
-#include "./err.h"
 
 /* Exported types ------------------------------------------------------------*/
 
@@ -95,7 +94,6 @@ typedef struct {
 typedef struct {
     Safety_Config_t config;       /**< Конфігурація */
     Safety_State_t state;         /**< Стан */
-    Error_Manager_t* error_mgr;   /**< Менеджер помилок */
     bool is_initialized;          /**< Прапорець ініціалізації */
 } Safety_System_t;
 
@@ -106,12 +104,10 @@ typedef struct {
  *
  * @param safety Вказівник на систему безпеки
  * @param config Конфігурація меж
- * @param error_mgr Менеджер помилок (може бути NULL)
  * @return Servo_Status_t Статус виконання
  */
 Servo_Status_t Safety_Init(Safety_System_t* safety,
-                           const Safety_Config_t* config,
-                           Error_Manager_t* error_mgr);
+                           const Safety_Config_t* config);
 
 /**
  * @brief Оновлення стану системи безпеки

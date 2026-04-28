@@ -23,8 +23,7 @@ static inline float ClampFloat(float value, float min, float max)
 /* Exported functions --------------------------------------------------------*/
 
 Servo_Status_t Safety_Init(Safety_System_t* safety,
-                           const Safety_Config_t* config,
-                           Error_Manager_t* error_mgr)
+                           const Safety_Config_t* config)
 {
     if (safety == NULL || config == NULL) {
         return SERVO_INVALID;
@@ -33,7 +32,6 @@ Servo_Status_t Safety_Init(Safety_System_t* safety,
     memset(safety, 0, sizeof(Safety_System_t));
 
     safety->config = *config;
-    safety->error_mgr = error_mgr;
     safety->state.is_safe = true;
     safety->state.last_update_time = Time_GetMillis();
     safety->is_initialized = true;
@@ -65,10 +63,6 @@ Servo_Status_t Safety_Update(Safety_System_t* safety,
             safety->state.position_violated = true;
             safety->state.last_violation = ERR_POSITION_LIMIT;
             violation = true;
-
-            if (safety->error_mgr != NULL) {
-                Error_Log(safety->error_mgr, ERR_POSITION_LIMIT, ERR_SEVERITY_ERROR, "Position limit");
-            }
         }
     }
 
@@ -78,10 +72,6 @@ Servo_Status_t Safety_Update(Safety_System_t* safety,
             safety->state.velocity_violated = true;
             safety->state.last_violation = ERR_VELOCITY_LIMIT;
             violation = true;
-
-            if (safety->error_mgr != NULL) {
-                Error_Log(safety->error_mgr, ERR_VELOCITY_LIMIT, ERR_SEVERITY_ERROR, "Velocity limit");
-            }
         }
     }
 
@@ -97,10 +87,6 @@ Servo_Status_t Safety_Update(Safety_System_t* safety,
                 safety->state.current_violated = true;
                 safety->state.last_violation = ERR_MOTOR_OVERCURRENT;
                 violation = true;
-
-                if (safety->error_mgr != NULL) {
-                    Error_Log(safety->error_mgr, ERR_MOTOR_OVERCURRENT, ERR_SEVERITY_CRITICAL, "Overcurrent");
-                }
             }
         } else {
             safety->state.overcurrent_start = 0;
@@ -113,10 +99,6 @@ Servo_Status_t Safety_Update(Safety_System_t* safety,
             safety->state.thermal_violated = true;
             safety->state.last_violation = ERR_MOTOR_OVERHEAT;
             violation = true;
-
-            if (safety->error_mgr != NULL) {
-                Error_Log(safety->error_mgr, ERR_MOTOR_OVERHEAT, ERR_SEVERITY_CRITICAL, "Overheat");
-            }
         }
     }
 
@@ -127,10 +109,6 @@ Servo_Status_t Safety_Update(Safety_System_t* safety,
             safety->state.watchdog_violated = true;
             safety->state.last_violation = ERR_WATCHDOG;
             violation = true;
-
-            if (safety->error_mgr != NULL) {
-                Error_Log(safety->error_mgr, ERR_WATCHDOG, ERR_SEVERITY_CRITICAL, "Watchdog timeout");
-            }
         }
     }
 

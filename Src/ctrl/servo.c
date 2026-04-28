@@ -56,9 +56,7 @@ Servo_Status_t Servo_InitFull(Servo_Controller_t* servo,
     servo->brake = brake;
 
     // Ініціалізація підсистем
-    Error_Init(&servo->error_mgr);
-
-    Safety_Init(&servo->safety, &config->safety_config, &servo->error_mgr);
+    Safety_Init(&servo->safety, &config->safety_config);
 
     PID_Init(&servo->pid, &config->pid_params);
 
@@ -170,7 +168,7 @@ Servo_Status_t Servo_SetPosition(Servo_Controller_t* servo, float position)
 
     // Перевірка безпеки
     if (!Safety_CheckPosition(&servo->safety, position)) {
-        Error_Log(&servo->error_mgr, ERR_POSITION_LIMIT, ERR_SEVERITY_WARNING, "Target position out of limits");
+        servo->state.error = ERR_POSITION_LIMIT;
         position = Safety_ClampPosition(&servo->safety, position);
     }
 
@@ -245,8 +243,6 @@ Servo_Status_t Servo_EmergencyStop(Servo_Controller_t* servo)
     if (servo->brake != NULL && servo->config.enable_brake) {
         Brake_Engage(servo->brake);
     }
-
-    Error_Log(&servo->error_mgr, ERR_NONE, ERR_SEVERITY_CRITICAL, "Emergency stop");
 
     return SERVO_OK;
 }
