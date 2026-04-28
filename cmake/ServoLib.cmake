@@ -10,7 +10,6 @@ set(SERVOLIB_UTIL
     ${SL}/hwd/hwd.c
     ${SL}/util/math.c
     ${SL}/util/derivative.c
-    ${SL}/util/prediction.c
     ${SL}/util/buf.c
     ${SL}/util/checksum.c
 )
@@ -25,6 +24,7 @@ set(SERVOLIB_MOTOR
 set(SERVOLIB_POSITION
     ${SL}/drv/position/position.c
     ${SL}/drv/position/incremental_encoder.c
+    ${SL}/drv/position/as5600.c
 )
 
 # Підсистема гальма

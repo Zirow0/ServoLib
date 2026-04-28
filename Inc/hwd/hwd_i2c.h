@@ -166,6 +166,26 @@ Servo_Status_t HWD_I2C_IsDeviceReady(HWD_I2C_Handle_t* handle,
                                      uint16_t dev_address,
                                      uint8_t trials);
 
+/**
+ * @brief Запуск фонового циклічного читання через I2C IT
+ *
+ * Ініціює першу транзакцію. Після завершення кожного читання I2C TC IRQ
+ * автоматично копіює дані в buf та запускає наступне читання.
+ * buf оновлюється безперервно без участі CPU.
+ *
+ * @param handle      Вказівник на дескриптор I2C
+ * @param dev_address Адреса пристрою (7-bit << 1)
+ * @param reg_address Адреса регістру для читання
+ * @param buf         volatile буфер для результату
+ * @param size        Розмір даних (байт)
+ * @return Servo_Status_t Статус ініціалізації
+ */
+Servo_Status_t HWD_I2C_StartContinuousRead(HWD_I2C_Handle_t* handle,
+                                            uint16_t dev_address,
+                                            uint8_t  reg_address,
+                                            volatile uint8_t* buf,
+                                            uint16_t size);
+
 #ifdef __cplusplus
 }
 #endif

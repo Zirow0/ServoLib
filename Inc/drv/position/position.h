@@ -1,12 +1,9 @@
 /**
  * @file position.h
  * @brief Інтерфейс та базова реалізація датчика положення
- * @author ServoCore Team
- * @date 2025
  *
- * Універсальний інтерфейс для датчиків положення з Hardware Callbacks Pattern.
- * Спільна логіка (конвертація, velocity, multi-turn, prediction) в position.c,
- * апаратна специфіка (SPI/I2C read) в драйверах (aeat9922.c, as5600.c).
+ * Спільна логіка (конвертація, velocity, multi-turn) в position.c.
+ * Апаратна специфіка — в драйверах (incremental_encoder.c, as5600.c).
  */
 
 #ifndef SERVOCORE_DRV_POSITION_H
@@ -18,239 +15,105 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 #include "../../core.h"
-#include <stdint.h>
-#include <stdbool.h>
 
 /* Exported types ------------------------------------------------------------*/
 
 /**
- * @brief Можливості датчика позиції
- */
-typedef enum {
-    POSITION_CAP_ABSOLUTE    = 0x01,  /**< Абсолютна позиція (AS5600, AEAT9922) */
-    POSITION_CAP_INCREMENTAL = 0x02,  /**< Інкрементальна (Quadrature encoder) */
-    POSITION_CAP_VELOCITY    = 0x04,  /**< Датчик надає velocity */
-    POSITION_CAP_INTERRUPT   = 0x08,  /**< Interrupt-driven (Hall sensors) */
-    POSITION_CAP_MULTITURN   = 0x10   /**< Multi-turn tracking */
-} Position_Capabilities_t;
-
-/**
  * @brief Сирі дані з датчика (заповнює драйвер)
  *
- * ВАЖЛИВО: Драйвер конвертує raw дані до стандарту 0-2π радіанів!
+ * Драйвер конвертує raw → 0..2π радіанів до передачі.
  */
 typedef struct {
-    float angle_rad;            /**< Кут в радіанах (0 до 2π) */
-    uint32_t timestamp_us;      /**< Мікросекунди (для velocity) */
-    bool has_velocity;          /**< Чи датчик надає готову velocity */
-    float velocity_rad_s;       /**< Швидкість в радіанах/с (якщо датчик надає) */
-    bool valid;                 /**< Валідність даних */
+    float    angle_rad;       /**< Кут 0..2π */
+    uint32_t timestamp_us;    /**< Мікросекунди (для velocity через derivative) */
+    bool     has_velocity;    /**< true — драйвер надає velocity напряму (IC timer) */
+    float    velocity_rad_s;  /**< Швидкість рад/с (якщо has_velocity = true) */
+    bool     valid;           /**< Валідність даних */
 } Position_Raw_Data_t;
 
 /**
- * @brief Параметри датчика позиції
+ * @brief Внутрішній стан датчика (обчислюється в position.c)
  */
 typedef struct {
-    Sensor_Type_t type;         /**< Тип датчика */
-    float min_angle;            /**< Мінімальний кут (градуси) */
-    float max_angle;            /**< Максимальний кут (градуси) */
-    uint32_t update_rate;       /**< Частота оновлення (Hz) */
-} Position_Params_t;
+    float    position_rad;          /**< Поточний кут 0..2π */
+    float    velocity_rad_s;        /**< Кутова швидкість рад/с */
+    int32_t  revolution_count;      /**< Лічильник повних обертів */
+    float    absolute_position_rad; /**< position + revolutions*2π */
 
-/**
- * @brief Статистика датчика позиції
- */
-typedef struct {
-    uint32_t update_count;      /**< Кількість оновлень */
-    uint32_t error_count;       /**< Кількість помилок */
-    float last_position_deg;    /**< Остання позиція */
-    float last_velocity_deg_s;  /**< Остання швидкість */
-    bool is_calibrated;         /**< Стан калібрування */
-} Position_Stats_t;
+    float    last_position_rad;     /**< Попередній кут (для derivative) */
+    uint32_t last_timestamp_us;     /**< Час попереднього Update (для derivative) */
 
-/**
- * @brief Дані датчика позиції (обробляються в position.c)
- *
- * ВАЖЛИВО: Внутрішня робота в радіанах, конвертація в градуси через getter функції.
- */
-typedef struct {
-    // Поточні дані (обчислені, в радіанах)
-    float position_rad;           /**< Позиція 0-2π */
-    float velocity_rad_s;         /**< Швидкість (рад/с) */
-
-    // Multi-turn tracking
-    int32_t revolution_count;     /**< Кількість повних обертів */
-    float absolute_position_rad;  /**< position + revolutions*2π */
-
-    // Для velocity обчислення
-    uint32_t last_timestamp_us;   /**< Час останнього update */
-    float last_position_rad;      /**< Попередня позиція (рад) */
-
-    // Prediction (екстраполяція між updates)
-    float predicted_position_rad;   /**< Передбачена позиція (рад) */
-    uint32_t prediction_timestamp_us; /**< Час prediction */
-
-    // Статус
-    Position_Stats_t stats;       /**< Статистика (градуси для зручності) */
-    bool is_initialized;          /**< Прапорець ініціалізації */
-    bool is_calibrated;           /**< Прапорець калібрування */
-
-    Servo_Error_t last_error;     /**< Код останньої помилки */
+    bool         is_initialized;
+    Servo_Error_t last_error;
 } Position_Sensor_Data_t;
 
 /**
- * @brief Hardware callbacks для драйвера датчика позиції
- *
- * Конкретний драйвер (AEAT9922, AS5600) надає ці функції.
+ * @brief Hardware callbacks від конкретного драйвера
  */
 typedef struct {
-    /** @brief Ініціалізація апаратури (SPI, I2C) */
-    Servo_Status_t (*init)(void* driver_data, const Position_Params_t* params);
+    /** @brief Ініціалізація апаратури */
+    Servo_Status_t (*init)(void* driver_data);
 
-    /** @brief Деініціалізація апаратури */
-    Servo_Status_t (*deinit)(void* driver_data);
-
-    /** @brief Читання даних з датчика (драйвер конвертує raw → radians!) */
+    /** @brief Читання сирих даних (instant — з volatile буфера або HW регістру) */
     Servo_Status_t (*read_raw)(void* driver_data, Position_Raw_Data_t* raw);
-
-    /** @brief Калібрування датчика */
-    Servo_Status_t (*calibrate)(void* driver_data);
-
-    /** @brief Callback для interrupt (опціонально) */
-    void (*notify_callback)(void* driver_data);
 } Position_Sensor_HW_Callbacks_t;
 
 /**
- * @brief Структура інтерфейсу датчика позиції
- *
- * Містить Position_Sensor_Data_t для спільної логіки та hardware callbacks
- * для апаратної специфіки.
+ * @brief Інтерфейс датчика положення
  */
 typedef struct Position_Sensor_Interface Position_Sensor_Interface_t;
 
 struct Position_Sensor_Interface {
-    /** @brief Дані датчика (логіка, стан, статистика) */
-    Position_Sensor_Data_t data;
-
-    /** @brief Hardware callbacks від конкретного драйвера */
-    Position_Sensor_HW_Callbacks_t hw;
-
-    /** @brief Можливості датчика */
-    Position_Capabilities_t capabilities;
-
-    /** @brief Чи потрібне калібрування (incremental = true) */
-    bool requires_calibration;
-
-    /** @brief Вказівник на конкретну реалізацію драйвера */
-    void* driver_data;
+    Position_Sensor_Data_t         data;        /**< Обчислені дані */
+    Position_Sensor_HW_Callbacks_t hw;          /**< Hardware callbacks */
+    bool                           multi_turn;  /**< Увімкнути multi-turn tracking */
+    void*                          driver_data; /**< Конкретний драйвер */
 };
 
 /* Exported functions --------------------------------------------------------*/
 
 /**
- * @brief Ініціалізація датчика позиції
+ * @brief Ініціалізація датчика
  *
- * Викликає hardware init callback та ініціалізує базові дані.
- *
- * @param sensor Вказівник на Position_Sensor_Interface_t
- * @param params Параметри датчика
- * @return Servo_Status_t Статус виконання
+ * @param sensor     Вказівник на інтерфейс
+ * @param multi_turn Увімкнути підрахунок обертів
  */
 Servo_Status_t Position_Sensor_Init(Position_Sensor_Interface_t* sensor,
-                                   const Position_Params_t* params);
+                                    bool multi_turn);
 
 /**
- * @brief Деініціалізація датчика позиції
+ * @brief Оновлення даних датчика
  *
- * @param sensor Вказівник на Position_Sensor_Interface_t
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t Position_Sensor_DeInit(Position_Sensor_Interface_t* sensor);
-
-/**
- * @brief Оновлення датчика позиції
- *
- * Викликає hw.read_raw(), обчислює position, velocity, multi-turn, prediction.
- * КРИТИЧНО: Викликати регулярно (наприклад, у control loop 1 kHz)
- *
- * @param sensor Вказівник на Position_Sensor_Interface_t
- * @return Servo_Status_t Статус виконання
+ * Викликає hw.read_raw(), обчислює velocity та multi-turn.
+ * Викликати регулярно (1 kHz control loop).
  */
 Servo_Status_t Position_Sensor_Update(Position_Sensor_Interface_t* sensor);
 
 /**
- * @brief Отримання позиції (0-360°)
- *
- * @param sensor Вказівник на інтерфейс
- * @param position_deg Вказівник для збереження позиції
- * @return Servo_Status_t Статус виконання
+ * @brief Отримання позиції (0..360°)
  */
 Servo_Status_t Position_Sensor_GetPosition(Position_Sensor_Interface_t* sensor,
-                                          float* position_deg);
+                                           float* position_deg);
 
 /**
  * @brief Отримання швидкості (град/с)
- *
- * @param sensor Вказівник на інтерфейс
- * @param velocity_deg_s Вказівник для збереження швидкості
- * @return Servo_Status_t Статус виконання
  */
 Servo_Status_t Position_Sensor_GetVelocity(Position_Sensor_Interface_t* sensor,
-                                          float* velocity_deg_s);
+                                           float* velocity_deg_s);
 
 /**
- * @brief Отримання абсолютної позиції (з multi-turn)
- *
- * @param sensor Вказівник на інтерфейс
- * @param abs_position_deg Вказівник для збереження (може бути > 360°)
- * @return Servo_Status_t Статус виконання
+ * @brief Отримання абсолютної позиції з урахуванням multi-turn (може бути > 360°)
  */
 Servo_Status_t Position_Sensor_GetAbsolutePosition(Position_Sensor_Interface_t* sensor,
-                                                  float* abs_position_deg);
+                                                   float* abs_position_deg);
 
 /**
- * @brief Отримання передбаченої позиції (prediction)
+ * @brief Встановлення поточної позиції як нової нульової точки
  *
- * Повертає екстрапольовану позицію на поточний момент між updates.
- *
- * @param sensor Вказівник на інтерфейс
- * @param position_deg Вказівник для збереження
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t Position_Sensor_GetPredictedPosition(Position_Sensor_Interface_t* sensor,
-                                                    float* position_deg);
-
-/**
- * @brief Встановлення позиції (zero reset)
- *
- * Встановлює поточну позицію як нову нульову точку.
- *
- * @param sensor Вказівник на інтерфейс
- * @param position_deg Нова позиція (градуси)
- * @return Servo_Status_t Статус виконання
+ * @param position_deg Нова позиція (0 = скидання в нуль)
  */
 Servo_Status_t Position_Sensor_SetPosition(Position_Sensor_Interface_t* sensor,
-                                          float position_deg);
-
-/**
- * @brief Калібрування датчика
- *
- * Викликає hardware calibrate callback (якщо є).
- *
- * @param sensor Вказівник на інтерфейс
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t Position_Sensor_Calibrate(Position_Sensor_Interface_t* sensor);
-
-/**
- * @brief Отримання статистики
- *
- * @param sensor Вказівник на інтерфейс
- * @param stats Вказівник для збереження статистики
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t Position_Sensor_GetStats(Position_Sensor_Interface_t* sensor,
-                                       Position_Stats_t* stats);
+                                           float position_deg);
 
 #ifdef __cplusplus
 }
