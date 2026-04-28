@@ -4,15 +4,10 @@
  * @author ServoCore Team
  * @date 2025
  *
- * Hardware Callbacks Pattern: спільна логіка (фільтрація EMA, відстеження піку,
- * виявлення перевантаження, калібрування нуля) в current.c.
- * Апаратна специфіка (АЦП читання, конвертація) — у конкретних драйверах.
- *
  * Послідовність ініціалізації:
- *   1. XxxDriver_Create(&driver, &config)   — factory, заповнює hw callbacks
- *   2. Current_Sensor_Init(&driver.interface, &params)
- *   3. Current_Sensor_Calibrate(&driver.interface) — при нульовому струмі
- *   4. while(1) { Current_Sensor_Update(&driver.interface); }
+ *   1. XxxDriver_Create(&driver, &config)
+ *   2. Current_Sensor_Calibrate(&driver.interface) — при нульовому струмі
+ *   3. while(1) { Current_Sensor_Update(&driver.interface); }
  */
 
 #ifndef SERVOCORE_DRV_CURRENT_H
@@ -28,33 +23,14 @@ extern "C" {
 /* Exported types ------------------------------------------------------------*/
 
 /**
- * @brief Можливості датчика струму
- */
-typedef enum {
-    CURRENT_CAP_BIDIRECTIONAL  = 0x01,  /**< Вимірює струм в обох напрямках */
-    CURRENT_CAP_UNIDIRECTIONAL = 0x02,  /**< Тільки додатний струм */
-    CURRENT_CAP_OVERCURRENT_HW = 0x04,  /**< Апаратний компаратор перевантаження */
-} Current_Capabilities_t;
-
-/**
- * @brief Напрямок струму
- */
-typedef enum {
-    CURRENT_DIR_ZERO     = 0,  /**< Струм у мертвій зоні */
-    CURRENT_DIR_POSITIVE = 1,  /**< Прямий напрямок */
-    CURRENT_DIR_NEGATIVE = 2,  /**< Зворотний напрямок */
-} Current_Direction_t;
-
-/**
  * @brief Сирі дані з датчика (заповнює драйвер у read_raw)
  *
- * Драйвер конвертує апаратні дані (напруга АЦП) у Ампери.
+ * Драйвер конвертує напругу АЦП у Ампери.
  * Зміщення нуля та фільтрація — відповідальність current.c.
  */
 typedef struct {
-    float    current_a;      /**< Миттєвий струм (А), без корекції та фільтрації */
-    uint32_t timestamp_us;   /**< Мітка часу зчитування (мікросекунди) */
-    bool     valid;          /**< Валідність даних */
+    float current_a;  /**< Миттєвий струм (А), без корекції та фільтрації */
+    bool  valid;      /**< Валідність даних */
 } Current_Raw_Data_t;
 
 /**
@@ -67,68 +43,33 @@ typedef struct {
 } Current_Params_t;
 
 /**
- * @brief Статистика датчика струму
- */
-typedef struct {
-    uint32_t update_count;       /**< Кількість успішних оновлень */
-    uint32_t error_count;        /**< Кількість помилок зчитування */
-    uint32_t overcurrent_count;  /**< Кількість подій перевантаження */
-    float    last_current_a;     /**< Останнє виміряне значення (після корекції) */
-    float    peak_current_a;     /**< Абсолютний пік з моменту старту або скидання */
-    bool     is_calibrated;      /**< Стан калібрування */
-} Current_Stats_t;
-
-/**
  * @brief Внутрішні дані датчика (керується current.c)
  */
 typedef struct {
-    /* Параметри обробки (зберігаються з Current_Params_t при Init) */
-    float    ema_alpha;
-    float    overcurrent_threshold_a;
+    float ema_alpha;
+    float overcurrent_threshold_a;
 
-    /* Оброблені дані */
-    float    filtered_current_a;  /**< Відфільтрований струм (А) */
-    float    zero_offset_a;       /**< Зміщення нуля (А), визначається калібруванням */
-    float    peak_current_a;      /**< Абсолютний пік (А) */
+    float filtered_current_a;  /**< Відфільтрований струм (А) */
+    float zero_offset_a;       /**< Зміщення нуля (А), визначається калібруванням */
+    float peak_current_a;      /**< Абсолютний пік (А) */
 
-    /* Стан */
-    bool                overcurrent_flag;  /**< Прапорець перевантаження */
-    Current_Direction_t direction;
-
-    /* Статистика */
-    Current_Stats_t stats;
-
-    /* Службові */
-    bool          is_initialized;
-    bool          is_calibrated;
-    Servo_Error_t last_error;
+    bool  overcurrent_flag;    /**< Прапорець перевантаження */
 } Current_Sensor_Data_t;
 
 /**
  * @brief Hardware callbacks — надаються конкретним драйвером
  */
 typedef struct {
-    /** @brief Ініціалізація апаратури (АЦП, GPIO) */
+    /** @brief Ініціалізація апаратури (перевірка АЦП) */
     Servo_Status_t (*init)(void* driver_data, const Current_Params_t* params);
-
-    /** @brief Деініціалізація апаратури */
-    Servo_Status_t (*deinit)(void* driver_data);
 
     /**
      * @brief Зчитування миттєвого струму з апаратури
      *
-     * Драйвер конвертує напругу АЦП у Ампери через коефіцієнт датчика.
-     * НЕ виконує фільтрацію та НЕ застосовує зміщення нуля.
+     * Конвертує напругу АЦП у Ампери. НЕ виконує фільтрацію та
+     * НЕ застосовує зміщення нуля.
      */
     Servo_Status_t (*read_raw)(void* driver_data, Current_Raw_Data_t* raw);
-
-    /**
-     * @brief Апаратне калібрування (опціонально, NULL якщо не підтримується)
-     *
-     * Для датчиків з вбудованим авто-нулем. Якщо NULL, калібрування
-     * виконується програмно в Current_Sensor_Calibrate() через read_raw.
-     */
-    Servo_Status_t (*calibrate)(void* driver_data);
 } Current_Sensor_HW_Callbacks_t;
 
 /**
@@ -140,10 +81,9 @@ typedef struct {
 typedef struct Current_Sensor_Interface Current_Sensor_Interface_t;
 
 struct Current_Sensor_Interface {
-    Current_Sensor_Data_t         data;          /**< Логіка, стан, статистика */
-    Current_Sensor_HW_Callbacks_t hw;            /**< Апаратні операції */
-    Current_Capabilities_t        capabilities;  /**< Можливості датчика */
-    void*                         driver_data;   /**< Вказівник на конкретний драйвер */
+    Current_Sensor_Data_t         data;         /**< Логіка, стан */
+    Current_Sensor_HW_Callbacks_t hw;           /**< Апаратні операції */
+    void*                         driver_data;  /**< Вказівник на конкретний драйвер */
 };
 
 /* Exported functions --------------------------------------------------------*/
@@ -161,18 +101,10 @@ Servo_Status_t Current_Sensor_Init(Current_Sensor_Interface_t* sensor,
                                     const Current_Params_t* params);
 
 /**
- * @brief Деініціалізація датчика струму
- *
- * @param sensor Вказівник на інтерфейс
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t Current_Sensor_DeInit(Current_Sensor_Interface_t* sensor);
-
-/**
  * @brief Оновлення датчика струму
  *
  * Викликати у контурному циклі (1 кГц).
- * Послідовність: read_raw → корекція нуля → EMA → пік → захист → напрямок.
+ * Послідовність: read_raw → корекція нуля → EMA → пік → захист.
  *
  * @param sensor Вказівник на інтерфейс
  * @return Servo_Status_t Статус виконання
@@ -183,8 +115,7 @@ Servo_Status_t Current_Sensor_Update(Current_Sensor_Interface_t* sensor);
  * @brief Калібрування нульового зміщення
  *
  * КРИТИЧНО: викликати при нульовому струмі (двигун зупинений, ШІМ вимкнений).
- * Якщо hw.calibrate == NULL: усереднює read_raw за ~50 мс, зберігає zero_offset_a.
- * Якщо hw.calibrate != NULL: делегує апаратному калібруванню.
+ * Усереднює read_raw за ~50 мс, зберігає zero_offset_a.
  *
  * @param sensor Вказівник на інтерфейс
  * @return Servo_Status_t Статус виконання
@@ -226,16 +157,6 @@ bool Current_Sensor_IsOvercurrent(const Current_Sensor_Interface_t* sensor);
  * @return Servo_Status_t Статус виконання
  */
 Servo_Status_t Current_Sensor_ResetPeak(Current_Sensor_Interface_t* sensor);
-
-/**
- * @brief Отримання статистики
- *
- * @param sensor Вказівник на інтерфейс
- * @param stats  Вказівник для збереження статистики
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t Current_Sensor_GetStats(const Current_Sensor_Interface_t* sensor,
-                                        Current_Stats_t* stats);
 
 #ifdef __cplusplus
 }

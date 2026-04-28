@@ -53,17 +53,11 @@ typedef enum {
  * @brief Конфігурація драйвера ACS712T
  */
 typedef struct {
-    ACS712_Variant_t variant;       /**< Варіант датчика */
-
-    HWD_ADC_Handle_t* adc;          /**< Ініціалізований дескриптор каналу АЦП */
-
-    float vcc_v;                    /**< Напруга живлення датчика (В), зазвичай 5.0 */
-    float divider_ratio;            /**< Коефіцієнт дільника напруги (< 1.0),
-                                         напр. 3.3/5.0 = 0.66 для 5В→3.3В */
-
-    /* Параметри базового шару */
-    float overcurrent_threshold_a;  /**< Поріг перевантаження (А), 0.0 = вимкнено */
-    float ema_alpha;                 /**< Коефіцієнт EMA фільтра [0.0 - 1.0] */
+    ACS712_Variant_t  variant;               /**< Варіант датчика */
+    HWD_ADC_Handle_t* adc;                   /**< Ініціалізований дескриптор каналу АЦП */
+    float             divider_ratio;         /**< Коефіцієнт дільника (< 1.0), напр. 0.66 для 5В→3.3В */
+    float             overcurrent_threshold_a; /**< Поріг перевантаження (А), 0.0 = вимкнено */
+    float             ema_alpha;             /**< Коефіцієнт EMA фільтра [0.0 - 1.0] */
 } ACS712_Config_t;
 
 /**
@@ -74,9 +68,7 @@ typedef struct {
  */
 typedef struct {
     Current_Sensor_Interface_t interface;  /**< Універсальний інтерфейс (ПЕРШИМ!) */
-
-    float            current_coefficient;  /**< 1/(sensitivity × divider_ratio), А/В */
-    float            max_current_a;        /**< Максимальний струм варіанту (А) */
+    float             current_coefficient; /**< 1/(sensitivity × divider_ratio), А/В */
     HWD_ADC_Handle_t* adc;                /**< Дескриптор каналу АЦП */
 } ACS712_Driver_t;
 

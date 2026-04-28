@@ -1,14 +1,19 @@
 /**
  * @file hwd_adc.h
- * @brief Апаратна абстракція аналого-цифрового перетворювача (АЦП)
+ * @brief Апаратна абстракція АЦП з DMA scan режимом
  * @author ServoCore Team
  * @date 2025
  *
- * Платформонезалежний інтерфейс для роботи з АЦП.
- * Конкретна реалізація — Board/STM32F411_OCM3/hwd_adc.c (libopencm3).
+ * Послідовність ініціалізації:
+ *   1. HWD_ADC_Init(&h1, &cfg1)   — реєстрація каналу 1
+ *   2. HWD_ADC_Init(&h2, &cfg2)   — реєстрація каналу 2
+ *   ...
+ *   N. HWD_ADC_StartScan()        — запуск ADC DMA circular (один раз)
  *
- * HWD_ADC_ReadVoltage() повертає напругу у вольтах — драйвери верхнього рівня
- * не знають про розрядність АЦП та опорну напругу конкретної платформи.
+ * Після StartScan() DMA безперервно оновлює буфер усіх каналів.
+ * HWD_ADC_ReadVoltage() читає з буфера миттєво, без блокування.
+ *
+ * Усі канали мають використовувати один і той самий adc_base.
  */
 
 #ifndef SERVOCORE_HWD_ADC_H
@@ -40,44 +45,44 @@ typedef struct {
  * @brief Дескриптор каналу АЦП
  */
 typedef struct {
-    HWD_ADC_Config_t config;    /**< Конфігурація */
-    uint8_t  resolution_bits;   /**< Розрядність АЦП, заповнюється при Init */
-    bool     is_initialized;    /**< Прапорець ініціалізації */
+    HWD_ADC_Config_t  config;  /**< Конфігурація */
+    volatile uint16_t* raw;    /**< Вказівник на слот у DMA буфері (після Init) */
+    bool     is_initialized;   /**< Прапорець ініціалізації */
 } HWD_ADC_Handle_t;
 
 /* Exported functions --------------------------------------------------------*/
 
 /**
- * @brief Ініціалізація каналу АЦП
+ * @brief Реєстрація каналу АЦП у scan sequence
  *
- * Налаштовує GPIO у режим аналогового входу, конфігурує АЦП
- * (розрядність, час вибірки, одиночне перетворення).
+ * Налаштовує GPIO у режим аналогового входу, додає канал до внутрішнього
+ * списку, присвоює handle->raw вказівник на слот у DMA буфері.
+ * Викликати для кожного каналу ДО HWD_ADC_StartScan().
  *
  * @param handle Вказівник на дескриптор
  * @param config Вказівник на конфігурацію
- * @return Servo_Status_t Статус виконання
+ * @return Servo_Status_t SERVO_INVALID якщо перевищено HWD_ADC_MAX_CHANNELS
  */
 Servo_Status_t HWD_ADC_Init(HWD_ADC_Handle_t* handle, const HWD_ADC_Config_t* config);
 
 /**
- * @brief Деініціалізація каналу АЦП
+ * @brief Запуск ADC DMA circular scan
  *
- * @param handle Вказівник на дескриптор
- * @return Servo_Status_t Статус виконання
+ * Конфігурує ADC у scan+continuous режимі та запускає DMA circular.
+ * Після виклику DMA автоматично оновлює буфер усіх зареєстрованих каналів.
+ * Викликати один раз після всіх HWD_ADC_Init().
+ *
+ * @return Servo_Status_t SERVO_NOT_INIT якщо жодного каналу не зареєстровано
  */
-Servo_Status_t HWD_ADC_DeInit(HWD_ADC_Handle_t* handle);
+Servo_Status_t HWD_ADC_StartScan(void);
 
 /**
- * @brief Зчитування напруги (блокуючий режим)
+ * @brief Зчитування напруги з DMA буфера (неблокуюче)
  *
- * Запускає одиночне перетворення, очікує завершення, повертає результат
- * у вольтах. Розрядність та опорна напруга абстраговані всередині.
+ * Повертає останнє значення з DMA буфера у вольтах.
+ * Викликати тільки після HWD_ADC_StartScan().
  *
- * Використовувати:
- *  - під час калібрування (ШІМ вимкнений)
- *  - при опитуванні без прив'язки до ШІМ
- *
- * @param handle   Вказівник на дескриптор
+ * @param handle    Вказівник на дескриптор
  * @param voltage_v Результат у вольтах
  * @return Servo_Status_t Статус виконання
  */

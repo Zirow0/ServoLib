@@ -4,19 +4,14 @@
  * @author ServoCore Team
  * @date 2025
  *
- * Використовує ADC1 у режимі одиночного polling перетворення.
- * Результат повертається у вольтах — розрядність та опорна напруга
- * абстраговані від драйверів верхнього рівня.
- *
- * Підключення (приклад для датчика струму ACS712):
- *   ACS712 OUT → дільник R1/R2 → PA4 (ADC1_IN4)
+ * ADC1 у scan+continuous режимі з DMA2 Stream0 Channel0 (circular).
+ * DMA безперервно оновлює s_dma_buf[] — кожен канал має свій слот.
+ * HWD_ADC_ReadVoltage() читає з буфера миттєво, без blocking.
  *
  * Параметри АЦП:
- *   Тактування:   APB2 (100 МГц) / prescaler 4 = 25 МГц
- *   Розрядність:  12 біт (4096 рівнів)
- *   Час вибірки:  84 цикли → 84/25МГц = 3.36 мкс (достатньо для сигналу після RC-фільтра)
- *   Час конвертації: 12.5 цикли → ~0.5 мкс
- *   Загальний час: ~3.86 мкс << 1 мс (контурний цикл)
+ *   Тактування:  APB2 (100 МГц) / prescaler 4 = 25 МГц
+ *   Розрядність: 12 біт (4096 рівнів)
+ *   Час вибірки: 84 цикли → ~3.36 мкс/канал (достатньо після RC-фільтра)
  */
 
 /* Includes ------------------------------------------------------------------*/
@@ -26,106 +21,105 @@
 
 #include "../../Inc/hwd/hwd_adc.h"
 #include <libopencm3/stm32/adc.h>
+#include <libopencm3/stm32/dma.h>
+#include <libopencm3/stm32/rcc.h>
+#include <libopencm3/stm32/gpio.h>
 
 /* Private defines -----------------------------------------------------------*/
 
-/** @brief Розрядність АЦП STM32F411 у режимі 12-bit */
-#define HWD_ADC_RESOLUTION_BITS     12U
+#define HWD_ADC_MAX_CHANNELS  8U    /**< Максимум каналів у scan sequence */
+#define HWD_ADC_MAX_VALUE     4095U /**< 2^12 - 1 */
 
-/** @brief Максимальне значення АЦП (2^12 - 1) */
-#define HWD_ADC_MAX_VALUE           4095U
+/* Private data --------------------------------------------------------------*/
+
+/** @brief DMA буфер — кожен слот оновлюється DMA автоматично */
+static volatile uint16_t s_dma_buf[HWD_ADC_MAX_CHANNELS];
+
+/** @brief Список зареєстрованих каналів (для adc_set_regular_sequence) */
+static uint8_t s_channels[HWD_ADC_MAX_CHANNELS];
+
+/** @brief Кількість зареєстрованих каналів */
+static uint8_t s_channel_count = 0U;
+
+/** @brief Базова адреса АЦП (спільна для всіх каналів) */
+static uint32_t s_adc_base = 0U;
 
 /* Exported functions --------------------------------------------------------*/
 
 Servo_Status_t HWD_ADC_Init(HWD_ADC_Handle_t* handle, const HWD_ADC_Config_t* config)
 {
-    if (handle == NULL || config == NULL) {
-        return SERVO_ERROR_NULL_PTR;
-    }
-
-    if (config->vref_v <= 0.0f) {
-        return SERVO_INVALID;
-    }
+    if (handle == NULL || config == NULL) return SERVO_ERROR_NULL_PTR;
+    if (config->vref_v <= 0.0f)          return SERVO_INVALID;
+    if (s_channel_count >= HWD_ADC_MAX_CHANNELS) return SERVO_INVALID;
 
     handle->config         = *config;
-    handle->resolution_bits = HWD_ADC_RESOLUTION_BITS;
-    handle->is_initialized = false;
+    handle->raw            = &s_dma_buf[s_channel_count];
+    handle->is_initialized = true;
 
-    /* Тактування GPIO та АЦП */
+    /* GPIO у режимі аналогового входу */
     rcc_periph_clock_enable((enum rcc_periph_clken)config->rcc_gpio);
-    rcc_periph_clock_enable((enum rcc_periph_clken)config->rcc_adc);
-
-    /* GPIO у режимі аналогового входу (AF не потрібен) */
-    gpio_mode_setup((uint32_t)config->gpio_port,
-                    GPIO_MODE_ANALOG,
-                    GPIO_PUPD_NONE,
+    gpio_mode_setup(config->gpio_port, GPIO_MODE_ANALOG, GPIO_PUPD_NONE,
                     (uint16_t)config->gpio_pin);
 
-    /* Налаштування АЦП */
-    adc_power_off(config->adc_base);
+    /* Тактування АЦП (безпечно викликати кілька разів) */
+    rcc_periph_clock_enable((enum rcc_periph_clken)config->rcc_adc);
 
-    /* Prescaler: APB2 (100 МГц) / 4 = 25 МГц.
-     * Це глобальне налаштування для всіх АЦП — не змінювати між Init викликами. */
-    adc_set_clk_prescale(ADC_CCR_ADCPRE_BY4);
+    s_channels[s_channel_count] = config->channel;
+    s_adc_base                  = config->adc_base;
+    s_channel_count++;
 
-    adc_disable_scan_mode(config->adc_base);
-    adc_set_single_conversion_mode(config->adc_base);
-    adc_disable_external_trigger_regular(config->adc_base);
-    adc_set_right_aligned(config->adc_base);
-    adc_set_resolution(config->adc_base, ADC_CR1_RES_12BIT);
-
-    /* Час вибірки для вказаного каналу */
-    adc_set_sample_time(config->adc_base,
-                        config->channel,
-                        ADC_SMPR_SMP_84CYC);
-
-    adc_power_on(config->adc_base);
-
-    handle->is_initialized = true;
     return SERVO_OK;
 }
 
-Servo_Status_t HWD_ADC_DeInit(HWD_ADC_Handle_t* handle)
+Servo_Status_t HWD_ADC_StartScan(void)
 {
-    if (handle == NULL) {
-        return SERVO_ERROR_NULL_PTR;
+    if (s_channel_count == 0U) return SERVO_NOT_INIT;
+
+    /* ── DMA2 Stream0 Channel0 (ADC1) ──────────────────────────────────── */
+    rcc_periph_clock_enable(RCC_DMA2);
+
+    dma_stream_reset(DMA2, DMA_STREAM0);
+    dma_channel_select(DMA2, DMA_STREAM0, DMA_SxCR_CHSEL_0);
+    dma_set_transfer_mode(DMA2, DMA_STREAM0, DMA_SxCR_DIR_PERIPHERAL_TO_MEM);
+    dma_set_priority(DMA2, DMA_STREAM0, DMA_SxCR_PL_HIGH);
+    dma_set_peripheral_size(DMA2, DMA_STREAM0, DMA_SxCR_PSIZE_16BIT);
+    dma_set_memory_size(DMA2, DMA_STREAM0, DMA_SxCR_MSIZE_16BIT);
+    dma_enable_memory_increment_mode(DMA2, DMA_STREAM0);
+    dma_enable_circular_mode(DMA2, DMA_STREAM0);
+    dma_set_peripheral_address(DMA2, DMA_STREAM0, (uint32_t)&ADC_DR(s_adc_base));
+    dma_set_memory_address(DMA2, DMA_STREAM0, (uint32_t)s_dma_buf);
+    dma_set_number_of_data(DMA2, DMA_STREAM0, s_channel_count);
+    dma_enable_stream(DMA2, DMA_STREAM0);
+
+    /* ── ADC scan + continuous + DMA ───────────────────────────────────── */
+    adc_power_off(s_adc_base);
+    adc_set_clk_prescale(ADC_CCR_ADCPRE_BY4);   /* 25 МГц */
+    adc_enable_scan_mode(s_adc_base);
+    adc_set_continuous_conversion_mode(s_adc_base);
+    adc_disable_external_trigger_regular(s_adc_base);
+    adc_set_right_aligned(s_adc_base);
+    adc_set_resolution(s_adc_base, ADC_CR1_RES_12BIT);
+
+    for (uint8_t i = 0; i < s_channel_count; i++) {
+        adc_set_sample_time(s_adc_base, s_channels[i], ADC_SMPR_SMP_84CYC);
     }
 
-    if (!handle->is_initialized) {
-        return SERVO_NOT_INIT;
-    }
+    adc_set_regular_sequence(s_adc_base, s_channel_count, s_channels);
+    adc_enable_dma(s_adc_base);
+    adc_set_dma_continue(s_adc_base);   /* DDS: продовжувати DMA запити */
 
-    adc_power_off(handle->config.adc_base);
-    handle->is_initialized = false;
+    adc_power_on(s_adc_base);
+    adc_start_conversion_regular(s_adc_base);
 
     return SERVO_OK;
 }
 
 Servo_Status_t HWD_ADC_ReadVoltage(HWD_ADC_Handle_t* handle, float* voltage_v)
 {
-    if (handle == NULL || voltage_v == NULL) {
-        return SERVO_ERROR_NULL_PTR;
-    }
+    if (handle == NULL || voltage_v == NULL) return SERVO_ERROR_NULL_PTR;
+    if (handle->raw == NULL)                 return SERVO_NOT_INIT;
 
-    if (!handle->is_initialized) {
-        return SERVO_NOT_INIT;
-    }
-
-    /* Встановлення каналу та запуск одиночного перетворення */
-    uint8_t channel_seq[1] = { (uint8_t)handle->config.channel };
-    adc_set_regular_sequence(handle->config.adc_base, 1, channel_seq);
-    adc_start_conversion_regular(handle->config.adc_base);
-
-    /* Очікування завершення перетворення (EOC) */
-    while (!adc_eoc(handle->config.adc_base)) {
-        /* Polling — прийнятно для коротких (<4 мкс) перетворень.
-         * При необхідності додати таймаут через HWD_Timer_GetMicros(). */
-    }
-
-    /* Зчитування результату та конвертація у вольти */
-    uint16_t raw = adc_read_regular(handle->config.adc_base);
-    *voltage_v = (float)raw * handle->config.vref_v / (float)HWD_ADC_MAX_VALUE;
-
+    *voltage_v = (float)*handle->raw * handle->config.vref_v / (float)HWD_ADC_MAX_VALUE;
     return SERVO_OK;
 }
 

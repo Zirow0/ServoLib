@@ -67,22 +67,11 @@ static Servo_Status_t ACS712_HW_Init(void* driver_data, const Current_Params_t* 
 
     (void)params;  /* АЦП налаштований через HWD_ADC_Handle_t */
 
-    /* АЦП вже ініціалізований користувачем через HWD_ADC_Init() перед Create.
-     * Перевіряємо що дескриптор готовий. */
-    if (driver->adc == NULL || !driver->adc->is_initialized) {
+    /* АЦП зареєстрований через HWD_ADC_Init() перед Create — raw != NULL. */
+    if (driver->adc == NULL || driver->adc->raw == NULL) {
         return SERVO_NOT_INIT;
     }
 
-    return SERVO_OK;
-}
-
-/**
- * @brief Hardware callback: деініціалізація
- */
-static Servo_Status_t ACS712_HW_DeInit(void* driver_data)
-{
-    /* АЦП не деініціалізуємо — він може використовуватись іншими модулями */
-    (void)driver_data;
     return SERVO_OK;
 }
 
@@ -147,19 +136,13 @@ Servo_Status_t ACS712_Create(ACS712_Driver_t* driver, const ACS712_Config_t* con
     /* Обчислення коефіцієнту конвертації з параметрів варіанту:
      * current_coefficient = 1 / (sensitivity × divider_ratio)
      * Одиниця: А/В — множиться на напругу АЦП, результат у Амперах. */
-    float sensitivity  = acs712_variants[config->variant].sensitivity_v_per_a;
-    driver->current_coefficient = 1.0f / (sensitivity * config->divider_ratio);
-    driver->max_current_a       = acs712_variants[config->variant].max_current_a;
-    driver->adc                 = config->adc;
+    float sensitivity = acs712_variants[config->variant].sensitivity_v_per_a;
+    driver->current_coefficient   = 1.0f / (sensitivity * config->divider_ratio);
+    driver->adc                   = config->adc;
 
     /* Налаштування hardware callbacks */
-    driver->interface.hw.init      = ACS712_HW_Init;
-    driver->interface.hw.deinit    = ACS712_HW_DeInit;
-    driver->interface.hw.read_raw  = ACS712_HW_ReadRaw;
-    driver->interface.hw.calibrate = NULL;  /* Калібрування — програмне, у current.c */
-
-    /* Можливості датчика */
-    driver->interface.capabilities = CURRENT_CAP_BIDIRECTIONAL;
+    driver->interface.hw.init     = ACS712_HW_Init;
+    driver->interface.hw.read_raw = ACS712_HW_ReadRaw;
 
     /* Вказівник для callbacks */
     driver->interface.driver_data = driver;
