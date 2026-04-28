@@ -31,18 +31,6 @@ static Servo_Status_t GPIO_Brake_HW_Init(void* driver_data)
 }
 
 /**
- * @brief Hardware callback: деініціалізація GPIO
- */
-static Servo_Status_t GPIO_Brake_HW_Deinit(void* driver_data)
-{
-    // GPIO деініціалізація не потрібна (керується Board layer)
-
-    (void)driver_data;  // Unused в цій реалізації
-
-    return SERVO_OK;
-}
-
-/**
  * @brief Hardware callback: фізична активація гальм
  */
 static Servo_Status_t GPIO_Brake_HW_Engage(void* driver_data)
@@ -97,9 +85,8 @@ Servo_Status_t GPIO_Brake_Create(GPIO_Brake_Driver_t* driver, const GPIO_Brake_C
     driver->active_high = config->active_high;
 
     // Налаштування hardware callbacks
-    driver->interface.hw.init = GPIO_Brake_HW_Init;
-    driver->interface.hw.deinit = GPIO_Brake_HW_Deinit;
-    driver->interface.hw.engage = GPIO_Brake_HW_Engage;
+    driver->interface.hw.init    = GPIO_Brake_HW_Init;
+    driver->interface.hw.engage  = GPIO_Brake_HW_Engage;
     driver->interface.hw.release = GPIO_Brake_HW_Release;
 
     // Вказівник на driver_data (для callbacks)

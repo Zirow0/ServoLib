@@ -3,9 +3,6 @@
  * @brief Універсальний інтерфейс драйвера гальм з hardware callbacks
  * @author ServoCore Team
  * @date 2025
- *
- * Уніфікований інтерфейс для різних типів гальм (електромагнітні, пневматичні, гідравлічні)
- * з підтримкою перехідних станів та платформонезалежною архітектурою
  */
 
 #ifndef SERVOCORE_DRV_BRAKE_H
@@ -48,7 +45,6 @@ typedef struct {
     uint32_t transition_start_time_ms;  /**< Час початку перехідного стану */
     uint32_t engage_time_ms;            /**< Таймінг переходу до ENGAGED */
     uint32_t release_time_ms;           /**< Таймінг переходу до RELEASED */
-    bool is_initialized;                /**< Прапорець ініціалізації */
 } Brake_Data_t;
 
 /* Forward declaration */
@@ -58,33 +54,9 @@ struct Brake_Interface_s;
  * @brief Hardware callbacks для апаратних операцій
  */
 typedef struct {
-    /**
-     * @brief Ініціалізація апаратури
-     * @param driver_data Вказівник на конкретний драйвер
-     * @return Servo_Status_t Статус виконання
-     */
-    Servo_Status_t (*init)(void* driver_data);
-
-    /**
-     * @brief Деініціалізація апаратури
-     * @param driver_data Вказівник на конкретний драйвер
-     * @return Servo_Status_t Статус виконання
-     */
-    Servo_Status_t (*deinit)(void* driver_data);
-
-    /**
-     * @brief Фізична активація гальм (встановити GPIO/клапан)
-     * @param driver_data Вказівник на конкретний драйвер
-     * @return Servo_Status_t Статус виконання
-     */
-    Servo_Status_t (*engage)(void* driver_data);
-
-    /**
-     * @brief Фізичне відпускання гальм (скинути GPIO/клапан)
-     * @param driver_data Вказівник на конкретний драйвер
-     * @return Servo_Status_t Статус виконання
-     */
-    Servo_Status_t (*release)(void* driver_data);
+    Servo_Status_t (*init)(void* driver_data);     /**< Ініціалізація апаратури */
+    Servo_Status_t (*engage)(void* driver_data);   /**< Фізична активація гальм */
+    Servo_Status_t (*release)(void* driver_data);  /**< Фізичне відпускання гальм */
 } Brake_Hardware_Callbacks_t;
 
 /**
@@ -110,16 +82,6 @@ typedef struct Brake_Interface_s {
 Servo_Status_t Brake_Init(Brake_Interface_t* brake, const Brake_Params_t* params);
 
 /**
- * @brief Деініціалізація драйвера гальм
- *
- * Викликає hw.deinit() та встановлює стан ENGAGED (fail-safe)
- *
- * @param brake Вказівник на інтерфейс
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t Brake_Deinit(Brake_Interface_t* brake);
-
-/**
  * @brief Активувати гальма (заблокувати рух)
  *
  * Викликає hw.engage() та переводить у стан ENGAGING
@@ -138,17 +100,6 @@ Servo_Status_t Brake_Engage(Brake_Interface_t* brake);
  * @return Servo_Status_t Статус виконання
  */
 Servo_Status_t Brake_Release(Brake_Interface_t* brake);
-
-/**
- * @brief Аварійна активація гальм
- *
- * Для GPIO-драйвера ідентична Brake_Engage().
- * Складніші драйвери можуть реалізувати спеціальну логіку всередині свого драйвера.
- *
- * @param brake Вказівник на інтерфейс
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t Brake_EmergencyEngage(Brake_Interface_t* brake);
 
 /**
  * @brief Оновлення стану гальм (обробка переходів)
@@ -186,14 +137,6 @@ bool Brake_IsEngaged(const Brake_Interface_t* brake);
  * @return bool true якщо гальма у стані RELEASED
  */
 bool Brake_IsReleased(const Brake_Interface_t* brake);
-
-/**
- * @brief Перевірка чи гальма у перехідному стані
- *
- * @param brake Вказівник на інтерфейс
- * @return bool true якщо стан ENGAGING або RELEASING
- */
-bool Brake_IsTransitioning(const Brake_Interface_t* brake);
 
 #ifdef __cplusplus
 }

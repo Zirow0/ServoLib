@@ -246,7 +246,7 @@ Servo_Status_t Servo_EmergencyStop(Servo_Controller_t* servo)
 
     // Аварійна активація гальм
     if (servo->brake != NULL && servo->config.enable_brake) {
-        Brake_EmergencyEngage(servo->brake);
+        Brake_Engage(servo->brake);
     }
 
     Error_Log(&servo->error_mgr, ERR_NONE, ERR_SEVERITY_CRITICAL, "Emergency stop");

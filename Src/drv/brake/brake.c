@@ -28,69 +28,28 @@ Servo_Status_t Brake_Init(Brake_Interface_t* brake, const Brake_Params_t* params
         return SERVO_ERROR_NULL_PTR;
     }
 
-    // Перевірка наявності обов'язкових callbacks
     if (brake->hw.init == NULL || brake->hw.engage == NULL || brake->hw.release == NULL) {
         return SERVO_ERROR_NULL_PTR;
     }
 
-    // Ініціалізація даних
     memset(&brake->data, 0, sizeof(Brake_Data_t));
     brake->data.engage_time_ms = params->engage_time_ms;
     brake->data.release_time_ms = params->release_time_ms;
-    brake->data.state = BRAKE_STATE_ENGAGED;  // Fail-safe: гальма активні за замовчуванням
-    brake->data.transition_start_time_ms = 0;
-    brake->data.is_initialized = false;
-
-    // Виклик апаратної ініціалізації
-    Servo_Status_t status = brake->hw.init(brake->driver_data);
-    if (status != SERVO_OK) {
-        return status;
-    }
-
-    // Встановлення фізичного стану гальм (активні)
-    status = brake->hw.engage(brake->driver_data);
-    if (status != SERVO_OK) {
-        return status;
-    }
-
-    brake->data.is_initialized = true;
-
-    return SERVO_OK;
-}
-
-Servo_Status_t Brake_Deinit(Brake_Interface_t* brake)
-{
-    if (brake == NULL || !brake->data.is_initialized) {
-        return SERVO_ERROR_NULL_PTR;
-    }
-
-    // Fail-safe: активуємо гальма перед деініціалізацією
-    brake->hw.engage(brake->driver_data);
     brake->data.state = BRAKE_STATE_ENGAGED;
 
-    // Виклик апаратної деініціалізації
-    if (brake->hw.deinit != NULL) {
-        brake->hw.deinit(brake->driver_data);
-    }
+    Servo_Status_t status = brake->hw.init(brake->driver_data);
+    if (status != SERVO_OK) return status;
 
-    brake->data.is_initialized = false;
-
-    return SERVO_OK;
+    return brake->hw.engage(brake->driver_data);
 }
 
 Servo_Status_t Brake_Engage(Brake_Interface_t* brake)
 {
-    if (brake == NULL || !brake->data.is_initialized) {
-        return SERVO_ERROR_NULL_PTR;
-    }
+    if (brake == NULL) return SERVO_ERROR_NULL_PTR;
 
-    // Виклик апаратної операції
     Servo_Status_t status = brake->hw.engage(brake->driver_data);
-    if (status != SERVO_OK) {
-        return status;
-    }
+    if (status != SERVO_OK) return status;
 
-    // Перехід у стан ENGAGING
     brake->data.state = BRAKE_STATE_ENGAGING;
     brake->data.transition_start_time_ms = Brake_GetTimeMs();
 
@@ -99,35 +58,20 @@ Servo_Status_t Brake_Engage(Brake_Interface_t* brake)
 
 Servo_Status_t Brake_Release(Brake_Interface_t* brake)
 {
-    if (brake == NULL || !brake->data.is_initialized) {
-        return SERVO_ERROR_NULL_PTR;
-    }
+    if (brake == NULL) return SERVO_ERROR_NULL_PTR;
 
-    // Виклик апаратної операції
     Servo_Status_t status = brake->hw.release(brake->driver_data);
-    if (status != SERVO_OK) {
-        return status;
-    }
+    if (status != SERVO_OK) return status;
 
-    // Перехід у стан RELEASING
     brake->data.state = BRAKE_STATE_RELEASING;
     brake->data.transition_start_time_ms = Brake_GetTimeMs();
 
     return SERVO_OK;
 }
 
-Servo_Status_t Brake_EmergencyEngage(Brake_Interface_t* brake)
-{
-    // Для базового інтерфейсу - ідентично звичайній активації
-    // Складні драйвери можуть реалізувати спеціальну логіку всередині свого драйвера
-    return Brake_Engage(brake);
-}
-
 Servo_Status_t Brake_Update(Brake_Interface_t* brake)
 {
-    if (brake == NULL || !brake->data.is_initialized) {
-        return SERVO_ERROR_NULL_PTR;
-    }
+    if (brake == NULL) return SERVO_ERROR_NULL_PTR;
 
     uint32_t current_time = Brake_GetTimeMs();
     uint32_t elapsed_time = current_time - brake->data.transition_start_time_ms;
@@ -162,10 +106,7 @@ Servo_Status_t Brake_Update(Brake_Interface_t* brake)
 
 Brake_State_t Brake_GetState(const Brake_Interface_t* brake)
 {
-    if (brake == NULL || !brake->data.is_initialized) {
-        return BRAKE_STATE_ENGAGED;  // Fail-safe
-    }
-
+    if (brake == NULL) return BRAKE_STATE_ENGAGED;  /* fail-safe */
     return brake->data.state;
 }
 
@@ -177,14 +118,4 @@ bool Brake_IsEngaged(const Brake_Interface_t* brake)
 bool Brake_IsReleased(const Brake_Interface_t* brake)
 {
     return Brake_GetState(brake) == BRAKE_STATE_RELEASED;
-}
-
-bool Brake_IsTransitioning(const Brake_Interface_t* brake)
-{
-    if (brake == NULL || !brake->data.is_initialized) {
-        return false;
-    }
-
-    return (brake->data.state == BRAKE_STATE_ENGAGING ||
-            brake->data.state == BRAKE_STATE_RELEASING);
 }
