@@ -116,16 +116,3 @@ Servo_Status_t HWD_GPIO_InitPin(const HWD_GPIO_Pin_t* pin)
     return SERVO_OK;
 }
 
-Servo_Status_t HWD_GPIO_DeInitPin(const HWD_GPIO_Pin_t* pin)
-{
-    if (pin == NULL || pin->port == NULL) {
-        return SERVO_INVALID;
-    }
-
-    uint32_t gpio_port = (uint32_t)(uintptr_t)pin->port;
-
-    /* Скидання до стану за замовчуванням: аналоговий вхід без підтяжки */
-    gpio_mode_setup(gpio_port, GPIO_MODE_ANALOG, GPIO_PUPD_NONE, pin->pin);
-
-    return SERVO_OK;
-}

@@ -93,13 +93,6 @@ Servo_Status_t HWD_GPIO_TogglePin(const HWD_GPIO_Pin_t* pin);
  */
 Servo_Status_t HWD_GPIO_InitPin(const HWD_GPIO_Pin_t* pin);
 
-/**
- * @brief Деініціалізація GPIO піна
- *
- * @param pin Вказівник на дескриптор піна
- * @return Servo_Status_t Статус виконання
- */
-Servo_Status_t HWD_GPIO_DeInitPin(const HWD_GPIO_Pin_t* pin);
 
 #ifdef __cplusplus
 }
