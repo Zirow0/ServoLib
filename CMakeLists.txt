@@ -14,6 +14,7 @@ endif()
 
 project(ServoLib_${BOARD} C ASM)
 set(CMAKE_C_STANDARD 99)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # ─── Перевірки ────────────────────────────────────────────────────────────────
 
@@ -37,10 +38,30 @@ if(NOT EXISTS "${CMAKE_SOURCE_DIR}/Apps/${APP}")
     message(FATAL_ERROR "Застосунок '${APP}' не знайдено в Apps/")
 endif()
 
-# ─── Завантаження конфігурації плати і джерел бібліотеки ─────────────────────
+# ─── Завантаження конфігурації плати, спільної логіки та джерел бібліотеки ────
 
-include(cmake/targets/${BOARD}.cmake)
-include(cmake/ServoLib.cmake)
+include(cmake/targets/${BOARD}.cmake)   # → DEVICE, BOARD_DIR, BOARD_SRCS
+include(cmake/stm32.cmake)              # → genlink, MCU_FLAGS, stm32_add_executable
+include(cmake/ServoLib.cmake)           # → SERVOLIB_* групи файлів
+
+# ─── LSP: compile_commands.json та .clangd ────────────────────────────────────
+
+file(CREATE_LINK
+    "${CMAKE_CURRENT_BINARY_DIR}/compile_commands.json"
+    "${CMAKE_SOURCE_DIR}/compile_commands.json"
+    SYMBOLIC
+)
+
+file(WRITE "${CMAKE_SOURCE_DIR}/.clangd"
+"CompileFlags:\n"
+"  Add:\n"
+"    - --target=arm-none-eabi\n"
+"  Remove:\n"
+"    - -mfpu=*\n"
+"    - -mfloat-abi=*\n"
+"    - -mcpu=*\n"
+"    - -mthumb\n"
+)
 
 # ─── Застосунок ───────────────────────────────────────────────────────────────
 

@@ -1,61 +1,89 @@
 #!/usr/bin/env bash
-# configure.sh — вибір цілі збірки, конфігурація CMake, оновлення compile_commands.json і .clangd
-set -e
+# configure.sh — інтерактивний вибір плати, цілі та програматора
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # ─── Перевірка LIBOPENCM3_DIR ─────────────────────────────────────────────────
-if [ -z "$LIBOPENCM3_DIR" ]; then
+if [[ -z "${LIBOPENCM3_DIR:-}" ]]; then
     echo "Помилка: LIBOPENCM3_DIR не встановлено."
     echo "Приклад: export LIBOPENCM3_DIR=/path/to/libopencm3"
     exit 1
 fi
 
-# ─── Меню вибору цілі ─────────────────────────────────────────────────────────
-TARGETS=(debug_encoder debug_motor debug_brake servo_full)
+# ─── Вибір плати ──────────────────────────────────────────────────────────────
+mapfile -t boards < <(basename -s .cmake "${SCRIPT_DIR}"/cmake/targets/*.cmake | sort)
 
-echo "Оберіть ціль збірки:"
-for i in "${!TARGETS[@]}"; do
-    echo "  $((i+1))) ${TARGETS[$i]}"
-done
-echo ""
-
-if [ -n "$1" ]; then
-    PRESET="$1"
-    valid=0
-    for t in "${TARGETS[@]}"; do
-        [ "$t" = "$PRESET" ] && valid=1 && break
-    done
-    if [ $valid -eq 0 ]; then
-        echo "Невідома ціль: $PRESET"
-        echo "Доступні: ${TARGETS[*]}"
-        exit 1
-    fi
+if [[ ${#boards[@]} -eq 0 ]]; then
+    echo "Помилка: не знайдено жодного файлу в cmake/targets/"
+    exit 1
+elif [[ ${#boards[@]} -eq 1 ]]; then
+    BOARD="${boards[0]}"
+    echo "Плата: ${BOARD}"
 else
-    read -rp "Введіть номер [1-${#TARGETS[@]}]: " choice
-    if ! [[ "$choice" =~ ^[1-9][0-9]*$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt "${#TARGETS[@]}" ]; then
+    echo "Оберіть плату:"
+    PS3="Введіть номер: "
+    select BOARD in "${boards[@]}"; do
+        [[ -n "${BOARD}" ]] && break
         echo "Невірний вибір."
-        exit 1
-    fi
-    PRESET="${TARGETS[$((choice-1))]}"
+    done
+fi
+
+# ─── Вибір застосунку ─────────────────────────────────────────────────────────
+mapfile -t apps < <(find "${SCRIPT_DIR}/Apps" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort)
+
+if [[ ${#apps[@]} -eq 0 ]]; then
+    echo "Помилка: не знайдено жодного застосунку в Apps/"
+    exit 1
 fi
 
 echo ""
-echo "→ Ціль: $PRESET"
+echo "Оберіть ціль:"
+PS3="Введіть номер: "
+select APP in "${apps[@]}"; do
+    [[ -n "${APP}" ]] && break
+    echo "Невірний вибір."
+done
 
-# ─── Конфігурація CMake ───────────────────────────────────────────────────────
-echo "→ cmake --preset $PRESET -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
-cmake --preset "$PRESET" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+# ─── Вибір програматора ───────────────────────────────────────────────────────
+echo ""
+echo "Оберіть програматор (або 'пропустити' — питати при кожній прошивці):"
+PS3="Введіть номер: "
+select choice in "stlink" "daplink" "jlink" "пропустити"; do
+    [[ -n "${choice}" ]] && break
+    echo "Невірний вибір."
+done
 
-# ─── Симлінк compile_commands.json → корінь ───────────────────────────────────
-COMPILE_COMMANDS="$SCRIPT_DIR/build/$PRESET/compile_commands.json"
-if [ -f "$COMPILE_COMMANDS" ]; then
-    ln -sf "$COMPILE_COMMANDS" "$SCRIPT_DIR/compile_commands.json"
-    echo "→ compile_commands.json → build/$PRESET/compile_commands.json"
+if [[ "${choice}" == "пропустити" ]]; then
+    PROGRAMMER=""
 else
-    echo "Попередження: $COMPILE_COMMANDS не знайдено."
+    PROGRAMMER="${choice}"
 fi
 
+# ─── CMake конфігурація ───────────────────────────────────────────────────────
+BUILD_DIR="${SCRIPT_DIR}/build/${BOARD}/${APP}"
+
 echo ""
-echo "Конфігурацію завершено. Для збірки:"
-echo "  cmake --build build/$PRESET"
+echo "→ Плата:      ${BOARD}"
+echo "→ Ціль:       ${APP}"
+echo "→ Програматор: ${PROGRAMMER:-<питати при прошивці>}"
+echo "→ Директорія: ${BUILD_DIR}"
+echo ""
+
+cmake -B "${BUILD_DIR}" \
+      -G Ninja \
+      -DBOARD="${BOARD}" \
+      -DAPP="${APP}" \
+      -DCMAKE_TOOLCHAIN_FILE="${SCRIPT_DIR}/cmake/toolchain/arm-none-eabi.cmake"
+
+# ─── Збереження стану ─────────────────────────────────────────────────────────
+cat > "${SCRIPT_DIR}/.preset" <<EOF
+BOARD="${BOARD}"
+APP="${APP}"
+PROGRAMMER="${PROGRAMMER}"
+EOF
+
+echo ""
+echo "Конфігурацію завершено. Далі:"
+echo "  ./build.sh"
+echo "  ./flash.sh"

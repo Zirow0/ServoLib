@@ -1,67 +1,122 @@
 #!/usr/bin/env bash
-# flash.sh — завантаження прошивки на плату через OpenOCD
-# Використання: ./flash.sh [stlink|daplink]
-set -e
+# flash.sh — прошивка плати через OpenOCD
+#
+# Виклик із cmake target (flash.sh <hex> <openocd_target_cfg>):
+#   аргументи передані явно, PROGRAMMER береться з .preset або питається
+#
+# Виклик вручну (flash.sh):
+#   усе визначається з .preset
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PRESET_FILE="${SCRIPT_DIR}/.preset"
 
-# ─── Визначення поточної цілі ─────────────────────────────────────────────────
-LINK=$(readlink "$SCRIPT_DIR/compile_commands.json" 2>/dev/null || true)
-if [ -z "$LINK" ]; then
+# ─── Читання .preset ──────────────────────────────────────────────────────────
+if [[ ! -f "${PRESET_FILE}" ]]; then
     echo "Помилка: проект не сконфігуровано."
-    echo "Запусти спочатку: ./configure.sh"
+    echo "Запустіть спочатку: ./configure.sh"
     exit 1
 fi
 
-TARGET=$(basename "$(dirname "$LINK")")
-BUILD_DIR="$SCRIPT_DIR/build/$TARGET"
-HEX="$BUILD_DIR/Apps/$TARGET/$TARGET.hex"
+# shellcheck source=/dev/null
+source "${PRESET_FILE}"
 
-if [ ! -f "$HEX" ]; then
-    echo "Помилка: прошивку не знайдено: $HEX"
-    echo "Запусти спочатку: ./build.sh"
+# ─── Аргументи або авто-визначення шляхів ────────────────────────────────────
+if [[ $# -eq 2 ]]; then
+    # Виклик із cmake --build --target flash
+    HEX_FILE="$1"
+    OPENOCD_TARGET_CFG="$2"
+else
+    # Самостійний виклик — визначаємо шляхи з .preset
+    BUILD_DIR="${SCRIPT_DIR}/build/${BOARD}/${APP}"
+    HEX_FILE="${BUILD_DIR}/Apps/${APP}/${APP}.hex"
+    # Для самостійного виклику збираємо спочатку
+    echo "→ Збірка..."
+    cmake --build "${BUILD_DIR}"
+fi
+
+if [[ ! -f "${HEX_FILE}" ]]; then
+    echo "Помилка: прошивку не знайдено: ${HEX_FILE}"
+    echo "Запустіть спочатку: ./build.sh"
     exit 1
 fi
 
-# ─── Визначення сімейства МК за платою ───────────────────────────────────────
-BOARD=$(grep -m1 "^BOARD:" "$BUILD_DIR/CMakeCache.txt" 2>/dev/null | cut -d= -f2- || true)
-
-case "$BOARD" in
-    STM32F411*|STM32F4*)  MCU_CFG="target/stm32f4x.cfg" ;;
-    STM32F1*)             MCU_CFG="target/stm32f1x.cfg" ;;
-    STM32H7*)             MCU_CFG="target/stm32h7x.cfg" ;;
-    *)                    MCU_CFG="target/stm32f4x.cfg" ;;
-esac
+# ─── Визначення OPENOCD_TARGET_CFG якщо не передано ──────────────────────────
+if [[ -z "${OPENOCD_TARGET_CFG:-}" ]]; then
+    # Читаємо з CMakeCache якщо доступний
+    CACHE="${SCRIPT_DIR}/build/${BOARD}/${APP}/CMakeCache.txt"
+    if [[ -f "${CACHE}" ]]; then
+        family=$(grep -m1 "^GENLINK_FAMILY" "${CACHE}" 2>/dev/null | cut -d= -f2 || true)
+        [[ -n "${family}" ]] && OPENOCD_TARGET_CFG="target/${family}x.cfg"
+    fi
+    # Fallback
+    OPENOCD_TARGET_CFG="${OPENOCD_TARGET_CFG:-target/stm32f4x.cfg}"
+fi
 
 # ─── Вибір програматора ───────────────────────────────────────────────────────
-PROGRAMMER="${1:-}"
-
-if [ -z "$PROGRAMMER" ]; then
+if [[ -z "${PROGRAMMER:-}" ]]; then
     echo "Оберіть програматор:"
-    echo "  1) stlink"
-    echo "  2) daplink"
-    read -rp "Введіть номер [1-2]: " choice
-    case "$choice" in
-        1) PROGRAMMER="stlink"  ;;
-        2) PROGRAMMER="daplink" ;;
-        *) echo "Невірний вибір."; exit 1 ;;
-    esac
+    PS3="Введіть номер: "
+    select choice in "stlink" "daplink" "jlink"; do
+        [[ -n "${choice}" ]] && PROGRAMMER="${choice}" && break
+        echo "Невірний вибір."
+    done
 fi
 
-case "$PROGRAMMER" in
-    stlink)  IFACE_CFG="interface/stlink.cfg"     ;;
-    daplink) IFACE_CFG="interface/cmsis-dap.cfg"  ;;
-    *) echo "Невідомий програматор: $PROGRAMMER (stlink або daplink)"; exit 1 ;;
+case "${PROGRAMMER}" in
+    stlink)  IFACE_CFG="interface/stlink.cfg"    USB_PATTERN="st-link|stlink"    SERIAL_CMD="hla_serial"       ;;
+    daplink) IFACE_CFG="interface/cmsis-dap.cfg" USB_PATTERN="cmsis-dap|daplink" SERIAL_CMD="cmsis_dap_serial" ;;
+    jlink)   IFACE_CFG="interface/jlink.cfg"     USB_PATTERN="j-link"            SERIAL_CMD="jlink_serial"     ;;
+    *) echo "Невідомий програматор: ${PROGRAMMER}"; exit 1 ;;
 esac
 
-# ─── Завантаження ─────────────────────────────────────────────────────────────
-echo "→ Ціль:       $TARGET"
-echo "→ Плата:      ${BOARD:-невідома} → $MCU_CFG"
-echo "→ Програматор: $PROGRAMMER → $IFACE_CFG"
-echo "→ HEX:        $HEX"
+# ─── Пошук підключених пристроїв через sysfs ─────────────────────────────────
+serials=()
+names=()
+
+for dir in /sys/bus/usb/devices/*/; do
+    product=$(cat "${dir}product" 2>/dev/null || true)
+    if echo "${product}" | grep -qiE "${USB_PATTERN}"; then
+        serial=$(cat "${dir}serial" 2>/dev/null || true)
+        if [[ -n "${serial}" ]]; then
+            serials+=("${serial}")
+            names+=("${product}")
+        fi
+    fi
+done
+
+# ─── Вибір конкретного пристрою ───────────────────────────────────────────────
+case ${#serials[@]} in
+    0)
+        echo "Помилка: ${PROGRAMMER} не знайдено."
+        exit 1
+        ;;
+    1)
+        SERIAL="${serials[0]}"
+        echo "→ Знайдено: ${names[0]}  (serial: ${SERIAL})"
+        ;;
+    *)
+        echo "Знайдено кілька пристроїв:"
+        PS3="Оберіть пристрій: "
+        select name in "${names[@]}"; do
+            idx=$((REPLY - 1))
+            if [[ "${idx}" -ge 0 && "${idx}" -lt ${#serials[@]} ]]; then
+                SERIAL="${serials[${idx}]}"
+                break
+            fi
+            echo "Невірний вибір."
+        done
+        ;;
+esac
+
+# ─── Прошивка ─────────────────────────────────────────────────────────────────
+echo "→ Програматор: ${PROGRAMMER}  (serial: ${SERIAL})"
+echo "→ Target cfg:  ${OPENOCD_TARGET_CFG}"
+echo "→ HEX:         ${HEX_FILE}"
 echo ""
 
 openocd \
-    -f "$IFACE_CFG" \
-    -f "$MCU_CFG" \
-    -c "program $HEX verify reset exit"
+    -f "${IFACE_CFG}" \
+    -c "${SERIAL_CMD} ${SERIAL}" \
+    -f "${OPENOCD_TARGET_CFG}" \
+    -c "program ${HEX_FILE} verify reset exit"

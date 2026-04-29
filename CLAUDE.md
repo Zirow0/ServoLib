@@ -16,17 +16,23 @@ export LIBOPENCM3_DIR=/path/to/libopencm3
 **Build targets** (`Apps/`): `debug_encoder`, `debug_motor`, `debug_brake`, `servo_full`
 
 ```bash
-# Configure (select target interactively or pass name):
-./configure.sh servo_full        # or: ./configure.sh debug_encoder, etc.
+# Configure (інтерактивний вибір плати, цілі та програматора):
+./configure.sh
 
 # Build:
-./build.sh                       # builds whichever target was last configured
+./build.sh
 
-# Flash to board:
-./flash.sh stlink                # or: ./flash.sh daplink
+# Flash:
+./flash.sh
+# або через CMake:
+cmake --build build/<BOARD>/<APP> --target flash
 ```
 
-Under the hood, `configure.sh` runs `cmake --preset <target>` and symlinks `compile_commands.json` to the project root for LSP/clangd. `build.sh` detects the current target from that symlink.
+`configure.sh` автоматично виявляє доступні плати з `cmake/targets/*.cmake` і цілі з `Apps/*/`. Стан зберігається у `.preset` (sourceable bash). `build.sh` і `flash.sh` читають `.preset`.
+
+`flash.sh` виявляє підключені програматори через sysfs. Якщо підключено кілька — пропонує вибір. Якщо програматор не збережено у `.preset` — питає при кожному виклику.
+
+**CMake layer:** `cmake/stm32.cmake` містить спільну логіку для всіх плат: `genlink.py` автовизначає CPU/FPU/DEFS/FAMILY з `devices.data`, лінкер-скрипт генерується автоматично з `OCM3/ld/linker.ld.S`. Файл плати (`cmake/targets/<BOARD>.cmake`) містить лише `DEVICE` і `BOARD_SRCS`.
 
 **No unit test framework exists.** Testing is done on real hardware (STM32F411CEU6 BlackPill) via UART output from the debug apps.
 
@@ -170,6 +176,8 @@ HWD_I2C_StartContinuousRead(handle, dev_addr, reg, volatile_buf, size);
 ```
 
 Hardware pin assignments are in `Board/STM32F411_OCM3/board_config.h`. Driver selection macros (`USE_MOTOR_PWM`, `USE_BRAKE`, `USE_SENSOR_AS5600`, `USE_SENSOR_ACS712`, etc.) are defined there.
+
+`compile_commands.json` (symlink) і `.clangd` генеруються автоматично при `cmake` configure — не редагувати вручну.
 
 ## Technical Specifications
 
