@@ -52,10 +52,37 @@ file(CREATE_LINK
     SYMBOLIC
 )
 
+# Визначаємо шляхи arm-none-eabi-gcc, щоб clangd не падав на гліб-заголовках хоста
+execute_process(
+    COMMAND ${CMAKE_C_COMPILER} -print-file-name=include
+    OUTPUT_VARIABLE _arm_gcc_include
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+execute_process(
+    COMMAND ${CMAKE_C_COMPILER} -print-sysroot
+    OUTPUT_VARIABLE _arm_sysroot
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+
+set(_clangd_isystem "")
+# GCC intrinsic headers (stdint.h, float.h тощо)
+if(_arm_gcc_include AND NOT _arm_gcc_include STREQUAL "include")
+    string(APPEND _clangd_isystem "    - -isystem${_arm_gcc_include}\n")
+endif()
+# Newlib headers (stdio.h, string.h тощо)
+if(_arm_sysroot)
+    string(APPEND _clangd_isystem "    - -isystem${_arm_sysroot}/include\n")
+endif()
+# Заглушки для Nix-специфічних відсутніх заголовків
+string(APPEND _clangd_isystem "    - -isystem${CMAKE_SOURCE_DIR}/.clangd-stubs\n")
+
 file(WRITE "${CMAKE_SOURCE_DIR}/.clangd"
 "CompileFlags:\n"
 "  Add:\n"
 "    - --target=arm-none-eabi\n"
+"${_clangd_isystem}"
 "  Remove:\n"
 "    - -mfpu=*\n"
 "    - -mfloat-abi=*\n"
