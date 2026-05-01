@@ -47,17 +47,65 @@ done
 
 # ─── Вибір програматора ───────────────────────────────────────────────────────
 echo ""
-echo "Оберіть програматор (або 'пропустити' — питати при кожній прошивці):"
+echo "Оберіть тип програматора (або 'пропустити' — питати при кожній прошивці):"
 PS3="Введіть номер: "
 select choice in "stlink" "daplink" "jlink" "пропустити"; do
     [[ -n "${choice}" ]] && break
     echo "Невірний вибір."
 done
 
-if [[ "${choice}" == "пропустити" ]]; then
-    PROGRAMMER=""
-else
+PROGRAMMER=""
+PROGRAMMER_SERIAL=""
+
+if [[ "${choice}" != "пропустити" ]]; then
     PROGRAMMER="${choice}"
+
+    # Визначаємо шаблон пошуку для цього типу
+    case "${PROGRAMMER}" in
+        stlink)  USB_PATTERN="st-link|stlink"    ;;
+        daplink) USB_PATTERN="cmsis-dap|daplink" ;;
+        jlink)   USB_PATTERN="j-link"            ;;
+    esac
+
+    # Шукаємо підключені пристрої через sysfs
+    prog_serials=()
+    prog_names=()
+    for dir in /sys/bus/usb/devices/*/; do
+        product=$(cat "${dir}product" 2>/dev/null || true)
+        if echo "${product}" | grep -qiE "${USB_PATTERN}"; then
+            serial=$(cat "${dir}serial" 2>/dev/null || true)
+            if [[ -n "${serial}" ]]; then
+                prog_serials+=("${serial}")
+                prog_names+=("${product}")
+            fi
+        fi
+    done
+
+    case ${#prog_serials[@]} in
+        0)
+            echo "Попередження: ${PROGRAMMER} не знайдено. ID буде запитано при прошивці."
+            ;;
+        1)
+            PROGRAMMER_SERIAL="${prog_serials[0]}"
+            echo "→ Знайдено: ${prog_names[0]}  (ID: ${PROGRAMMER_SERIAL})"
+            ;;
+        *)
+            echo "Знайдено кілька пристроїв ${PROGRAMMER}:"
+            PS3="Оберіть пристрій: "
+            display_items=()
+            for i in "${!prog_serials[@]}"; do
+                display_items+=("${prog_names[$i]}  (ID: ${prog_serials[$i]})")
+            done
+            select item in "${display_items[@]}"; do
+                idx=$((REPLY - 1))
+                if [[ "${idx}" -ge 0 && "${idx}" -lt ${#prog_serials[@]} ]]; then
+                    PROGRAMMER_SERIAL="${prog_serials[${idx}]}"
+                    break
+                fi
+                echo "Невірний вибір."
+            done
+            ;;
+    esac
 fi
 
 # ─── CMake конфігурація ───────────────────────────────────────────────────────
@@ -66,7 +114,11 @@ BUILD_DIR="${SCRIPT_DIR}/build/${BOARD}/${APP}"
 echo ""
 echo "→ Плата:      ${BOARD}"
 echo "→ Ціль:       ${APP}"
-echo "→ Програматор: ${PROGRAMMER:-<питати при прошивці>}"
+if [[ -n "${PROGRAMMER}" ]]; then
+    echo "→ Програматор: ${PROGRAMMER}${PROGRAMMER_SERIAL:+  (ID: ${PROGRAMMER_SERIAL})}"
+else
+    echo "→ Програматор: <питати при прошивці>"
+fi
 echo "→ Директорія: ${BUILD_DIR}"
 echo ""
 
@@ -81,6 +133,7 @@ cat > "${SCRIPT_DIR}/.preset" <<EOF
 BOARD="${BOARD}"
 APP="${APP}"
 PROGRAMMER="${PROGRAMMER}"
+PROGRAMMER_SERIAL="${PROGRAMMER_SERIAL}"
 EOF
 
 echo ""

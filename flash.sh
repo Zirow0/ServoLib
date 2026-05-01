@@ -70,47 +70,56 @@ case "${PROGRAMMER}" in
     *) echo "Невідомий програматор: ${PROGRAMMER}"; exit 1 ;;
 esac
 
-# ─── Пошук підключених пристроїв через sysfs ─────────────────────────────────
-serials=()
-names=()
-
-for dir in /sys/bus/usb/devices/*/; do
-    product=$(cat "${dir}product" 2>/dev/null || true)
-    if echo "${product}" | grep -qiE "${USB_PATTERN}"; then
-        serial=$(cat "${dir}serial" 2>/dev/null || true)
-        if [[ -n "${serial}" ]]; then
-            serials+=("${serial}")
-            names+=("${product}")
-        fi
-    fi
-done
-
 # ─── Вибір конкретного пристрою ───────────────────────────────────────────────
-case ${#serials[@]} in
-    0)
-        echo "Помилка: ${PROGRAMMER} не знайдено."
-        exit 1
-        ;;
-    1)
-        SERIAL="${serials[0]}"
-        echo "→ Знайдено: ${names[0]}  (serial: ${SERIAL})"
-        ;;
-    *)
-        echo "Знайдено кілька пристроїв:"
-        PS3="Оберіть пристрій: "
-        select name in "${names[@]}"; do
-            idx=$((REPLY - 1))
-            if [[ "${idx}" -ge 0 && "${idx}" -lt ${#serials[@]} ]]; then
-                SERIAL="${serials[${idx}]}"
-                break
+# Якщо збережено конкретний ID — використовуємо одразу
+if [[ -n "${PROGRAMMER_SERIAL:-}" ]]; then
+    SERIAL="${PROGRAMMER_SERIAL}"
+    echo "→ Програматор: ${PROGRAMMER}  (ID: ${SERIAL})"
+else
+    # Пошук підключених пристроїв через sysfs
+    serials=()
+    names=()
+
+    for dir in /sys/bus/usb/devices/*/; do
+        product=$(cat "${dir}product" 2>/dev/null || true)
+        if echo "${product}" | grep -qiE "${USB_PATTERN}"; then
+            serial=$(cat "${dir}serial" 2>/dev/null || true)
+            if [[ -n "${serial}" ]]; then
+                serials+=("${serial}")
+                names+=("${product}")
             fi
-            echo "Невірний вибір."
-        done
-        ;;
-esac
+        fi
+    done
+
+    case ${#serials[@]} in
+        0)
+            echo "Помилка: ${PROGRAMMER} не знайдено."
+            exit 1
+            ;;
+        1)
+            SERIAL="${serials[0]}"
+            echo "→ Знайдено: ${names[0]}  (ID: ${SERIAL})"
+            ;;
+        *)
+            echo "Знайдено кілька пристроїв ${PROGRAMMER}:"
+            PS3="Оберіть пристрій: "
+            display_items=()
+            for i in "${!serials[@]}"; do
+                display_items+=("${names[$i]}  (ID: ${serials[$i]})")
+            done
+            select item in "${display_items[@]}"; do
+                idx=$((REPLY - 1))
+                if [[ "${idx}" -ge 0 && "${idx}" -lt ${#serials[@]} ]]; then
+                    SERIAL="${serials[${idx}]}"
+                    break
+                fi
+                echo "Невірний вибір."
+            done
+            ;;
+    esac
+fi
 
 # ─── Прошивка ─────────────────────────────────────────────────────────────────
-echo "→ Програматор: ${PROGRAMMER}  (serial: ${SERIAL})"
 echo "→ Target cfg:  ${OPENOCD_TARGET_CFG}"
 echo "→ HEX:         ${HEX_FILE}"
 echo ""
