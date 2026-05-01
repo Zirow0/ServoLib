@@ -49,7 +49,6 @@ int main(void)
     PWM_Motor_Create(&motor, &mot_cfg);
 
     Motor_Params_t mot_params = {
-        .type             = MOTOR_TYPE_DC_PWM,
         .max_power        = 100.0f,
         .min_power        = 5.0f,
         .invert_direction = false,
@@ -106,7 +105,6 @@ int main(void)
             .enable_acceleration_limit = false,
 
             .enable_current_protection  = false,
-            .enable_thermal_protection  = false,
 
             .watchdog_timeout_ms   = 500,
             .enable_watchdog       = true,

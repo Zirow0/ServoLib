@@ -64,7 +64,6 @@ int main(void)
     PWM_Motor_Create(&motor, &mot_cfg);
 
     Motor_Params_t params = {
-        .type             = MOTOR_TYPE_DC_PWM,
         .max_power        = 100.0f,
         .min_power        = 5.0f,
         .invert_direction = false,
@@ -75,19 +74,17 @@ int main(void)
 
     char buf[64];
     uint32_t cycle = 0;
-    Motor_Stats_t stats;
 
     /* ── Тест: вперед → стоп → назад → стоп ────────────────────────────── */
     while (1) {
         HWD_UART_WriteString("-> FWD 50%\r\n");
-        Motor_SetPower_DC(&motor.interface, 50.0f);
+        Motor_SetPower(&motor.interface, 50.0f);
         HWD_Timer_DelayMs(2000);
 
-        Motor_GetStats(&motor.interface, &stats);
         snprintf(buf, sizeof(buf), "   state:%s dir:%s pwr:%d%%\r\n",
-                 motor_state_str(stats.state),
-                 motor_dir_str(stats.direction),
-                 (int)stats.current_power);
+                 motor_state_str(motor.interface.data.state),
+                 motor_dir_str(motor.interface.data.direction),
+                 (int)motor.interface.data.current_power);
         HWD_UART_WriteString(buf);
 
         HWD_UART_WriteString("-> STOP\r\n");
@@ -95,26 +92,21 @@ int main(void)
         HWD_Timer_DelayMs(1000);
 
         HWD_UART_WriteString("-> BWD 50%\r\n");
-        Motor_SetPower_DC(&motor.interface, -50.0f);
+        Motor_SetPower(&motor.interface, -50.0f);
         HWD_Timer_DelayMs(2000);
 
-        Motor_GetStats(&motor.interface, &stats);
         snprintf(buf, sizeof(buf), "   state:%s dir:%s pwr:%d%%\r\n",
-                 motor_state_str(stats.state),
-                 motor_dir_str(stats.direction),
-                 (int)stats.current_power);
+                 motor_state_str(motor.interface.data.state),
+                 motor_dir_str(motor.interface.data.direction),
+                 (int)motor.interface.data.current_power);
         HWD_UART_WriteString(buf);
 
         HWD_UART_WriteString("-> STOP\r\n");
         Motor_Stop(&motor.interface);
         HWD_Timer_DelayMs(1000);
 
-        Motor_GetStats(&motor.interface, &stats);
-        snprintf(buf, sizeof(buf), "cycle:%lu starts:%lu run:%lums err:%lu\r\n",
-                 (unsigned long)++cycle,
-                 (unsigned long)stats.total_starts,
-                 (unsigned long)stats.run_time_ms,
-                 (unsigned long)stats.error_count);
+        snprintf(buf, sizeof(buf), "cycle:%lu\r\n",
+                 (unsigned long)++cycle);
         HWD_UART_WriteString(buf);
 
         HWD_GPIO_TogglePin(&led_pin);

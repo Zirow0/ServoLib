@@ -40,7 +40,6 @@ set(SERVOLIB_CTRL
     ${SL}/ctrl/pid_mgr.c
     ${SL}/ctrl/safety.c
     ${SL}/ctrl/traj.c
-    ${SL}/ctrl/err.c
     ${SL}/ctrl/time.c
 )
 
