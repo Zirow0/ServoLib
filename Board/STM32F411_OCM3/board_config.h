@@ -63,14 +63,16 @@ extern "C" {
 #define MOTOR_DIR_GPIO_PORT     GPIOA
 #define MOTOR_DIR_PIN           GPIO7
 
-/* Incremental Encoder (TIM4 CH1 → PB6/AF2, PB5 input) ----------------------*/
+/* Incremental Encoder (TIM4 CH1 → PB6/AF2, PB4 input) ----------------------*/
+/* A: PB6 → EXTI6 (exti9_5_isr) + TIM4_CH1 IC                               */
+/* B: PB4 → EXTI4 (exti4_isr — виключний вектор, нема race при 8+ kHz)      */
 #define ENCODER_TIMER_BASE      TIM4
 #define ENCODER_TIMER_RCC       RCC_TIM4
 #define ENCODER_GPIO_PORT_A     GPIOB
 #define ENCODER_GPIO_PIN_A      GPIO6
 #define ENCODER_GPIO_RCC_A      RCC_GPIOB
 #define ENCODER_GPIO_PORT_B     GPIOB
-#define ENCODER_GPIO_PIN_B      GPIO5
+#define ENCODER_GPIO_PIN_B      GPIO4
 #define ENCODER_GPIO_RCC_B      RCC_GPIOB
 #define ENCODER_GPIO_AF         GPIO_AF2
 #define ENCODER_CPR             4000U
