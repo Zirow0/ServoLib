@@ -198,6 +198,15 @@ typedef struct {
 
 /* Exported functions prototypes ---------------------------------------------*/
 
+const char*    Servo_GetStatusString(Servo_Status_t status);
+const char*    Servo_GetModeString(Servo_Mode_t mode);
+const char*    Servo_GetStateString(Servo_State_t state);
+bool           Servo_IsError(Servo_Status_t status);
+bool           Servo_ModeRequiresSensor(Servo_Mode_t mode);
+Servo_Status_t Axis_InitDefaultConfig(Axis_Config_t* config);
+Servo_Status_t Axis_InitState(Axis_State_t* state);
+Servo_Status_t Axis_ValidateConfig(const Axis_Config_t* config);
+
 #ifdef __cplusplus
 }
 #endif

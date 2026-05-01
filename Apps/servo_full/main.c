@@ -57,31 +57,18 @@ int main(void)
     Motor_Init(&motor.interface, &mot_params);
 
     /* ── Інкрементальний енкодер ─────────────────────────────────────────── */
-    Incremental_Encoder_Config_t enc_cfg = {
-        .cpr = ENCODER_CPR,
-        .hw  = {
-            .timer_base  = ENCODER_TIMER_BASE,
-            .rcc_timer   = ENCODER_TIMER_RCC,
-            .gpio_port_a = ENCODER_GPIO_PORT_A,
-            .gpio_pin_a  = ENCODER_GPIO_PIN_A,
-            .rcc_gpio_a  = ENCODER_GPIO_RCC_A,
-            .gpio_port_b = ENCODER_GPIO_PORT_B,
-            .gpio_pin_b  = ENCODER_GPIO_PIN_B,
-            .rcc_gpio_b  = ENCODER_GPIO_RCC_B,
-            .gpio_af     = ENCODER_GPIO_AF,
-            .invert_a    = false,
-            .invert_b    = false,
-        },
+    static const Incremental_Encoder_HW_t enc_hw = {
+        .gpio_port_a = ENCODER_GPIO_PORT_A,
+        .gpio_pin_a  = ENCODER_GPIO_PIN_A,
+        .gpio_af_a   = ENCODER_GPIO_AF,
+        .gpio_port_b = ENCODER_GPIO_PORT_B,
+        .gpio_pin_b  = ENCODER_GPIO_PIN_B,
+        .timer_base  = ENCODER_TIMER_BASE,
+        .timer_rcc   = ENCODER_TIMER_RCC,
+        .ic_channel  = 1U,  /* TIM_IC1 = CH1 */
     };
-    Incremental_Encoder_Create(&encoder, &enc_cfg);
-
-    Position_Params_t enc_params = {
-        .type        = SENSOR_TYPE_ENCODER_OPT,
-        .min_angle   = 0.0f,
-        .max_angle   = 360.0f,
-        .update_rate = 1000,
-    };
-    Position_Sensor_Init(&encoder.interface, &enc_params);
+    Incremental_Encoder_Create(&encoder, ENCODER_CPR, &enc_hw);
+    Position_Sensor_Init(&encoder.interface, true);
 
     /* ── Гальмо ──────────────────────────────────────────────────────────── */
     GPIO_Brake_Config_t brk_cfg = {

@@ -23,6 +23,26 @@ extern "C" {
 /* Exported types ------------------------------------------------------------*/
 
 /**
+ * @brief Апаратна конфігурація енкодера
+ *
+ * Усі значення — апаратно-специфічні константи (GPIO*, TIM*, AF*).
+ * Зберігаються у драйвері та використовуються в ISR dispatch.
+ *
+ * Канал A → TIM Input Capture (AF) + EXTI (обидва фронти)
+ * Канал B → GPIO input + EXTI (обидва фронти)
+ */
+typedef struct {
+    uint32_t gpio_port_a;  /**< GPIO порт каналу A (напр. GPIOA) */
+    uint16_t gpio_pin_a;   /**< GPIO пін каналу A (напр. GPIO0) */
+    uint8_t  gpio_af_a;    /**< AF номер для TIM IC на піні A (напр. GPIO_AF1) */
+    uint32_t gpio_port_b;  /**< GPIO порт каналу B */
+    uint16_t gpio_pin_b;   /**< GPIO пін каналу B */
+    uint32_t timer_base;   /**< База таймера (напр. TIM2) */
+    uint32_t timer_rcc;    /**< RCC таймера (напр. RCC_TIM2) */
+    uint32_t ic_channel;   /**< IC канал: 1=CH1, 2=CH2, 3=CH3, 4=CH4 */
+} Incremental_Encoder_HW_t;
+
+/**
  * @brief Структура драйвера інкрементального енкодера
  *
  * Перше поле — Position_Sensor_Interface_t (обов'язково).
@@ -30,7 +50,8 @@ extern "C" {
 typedef struct {
     Position_Sensor_Interface_t interface; /**< Інтерфейс датчика (ПЕРШИЙ!) */
 
-    uint32_t cpr;                          /**< Counts per revolution (після x4) */
+    uint32_t                    cpr;       /**< Counts per revolution (після x4) */
+    Incremental_Encoder_HW_t   hw;        /**< Апаратна конфігурація (для ISR dispatch) */
 
     volatile int32_t  count;              /**< Позиція — оновлюється в EXTI ISR */
     volatile uint32_t period_us;          /**< Період між імпульсами A (мкс) — з IC ISR */
@@ -45,14 +66,17 @@ typedef struct {
 /**
  * @brief Створення драйвера
  *
- * Прив'язує callbacks до interface. Після виклику:
+ * Зберігає HW конфіг та прив'язує callbacks до interface.
+ * Апаратна ініціалізація (EXTI, TIM IC) відбувається при виклику
  * Position_Sensor_Init(&driver->interface, multi_turn).
  *
  * @param driver Вказівник на структуру драйвера
  * @param cpr    Counts per revolution (x4 — усі 4 фронти обох каналів)
+ * @param hw     Апаратна конфігурація пінів та таймера
  */
-Servo_Status_t Incremental_Encoder_Create(Incremental_Encoder_Driver_t* driver,
-                                           uint32_t cpr);
+Servo_Status_t Incremental_Encoder_Create(Incremental_Encoder_Driver_t *driver,
+                                           uint32_t cpr,
+                                           const Incremental_Encoder_HW_t *hw);
 
 /**
  * @brief EXTI ISR handler — викликати з board ISR при зміні каналу A або B
