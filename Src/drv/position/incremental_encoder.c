@@ -95,11 +95,20 @@ static uint8_t get_timer_nvic(uint32_t timer_base)
 
 static void dispatch_exti(uint8_t line)
 {
-    exti_reset_request(1U << line);
     Incremental_Encoder_Driver_t *d = s_exti_map[line];
-    if (d == NULL) { return; }
-    uint8_t a = gpio_get(d->hw.gpio_port_a, d->hw.gpio_pin_a) ? 1U : 0U;
-    uint8_t b = gpio_get(d->hw.gpio_port_b, d->hw.gpio_pin_b) ? 1U : 0U;
+    if (d == NULL) {
+        exti_reset_request(1U << line);
+        return;
+    }
+
+    /* Атомарне читання IDR ПЕРЕД очисткою прапора — мінімальна затримка */
+    uint32_t idr_a = GPIO_IDR(d->hw.gpio_port_a);
+    uint32_t idr_b = (d->hw.gpio_port_b == d->hw.gpio_port_a)
+                     ? idr_a : GPIO_IDR(d->hw.gpio_port_b);
+    exti_reset_request(1U << line);
+
+    uint8_t a = (idr_a & d->hw.gpio_pin_a) ? 1U : 0U;
+    uint8_t b = (idr_b & d->hw.gpio_pin_b) ? 1U : 0U;
     Incremental_Encoder_EXTI_Handler(d, a, b);
 }
 
@@ -115,7 +124,10 @@ static void dispatch_tim_ic(uint32_t timer_base)
         timer_clear_flag(timer_base, flag);
 
         uint32_t ccr    = *e->ccr_reg;
-        uint32_t period = ccr - e->last_ccr;   /* вірно при 32-bit wrap */
+        /* uint16_t cast: коректний wrap для 16-bit таймерів (TIM3/TIM4);
+         * для 32-bit (TIM2) обмежує max вимірюваний період до ~65 мс,
+         * що відповідає ~2 RPM при CPR=4000 — прийнятно для servo */
+        uint32_t period = (uint32_t)(uint16_t)(ccr - e->last_ccr);
         e->last_ccr     = ccr;
         if (e->driver != NULL && period > 0U) {
             Incremental_Encoder_IC_Handler(e->driver, period);
@@ -134,7 +146,6 @@ static Servo_Status_t IncEnc_HW_Init(void *driver_data)
     drv->period_us     = 0U;
     drv->last_pulse_ms = 0U;
     drv->direction     = 1;
-    drv->enc_state     = 0U;
 
     /* ── Реєстрація в dispatch tables ── */
     uint8_t line_a = (uint8_t)__builtin_ctz(hw->gpio_pin_a);
@@ -201,6 +212,14 @@ static Servo_Status_t IncEnc_HW_Init(void *driver_data)
     }
 
     timer_enable_counter(hw->timer_base);
+
+    /* ── Ініціалізація enc_state з фактичного стану пінів ── */
+    uint32_t idr_a = GPIO_IDR(hw->gpio_port_a);
+    uint32_t idr_b = (hw->gpio_port_b == hw->gpio_port_a)
+                     ? idr_a : GPIO_IDR(hw->gpio_port_b);
+    uint8_t init_a = (idr_a & hw->gpio_pin_a) ? 1U : 0U;
+    uint8_t init_b = (idr_b & hw->gpio_pin_b) ? 1U : 0U;
+    drv->enc_state = (uint8_t)((init_b << 1) | init_a);
 
     /* ── EXTI для каналу A (обидва фронти) ── */
     exti_select_source(1U << line_a, hw->gpio_port_a);

@@ -5,7 +5,7 @@
  * Підключення:
  *   TIM3 CH1 (PWM)   → PA6  (AF2)
  *   PA7      (DIR)   → PA7  (GPIO OUT)
- *   TIM2     (ENC)   → PA0/PA1 (AF1)
+ *   TIM4 CH1 (ENC)   → PB6 (AF2) + PB5 (input)
  *   Brake            → PA8  (GPIO OUT)
  *   I2C1 SCL/SDA     → PB6/PB7 (AF4)
  *   USART1 TX/RX     → PA9/PA10 (AF7)
@@ -63,16 +63,16 @@ extern "C" {
 #define MOTOR_DIR_GPIO_PORT     GPIOA
 #define MOTOR_DIR_PIN           GPIO7
 
-/* Incremental Encoder (TIM2 → PA0/PA1, AF1) ---------------------------------*/
-#define ENCODER_TIMER_BASE      TIM2
-#define ENCODER_TIMER_RCC       RCC_TIM2
-#define ENCODER_GPIO_PORT_A     GPIOA
-#define ENCODER_GPIO_PIN_A      GPIO0
-#define ENCODER_GPIO_RCC_A      RCC_GPIOA
-#define ENCODER_GPIO_PORT_B     GPIOA
-#define ENCODER_GPIO_PIN_B      GPIO1
-#define ENCODER_GPIO_RCC_B      RCC_GPIOA
-#define ENCODER_GPIO_AF         GPIO_AF1
+/* Incremental Encoder (TIM4 CH1 → PB6/AF2, PB5 input) ----------------------*/
+#define ENCODER_TIMER_BASE      TIM4
+#define ENCODER_TIMER_RCC       RCC_TIM4
+#define ENCODER_GPIO_PORT_A     GPIOB
+#define ENCODER_GPIO_PIN_A      GPIO6
+#define ENCODER_GPIO_RCC_A      RCC_GPIOB
+#define ENCODER_GPIO_PORT_B     GPIOB
+#define ENCODER_GPIO_PIN_B      GPIO5
+#define ENCODER_GPIO_RCC_B      RCC_GPIOB
+#define ENCODER_GPIO_AF         GPIO_AF2
 #define ENCODER_CPR             4000U
 
 /* Microsecond Timer (TIM5) --------------------------------------------------*/
