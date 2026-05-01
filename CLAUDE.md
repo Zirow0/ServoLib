@@ -28,9 +28,9 @@ export LIBOPENCM3_DIR=/path/to/libopencm3
 cmake --build build/<BOARD>/<APP> --target flash
 ```
 
-`configure.sh` автоматично виявляє доступні плати з `cmake/targets/*.cmake` і цілі з `Apps/*/`. Стан зберігається у `.preset` (sourceable bash). `build.sh` і `flash.sh` читають `.preset`.
+`configure.sh` автоматично виявляє доступні плати з `cmake/targets/*.cmake` і цілі з `Apps/*/`. Стан зберігається у `.preset` (sourceable bash): `BOARD`, `APP`, `PROGRAMMER` (тип), `PROGRAMMER_SERIAL` (ID пристрою). `build.sh` і `flash.sh` читають `.preset`.
 
-`flash.sh` виявляє підключені програматори через sysfs. Якщо підключено кілька — пропонує вибір. Якщо програматор не збережено у `.preset` — питає при кожному виклику.
+`flash.sh`: якщо `PROGRAMMER_SERIAL` збережено — використовує одразу без сканування. Якщо тип збережено без ID — сканує sysfs, при кількох пристроях показує меню `Назва (ID: ...)`. Якщо програматор не обрано — питає тип при кожному виклику.
 
 **CMake layer:** `cmake/stm32.cmake` містить спільну логіку для всіх плат: `genlink.py` автовизначає CPU/FPU/DEFS/FAMILY з `devices.data`, лінкер-скрипт генерується автоматично з `OCM3/ld/linker.ld.S`. Файл плати (`cmake/targets/<BOARD>.cmake`) містить лише `DEVICE` і `BOARD_SRCS`.
 

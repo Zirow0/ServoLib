@@ -14,7 +14,7 @@ Application (Apps/)
     ↓
 Control Layer (ctrl/)        — PID, Safety, Trajectory, Servo
     ↓
-Driver Layer (drv/)          — Motor, Position, Brake
+Driver Layer (drv/)          — Motor, Position, Brake, Current
     ↓
 HWD Layer (hwd/)             — PWM, SPI, I2C, GPIO, Timer, UART
     ↓
@@ -32,8 +32,8 @@ Platform Layer (Board/)      — STM32F411_OCM3 (libopencm3)
 | PWM мотора           | PA6   | TIM3 CH1 (AF2)   |
 | DIR мотора           | PA7   | GPIO OUT         |
 | Гальмо               | PA8   | GPIO OUT         |
-| Енкодер A            | PA0   | TIM2 CH1 (AF1)   |
-| Енкодер B            | PA1   | TIM2 CH2 (AF1)   |
+| Енкодер A            | PB6   | EXTI6 + TIM4 CH1 IC |
+| Енкодер B            | PB4   | EXTI4            |
 | UART TX              | PA9   | USART1 (AF7)     |
 | UART RX              | PA10  | USART1 (AF7)     |
 | LED                  | PC13  | GPIO OUT         |
@@ -55,18 +55,14 @@ Platform Layer (Board/)      — STM32F411_OCM3 (libopencm3)
 ### Конфігурація і збірка
 
 ```bash
-# 1. Обрати ціль і сконфігурувати проект
+# 1. Інтерактивно обрати плату, ціль і програматор
 ./configure.sh
-
-# Або напряму:
-./configure.sh debug_motor
 
 # 2. Зібрати
 ./build.sh
 
 # 3. Прошити
-./flash.sh stlink
-./flash.sh daplink
+./flash.sh
 ```
 
 ### Доступні цілі
@@ -83,8 +79,7 @@ Platform Layer (Board/)      — STM32F411_OCM3 (libopencm3)
 ## Компоненти
 
 ### Датчики положення
-- **Інкрементальний квадратурний енкодер** — TIM2, режим x4, 32-біт лічильник *(активний)*
-- **AEAT-9922** — 18-біт SPI магнітний енкодер *(доступний)*
+- **Інкрементальний квадратурний енкодер** — EXTI X4 + IC таймер (TIM4), 32-біт лічильник *(активний)*
 - **AS5600** — 12-біт I2C магнітний енкодер *(доступний)*
 
 ### Двигун
@@ -112,7 +107,7 @@ ServoLib/
 ├── Inc/                        # Заголовочні файли
 │   ├── core.h                  # Базові типи та enum
 │   ├── hwd/                    # HWD абстракції
-│   ├── drv/                    # Драйвери (motor, position, brake)
+│   ├── drv/                    # Драйвери (motor, position, brake, current)
 │   ├── ctrl/                   # Керування (servo, pid, safety, traj)
 │   └── util/                   # Утиліти (math, buf, derivative)
 ├── Src/                        # Реалізації
@@ -169,11 +164,9 @@ ServoLib/
 
 ## Документація
 
-- `Doc/README.md` — швидкий старт (українська)
 - `Doc/structure.md` — детальна структура
 - `Doc/technical_specifications.md` — технічна специфікація
 - `Doc/BRAKE_DRIVER.md` — драйвер гальм
-- `Doc/AEAT-9922_DRIVER_GUIDE.md` — енкодер AEAT-9922
 - `Templates/config_user_template.h` — шаблон конфігурації
 
 ---
