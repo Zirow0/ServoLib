@@ -109,8 +109,8 @@ static void dispatch_tim_ic(uint32_t timer_base)
         EncTimEntry_t *e = &s_tim_map[i];
         if (e->timer_base != timer_base) { continue; }
 
-        /* TIM_SR_CC1IF = (1<<1); для CHx: (1<<1) << (ic_ch-1) */
-        uint32_t flag = (1U << 1U) << (e->ic_ch - 1U);
+        /* TIM_SR_CC1IF = (1<<1); для CHx (0-based): (1<<1) << ic_ch */
+        uint32_t flag = (1U << 1U) << e->ic_ch;
         if (!timer_get_flag(timer_base, flag)) { continue; }
         timer_clear_flag(timer_base, flag);
 
@@ -144,11 +144,12 @@ static Servo_Status_t IncEnc_HW_Init(void *driver_data)
 
     if (s_tim_count < ENC_MAX) {
         /* Вирахувати ccr_reg тут — єдине місце де TIM_CCRx потрібні */
+        /* ic_channel 0-based: 0=CH1, 1=CH2, 2=CH3, 3=CH4 (відповідає enum tim_ic_id) */
         volatile uint32_t *ccr;
         switch (hw->ic_channel) {
-            case 1U: ccr = &TIM_CCR1(hw->timer_base); break;
-            case 2U: ccr = &TIM_CCR2(hw->timer_base); break;
-            case 3U: ccr = &TIM_CCR3(hw->timer_base); break;
+            case 0U: ccr = &TIM_CCR1(hw->timer_base); break;
+            case 1U: ccr = &TIM_CCR2(hw->timer_base); break;
+            case 2U: ccr = &TIM_CCR3(hw->timer_base); break;
             default:  ccr = &TIM_CCR4(hw->timer_base); break;
         }
         s_tim_map[s_tim_count].timer_base = hw->timer_base;
@@ -176,8 +177,13 @@ static Servo_Status_t IncEnc_HW_Init(void *driver_data)
     timer_set_prescaler(hw->timer_base, APB1_TIMER_CLOCK / 1000000U - 1U);
     timer_set_period(hw->timer_base, 0xFFFFFFFFU);
 
-    enum tim_ic_id  ic_id  = (enum tim_ic_id)hw->ic_channel;
-    enum tim_ic_input ic_in = (enum tim_ic_input)hw->ic_channel; /* TIM_IC_IN_TI1=1=TIM_IC1 */
+    /* ic_channel 0-based → enum tim_ic_id напряму (TIM_IC1=0, TIM_IC2=1, ...) */
+    /* TIM_IC_IN_TIx: TI1=1, TI2=2, TI3=5, TI4=6 — потрібен lookup */
+    static const enum tim_ic_input ic_in_map[4] = {
+        TIM_IC_IN_TI1, TIM_IC_IN_TI2, TIM_IC_IN_TI3, TIM_IC_IN_TI4
+    };
+    enum tim_ic_id    ic_id = (enum tim_ic_id)hw->ic_channel;
+    enum tim_ic_input ic_in = ic_in_map[hw->ic_channel < 4U ? hw->ic_channel : 0U];
 
     timer_ic_set_input(hw->timer_base, ic_id, ic_in);
     timer_ic_set_filter(hw->timer_base, ic_id, TIM_IC_OFF);
@@ -185,8 +191,8 @@ static Servo_Status_t IncEnc_HW_Init(void *driver_data)
     timer_ic_set_polarity(hw->timer_base, ic_id, TIM_IC_RISING);
     timer_ic_enable(hw->timer_base, ic_id);
 
-    /* CC IRQ: TIM_DIER_CC1IE = (1<<1); для CHx: зсув на (ic_ch-1) */
-    timer_enable_irq(hw->timer_base, (uint32_t)((1U << 1U) << (hw->ic_channel - 1U)));
+    /* CC IRQ: TIM_DIER_CC1IE = (1<<1); для CHx (0-based): зсув на ic_ch */
+    timer_enable_irq(hw->timer_base, (uint32_t)((1U << 1U) << hw->ic_channel));
 
     uint8_t tim_nvic = get_timer_nvic(hw->timer_base);
     if (tim_nvic != 0xFFU) {

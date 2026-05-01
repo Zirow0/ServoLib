@@ -39,7 +39,7 @@ typedef struct {
     uint16_t gpio_pin_b;   /**< GPIO пін каналу B */
     uint32_t timer_base;   /**< База таймера (напр. TIM2) */
     uint32_t timer_rcc;    /**< RCC таймера (напр. RCC_TIM2) */
-    uint32_t ic_channel;   /**< IC канал: 1=CH1, 2=CH2, 3=CH3, 4=CH4 */
+    uint32_t ic_channel;   /**< IC канал (0-based = enum tim_ic_id): 0=CH1, 1=CH2, 2=CH3, 3=CH4 */
 } Incremental_Encoder_HW_t;
 
 /**

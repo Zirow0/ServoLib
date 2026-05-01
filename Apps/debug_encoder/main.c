@@ -30,7 +30,7 @@ int main(void)
         .gpio_pin_b  = ENCODER_GPIO_PIN_B,
         .timer_base  = ENCODER_TIMER_BASE,
         .timer_rcc   = ENCODER_TIMER_RCC,
-        .ic_channel  = 1U,  /* TIM_IC1 = CH1 */
+        .ic_channel  = 0U,  /* TIM_IC1 = CH1 (0-based, відповідає enum tim_ic_id) */
     };
     Incremental_Encoder_Create(&encoder, ENCODER_CPR, &enc_hw);
     Position_Sensor_Init(&encoder.interface, true);
