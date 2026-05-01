@@ -47,9 +47,11 @@ typedef struct {
     AS5600_Config_t             config;
     HWD_I2C_Handle_t            i2c_handle;
 
-    volatile uint8_t            raw_buf[2];  /**< Оновлюється I2C IT IRQ */
+    volatile uint8_t            raw_buf[2];       /**< Оновлюється I2C IT IRQ */
     AS5600_MagnetStatus_t       magnet_status;
     uint32_t                    error_count;
+    uint16_t                    last_raw;         /**< Попередній 12-bit raw для детекції обертів */
+    int32_t                     revolution_count; /**< Лічильник обертів */
 } AS5600_Driver_t;
 
 /* Exported functions --------------------------------------------------------*/
@@ -58,7 +60,7 @@ typedef struct {
  * @brief Створення драйвера AS5600
  *
  * Прив'язує callbacks до interface. Після виклику:
- * Position_Sensor_Init(&driver->interface, multi_turn).
+ * Position_Sensor_Init(&driver->interface).
  */
 Servo_Status_t AS5600_Create(AS5600_Driver_t* driver,
                               const AS5600_Config_t* config);

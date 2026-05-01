@@ -249,11 +249,8 @@ static Servo_Status_t IncEnc_HW_ReadRaw(void *driver_data, Position_Raw_Data_t *
     uint32_t last_ms   = drv->last_pulse_ms;
     int8_t   dir       = drv->direction;
 
-    /* Нормалізація лічильника до [0, CPR) */
-    int32_t normalized = count % cpr;
-    if (normalized < 0) { normalized += cpr; }
-
-    raw->angle_rad    = (float)normalized / (float)cpr * TWO_PI;
+    /* Абсолютний кут напряму з лічильника ISR — multi-turn вбудований */
+    raw->angle_rad    = (float)count / (float)cpr * TWO_PI;
     raw->timestamp_us = HWD_Timer_GetMicros();
     raw->valid        = true;
 

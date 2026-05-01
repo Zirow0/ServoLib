@@ -68,7 +68,7 @@ typedef struct {
  *
  * Зберігає HW конфіг та прив'язує callbacks до interface.
  * Апаратна ініціалізація (EXTI, TIM IC) відбувається при виклику
- * Position_Sensor_Init(&driver->interface, multi_turn).
+ * Position_Sensor_Init(&driver->interface).
  *
  * @param driver Вказівник на структуру драйвера
  * @param cpr    Counts per revolution (x4 — усі 4 фронти обох каналів)

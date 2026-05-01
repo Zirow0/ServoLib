@@ -108,7 +108,7 @@ Incremental_Encoder_IC_Handler(driver, period_us);        // оновлює peri
 
 **Critical:** `HW_ReadRaw()` повертає лише сирі дані — ніколи градуси. Конвертація у `position.c`.
 
-`Position_Sensor_Init(sensor, bool multi_turn)` — другий параметр замість `Position_Params_t`.
+`Position_Sensor_Init(sensor)` — multi-turn відстежується всередині кожного драйвера (інкрементальний через `count`, AS5600 через `revolution_count` у `HW_ReadRaw`).
 
 ### Motor Driver
 

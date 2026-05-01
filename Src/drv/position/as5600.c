@@ -53,10 +53,18 @@ static Servo_Status_t AS5600_HW_Init(void* driver_data)
     }
 
     /* Запуск фонового continuous read у raw_buf */
-    return HWD_I2C_StartContinuousRead(&driver->i2c_handle,
-                                        AS5600_I2C_ADDRESS << 1,
-                                        AS5600_REG_ANGLE_H,
-                                        driver->raw_buf, 2);
+    Servo_Status_t s2 = HWD_I2C_StartContinuousRead(&driver->i2c_handle,
+                                                      AS5600_I2C_ADDRESS << 1,
+                                                      AS5600_REG_ANGLE_H,
+                                                      driver->raw_buf, 2);
+    if (s2 != SERVO_OK) return s2;
+
+    /* Зачекати перше оновлення буфера та зберегти початковий raw,
+     * щоб перший виклик HW_ReadRaw не виявив хибний перехід оберту */
+    HWD_Timer_DelayMs(5);
+    driver->last_raw = (((uint16_t)driver->raw_buf[0] << 8)
+                       | driver->raw_buf[1]) & AS5600_MAX_VALUE;
+    return SERVO_OK;
 }
 
 static Servo_Status_t AS5600_HW_ReadRaw(void* driver_data, Position_Raw_Data_t* raw)
@@ -64,10 +72,18 @@ static Servo_Status_t AS5600_HW_ReadRaw(void* driver_data, Position_Raw_Data_t* 
     AS5600_Driver_t* driver = (AS5600_Driver_t*)driver_data;
 
     /* Читання з volatile буфера — оновлюється I2C IT IRQ */
-    uint16_t angle_raw = (((uint16_t)driver->raw_buf[0] << 8)
-                         | driver->raw_buf[1]) & AS5600_MAX_VALUE;
+    uint16_t raw_now = (((uint16_t)driver->raw_buf[0] << 8)
+                       | driver->raw_buf[1]) & AS5600_MAX_VALUE;
 
-    raw->angle_rad      = (float)angle_raw * TWO_PI_F / 4096.0f;
+    /* Детекція переходу межі оберту (0↔4095) по стрибку > 2048 (½ оберту) */
+    int32_t diff = (int32_t)raw_now - (int32_t)driver->last_raw;
+    if      (diff >  2048) driver->revolution_count--;  /* перехід 360°→0° */
+    else if (diff < -2048) driver->revolution_count++;  /* перехід 0°→360° */
+    driver->last_raw = raw_now;
+
+    /* Абсолютний кут: оберти × 4096 + поточний raw → радіани */
+    int32_t abs_count   = driver->revolution_count * 4096 + (int32_t)raw_now;
+    raw->angle_rad      = (float)abs_count * TWO_PI_F / 4096.0f;
     raw->timestamp_us   = HWD_Timer_GetMicros();
     raw->has_velocity   = false;
     raw->velocity_rad_s = 0.0f;

@@ -33,7 +33,7 @@ int main(void)
         .ic_channel  = 0U,  /* TIM_IC1 = CH1 (0-based, відповідає enum tim_ic_id) */
     };
     Incremental_Encoder_Create(&encoder, ENCODER_CPR, &enc_hw);
-    Position_Sensor_Init(&encoder.interface, true);
+    Position_Sensor_Init(&encoder.interface);
 
     char buf[48];
 

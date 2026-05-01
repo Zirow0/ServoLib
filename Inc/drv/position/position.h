@@ -21,10 +21,13 @@ extern "C" {
 /**
  * @brief Сирі дані з датчика (заповнює драйвер)
  *
- * Драйвер конвертує raw → 0..2π радіанів до передачі.
+ * angle_rad — абсолютний кут (необмежений, може бути < 0 або >> 2π).
+ * Multi-turn відстежується всередині драйвера. position.c нормалізує
+ * angle_rad до [0, 2π) для position_rad, і зберігає напряму в
+ * absolute_position_rad (з урахуванням angle_offset_rad).
  */
 typedef struct {
-    float    angle_rad;       /**< Кут 0..2π */
+    float    angle_rad;       /**< Абсолютний кут (рад), необмежений */
     uint32_t timestamp_us;    /**< Мікросекунди (для velocity через derivative) */
     bool     has_velocity;    /**< true — драйвер надає velocity напряму (IC timer) */
     float    velocity_rad_s;  /**< Швидкість рад/с (якщо has_velocity = true) */
@@ -35,12 +38,12 @@ typedef struct {
  * @brief Внутрішній стан датчика (обчислюється в position.c)
  */
 typedef struct {
-    float    position_rad;          /**< Поточний кут 0..2π */
+    float    position_rad;          /**< Поточний кут 0..2π (нормалізований) */
     float    velocity_rad_s;        /**< Кутова швидкість рад/с */
-    int32_t  revolution_count;      /**< Лічильник повних обертів */
-    float    absolute_position_rad; /**< position + revolutions*2π */
+    float    absolute_position_rad; /**< Абсолютний кут з урахуванням angle_offset_rad */
+    float    angle_offset_rad;      /**< Зсув нульової точки (встановлюється SetPosition) */
 
-    float    last_position_rad;     /**< Попередній кут (для derivative) */
+    float    last_position_rad;     /**< Попередній кут (для derivative velocity) */
     uint32_t last_timestamp_us;     /**< Час попереднього Update (для derivative) */
 
     bool         is_initialized;
@@ -66,7 +69,6 @@ typedef struct Position_Sensor_Interface Position_Sensor_Interface_t;
 struct Position_Sensor_Interface {
     Position_Sensor_Data_t         data;        /**< Обчислені дані */
     Position_Sensor_HW_Callbacks_t hw;          /**< Hardware callbacks */
-    bool                           multi_turn;  /**< Увімкнути multi-turn tracking */
     void*                          driver_data; /**< Конкретний драйвер */
 };
 
@@ -75,11 +77,9 @@ struct Position_Sensor_Interface {
 /**
  * @brief Ініціалізація датчика
  *
- * @param sensor     Вказівник на інтерфейс
- * @param multi_turn Увімкнути підрахунок обертів
+ * Викликає hw.init(). Multi-turn відстежується всередині драйвера.
  */
-Servo_Status_t Position_Sensor_Init(Position_Sensor_Interface_t* sensor,
-                                    bool multi_turn);
+Servo_Status_t Position_Sensor_Init(Position_Sensor_Interface_t* sensor);
 
 /**
  * @brief Оновлення даних датчика

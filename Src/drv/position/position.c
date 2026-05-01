@@ -14,32 +14,21 @@
 #include "../../../Inc/drv/position/position.h"
 #include "../../../Inc/util/derivative.h"
 #include "../../../Inc/hwd/hwd_timer.h"
+#include <math.h>
 #include <string.h>
 
 /* Private functions ---------------------------------------------------------*/
 
 static float NormalizeAngle(float angle_rad)
 {
-    while (angle_rad >= TWO_PI) angle_rad -= TWO_PI;
-    while (angle_rad <  0.0f)  angle_rad += TWO_PI;
-    return angle_rad;
-}
-
-static void UpdateMultiTurn(Position_Sensor_Data_t* data, float current_rad)
-{
-    float diff = current_rad - data->last_position_rad;
-
-    if      (diff >  PI) data->revolution_count--;
-    else if (diff < -PI) data->revolution_count++;
-
-    data->absolute_position_rad = current_rad
-                                 + (float)data->revolution_count * TWO_PI;
+    float r = fmodf(angle_rad, TWO_PI);
+    if (r < 0.0f) r += TWO_PI;
+    return r;
 }
 
 /* Exported functions --------------------------------------------------------*/
 
-Servo_Status_t Position_Sensor_Init(Position_Sensor_Interface_t* sensor,
-                                    bool multi_turn)
+Servo_Status_t Position_Sensor_Init(Position_Sensor_Interface_t* sensor)
 {
     if (sensor == NULL) {
         return SERVO_INVALID;
@@ -47,7 +36,6 @@ Servo_Status_t Position_Sensor_Init(Position_Sensor_Interface_t* sensor,
 
     memset(&sensor->data, 0, sizeof(Position_Sensor_Data_t));
 
-    sensor->multi_turn            = multi_turn;
     sensor->data.last_timestamp_us = HWD_Timer_GetMicros();
     sensor->data.last_error        = ERR_NONE;
 
@@ -87,7 +75,8 @@ Servo_Status_t Position_Sensor_Update(Position_Sensor_Interface_t* sensor)
         return SERVO_ERROR;
     }
 
-    float current_rad = NormalizeAngle(raw.angle_rad);
+    float abs_rad     = raw.angle_rad + data->angle_offset_rad;
+    float current_rad = NormalizeAngle(abs_rad);
 
     /* Velocity */
     if (raw.has_velocity) {
@@ -101,16 +90,10 @@ Servo_Status_t Position_Sensor_Update(Position_Sensor_Interface_t* sensor)
         );
     }
 
-    /* Multi-turn */
-    if (sensor->multi_turn) {
-        UpdateMultiTurn(data, current_rad);
-    } else {
-        data->absolute_position_rad = current_rad;
-    }
-
-    data->position_rad      = current_rad;
-    data->last_position_rad = current_rad;
-    data->last_timestamp_us = raw.timestamp_us;
+    data->absolute_position_rad = abs_rad;
+    data->position_rad          = current_rad;
+    data->last_position_rad     = current_rad;
+    data->last_timestamp_us     = raw.timestamp_us;
 
     return SERVO_OK;
 }
@@ -151,17 +134,14 @@ Servo_Status_t Position_Sensor_SetPosition(Position_Sensor_Interface_t* sensor,
     if (sensor == NULL)                return SERVO_INVALID;
     if (!sensor->data.is_initialized) return SERVO_NOT_INIT;
 
-    float new_rad = DEG2RAD(position_deg);
-    float offset  = new_rad - sensor->data.position_rad;
+    float new_rad   = DEG2RAD(position_deg);
+    /* Сирий кут з драйвера (без поточного зсуву) */
+    float raw_angle = sensor->data.absolute_position_rad - sensor->data.angle_offset_rad;
 
-    sensor->data.position_rad           = new_rad;
-    sensor->data.last_position_rad      = new_rad;
-    sensor->data.absolute_position_rad += offset;
-
-    if (position_deg == 0.0f) {
-        sensor->data.revolution_count       = 0;
-        sensor->data.absolute_position_rad  = 0.0f;
-    }
+    sensor->data.angle_offset_rad      = new_rad - raw_angle;
+    sensor->data.absolute_position_rad = new_rad;
+    sensor->data.position_rad          = NormalizeAngle(new_rad);
+    sensor->data.last_position_rad     = sensor->data.position_rad;
 
     return SERVO_OK;
 }
