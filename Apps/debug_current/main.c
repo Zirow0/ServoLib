@@ -30,9 +30,9 @@ int main(void)
     static const ACS712_Config_t acs_cfg = {
         .variant                 = ACS712_30A,
         .adc                     = &current_adc,
-        .divider_ratio           = 0.694f,
+        .divider_ratio           = 0.65f,
         .overcurrent_threshold_a = 4.0f,
-        .ema_alpha               = 0.1f,
+        .ema_alpha               = 0.5f,
     };
     ACS712_Create(&current_driver, &acs_cfg);
 
