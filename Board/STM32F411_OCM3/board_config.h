@@ -39,9 +39,9 @@ extern "C" {
 // #define USE_HWD_I2C
 // #define USE_SENSOR_AS5600
 
-// #define USE_HWD_ADC
-// #define USE_SENSOR_CURRENT
-// #define USE_SENSOR_ACS712
+#define USE_HWD_ADC
+#define USE_SENSOR_CURRENT
+#define USE_SENSOR_ACS712
 
 #define USE_HWD_UART
 

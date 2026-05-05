@@ -27,6 +27,12 @@ set(SERVOLIB_POSITION
     ${SL}/drv/position/as5600.c
 )
 
+# Підсистема датчика струму
+set(SERVOLIB_CURRENT
+    ${SL}/drv/current/current.c
+    ${SL}/drv/current/acs712.c
+)
+
 # Підсистема гальма
 set(SERVOLIB_BRAKE
     ${SL}/drv/brake/brake.c

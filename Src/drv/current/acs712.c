@@ -27,7 +27,6 @@
 #endif
 
 #include "drv/current/acs712.h"
-#include "hwd/hwd_timer.h"
 #include <string.h>
 
 /* Private defines -----------------------------------------------------------*/
@@ -103,9 +102,8 @@ static Servo_Status_t ACS712_HW_ReadRaw(void* driver_data, Current_Raw_Data_t* r
     }
 
     /* Конвертація: I_raw = Vadc × current_coefficient */
-    raw->current_a    = vadc_v * driver->current_coefficient;
-    raw->timestamp_us = HWD_Timer_GetMicros();
-    raw->valid        = true;
+    raw->current_a = vadc_v * driver->current_coefficient;
+    raw->valid     = true;
 
     return SERVO_OK;
 }

@@ -53,7 +53,6 @@ Servo_Status_t Current_Sensor_Init(Current_Sensor_Interface_t* sensor,
     if (sensor->hw.init != NULL) {
         Servo_Status_t status = sensor->hw.init(sensor->driver_data, params);
         if (status != SERVO_OK) {
-            sensor->data.last_error = ERR_SENSOR_INIT_FAILED;
             return status;
         }
     }
