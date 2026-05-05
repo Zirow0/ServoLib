@@ -3,18 +3,22 @@
 #include "drv/motor/pwm.h"
 #include "drv/position/incremental_encoder.h"
 #include "drv/brake/gpio_brake.h"
+#include "drv/current/acs712.h"
 #include "hwd/hwd_pwm.h"
+#include "hwd/hwd_adc.h"
 #include "hwd/hwd_timer.h"
 #include "hwd/hwd_gpio.h"
 #include "hwd/hwd_uart.h"
 
 #include <stdio.h>
 
-static PWM_Motor_Driver_t          motor;
-static HWD_PWM_Handle_t            pwm_fwd;
+static PWM_Motor_Driver_t           motor;
+static HWD_PWM_Handle_t             pwm_fwd;
 static Incremental_Encoder_Driver_t encoder;
-static GPIO_Brake_Driver_t         brake;
-static Servo_Controller_t          servo;
+static GPIO_Brake_Driver_t          brake;
+static ACS712_Driver_t              current_driver;
+static HWD_ADC_Handle_t             current_adc;
+static Servo_Controller_t           servo;
 
 static const HWD_GPIO_Pin_t led_pin = {
     .port = (void*)LED_GPIO_PORT,
@@ -28,6 +32,29 @@ int main(void)
     Board_Init();
 
     HWD_UART_WriteString("ServoLib servo_full debug\r\n");
+
+    /* ── Датчик струму ACS712 ────────────────────────────────────────────── */
+    static const HWD_ADC_Config_t adc_cfg = {
+        .adc_base  = CURRENT_ADC_PERIPH,
+        .rcc_adc   = CURRENT_ADC_RCC,
+        .rcc_gpio  = CURRENT_ADC_GPIO_RCC,
+        .gpio_port = CURRENT_ADC_GPIO_PORT,
+        .gpio_pin  = CURRENT_ADC_GPIO_PIN,
+        .channel   = CURRENT_ADC_CHANNEL,
+        .vref_v    = CURRENT_ADC_VREF_V,
+    };
+    HWD_ADC_Init(&current_adc, &adc_cfg);
+    HWD_ADC_StartScan();
+
+    static const ACS712_Config_t acs_cfg = {
+        .variant                 = ACS712_30A,
+        .adc                     = &current_adc,
+        .divider_ratio           = 0.65f,
+        .overcurrent_threshold_a = 4.0f,
+        .ema_alpha               = 0.5f,
+    };
+    ACS712_Create(&current_driver, &acs_cfg);
+    Current_Sensor_Calibrate(&current_driver.interface);
 
     /* ── PWM канал ───────────────────────────────────────────────────────── */
     HWD_PWM_Config_t fwd_cfg = {
@@ -128,6 +155,7 @@ int main(void)
     char buf[64];
 
     while (1) {
+        Current_Sensor_Update(&current_driver.interface);
         Servo_Update(&servo);
 
         /* Вивід стану раз на 100 мс */
@@ -138,16 +166,21 @@ int main(void)
 
             float pos = Servo_GetPosition(&servo);
             float vel = Servo_GetVelocity(&servo);
+            float cur = 0.0f;
+            Current_Sensor_GetCurrent(&current_driver.interface, &cur);
 
             int pos_i = (int)pos;
             int pos_f = (int)((pos - (float)pos_i) * 100.0f);
             int vel_i = (int)vel;
             int vel_f = (int)((vel - (float)vel_i) * 100.0f);
+            int cur_i = (int)cur;
+            int cur_f = (int)((cur - (float)cur_i) * 100.0f);
             if (pos_f < 0) pos_f = -pos_f;
             if (vel_f < 0) vel_f = -vel_f;
+            if (cur_f < 0) cur_f = -cur_f;
 
-            snprintf(buf, sizeof(buf), "pos:%d.%02d vel:%d.%02d target:%d\r\n",
-                     pos_i, pos_f, vel_i, vel_f,
+            snprintf(buf, sizeof(buf), "pos:%d.%02d vel:%d.%02d cur:%d.%02dA target:%d\r\n",
+                     pos_i, pos_f, vel_i, vel_f, cur_i, cur_f,
                      (int)Servo_IsAtTarget(&servo));
             HWD_UART_WriteString(buf);
 
