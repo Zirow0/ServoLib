@@ -7,7 +7,9 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "../../Inc/ctrl/pid.h"
-#include <string.h>
+
+/* Private defines -----------------------------------------------------------*/
+#define PID_DT_MAX_S  0.1f   /**< Максимальний крок часу (захист від пауз/debug) */
 
 /* Private functions ---------------------------------------------------------*/
 
@@ -28,9 +30,6 @@ Servo_Status_t PID_Init(PID_Controller_t* pid, const PID_Params_t* params)
     if (pid == NULL || params == NULL) {
         return SERVO_INVALID;
     }
-
-    // Очищення структури
-    memset(pid, 0, sizeof(PID_Controller_t));
 
     pid->params = *params;
     PID_Reset(pid);
@@ -92,6 +91,10 @@ Servo_Status_t PID_Compute(PID_Controller_t* pid, float setpoint, float input, u
         return SERVO_OK;
     }
 
+    if (dt > PID_DT_MAX_S) {
+        dt = PID_DT_MAX_S;
+    }
+
     pid->last_time_us = current_time_us;
 
     float error = setpoint - input;
@@ -101,10 +104,12 @@ Servo_Status_t PID_Compute(PID_Controller_t* pid, float setpoint, float input, u
                 ? pid->params.Kp * error
                 : 0.0f;
 
-    /* Інтегральна складова (anti-windup через clamp інтегратора) */
+    /* Інтегральна складова (anti-windup: clamp з урахуванням P-term) */
     if (pid->params.enabled_terms & PID_ENABLE_I) {
         pid->integral += pid->params.Ki * dt * error;
-        pid->integral  = Clamp(pid->integral, pid->params.out_min, pid->params.out_max);
+        pid->integral  = Clamp(pid->integral,
+                               pid->params.out_min - pid->p_term,
+                               pid->params.out_max - pid->p_term);
         pid->i_term    = pid->integral;
     } else {
         pid->integral = 0.0f;
