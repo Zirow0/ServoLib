@@ -101,6 +101,7 @@ typedef struct {
     /* Телеметрія */
     float last_vel_sp;     /**< Останній setpoint швидкості (рад/с) */
     float last_current_sp; /**< Останній setpoint струму (А) */
+    float last_ff;         /**< Останній внесок feedforward (%) */
     float last_power;      /**< Остання команда двигуну (%) */
 } Cascade_Controller_t;
 

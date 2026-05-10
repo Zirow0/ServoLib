@@ -62,6 +62,7 @@ Servo_Status_t Cascade_Init(Cascade_Controller_t* casc,
     casc->prev_time_us    = 0u;
     casc->last_vel_sp     = 0.0f;
     casc->last_current_sp = 0.0f;
+    casc->last_ff         = 0.0f;
     casc->last_power      = 0.0f;
 
     Servo_Status_t s;
@@ -112,11 +113,14 @@ float Cascade_Compute(Cascade_Controller_t* casc,
         }
 
         case CASCADE_MODE_VEL: {
-            PID_Compute(&casc->vel_pid, casc->target_vel, omega, time_us);
+            float vel_sp = CascadeClamp(casc->target_vel,
+                                        casc->config.pos.out_min,
+                                        casc->config.pos.out_max);
+            casc->last_vel_sp = vel_sp;
+            PID_Compute(&casc->vel_pid, vel_sp, omega, time_us);
             current_sp = CascadeClamp(PID_GetOutput(&casc->vel_pid),
                                       casc->config.vel.out_min,
                                       casc->config.vel.out_max);
-            casc->last_vel_sp    = 0.0f;
             casc->last_current_sp = current_sp;
             break;
         }
@@ -147,6 +151,7 @@ float Cascade_Compute(Cascade_Controller_t* casc,
 
     /* trq-PID + FF. Фінальне обмеження — єдине місце де обрізається вихід
      * останнього каскаду перед поверненням. */
+    casc->last_ff = ff;
     PID_Compute(&casc->trq_pid, current_sp, current_a, time_us);
     float power = CascadeClamp(PID_GetOutput(&casc->trq_pid) + ff,
                                 casc->config.trq.out_min,
@@ -184,6 +189,7 @@ Servo_Status_t Cascade_Reset(Cascade_Controller_t* casc)
     casc->prev_time_us    = 0u;
     casc->last_vel_sp     = 0.0f;
     casc->last_current_sp = 0.0f;
+    casc->last_ff         = 0.0f;
     casc->last_power      = 0.0f;
 
     return SERVO_OK;
