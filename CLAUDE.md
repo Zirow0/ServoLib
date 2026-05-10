@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **ServoLib** is a modular, portable C library for controlling DC servo drives on STM32F4 platforms using **libopencm3** (not STM32 HAL). Built on a 5-layer architecture with complete hardware abstraction.
 
+**Одиниці вимірювання:** кут — **радіани**, швидкість — **рад/с** скрізь у API (ctrl, drv, servo). Конвертація в градуси — лише в Apps для UART-виводу.
+
 ## Build Commands
 
 **Prerequisites:** Set `LIBOPENCM3_DIR` before configuring:
@@ -41,9 +43,9 @@ cmake --build build/<BOARD>/<APP> --target flash
 ```
 Apps/                          ← Debug/application targets (main.c per target)
     ↓
-Src/ctrl/                      ← PID, Safety, Trajectory, Servo coordinator
+Src/ctrl/                      ← Cascade PID, Safety, Trajectory, Servo coordinator
     ↓
-Src/drv/                       ← Motor, Position sensor, Brake drivers
+Src/drv/                       ← Motor, Position sensor, Brake, Current drivers
     ↓
 Inc/hwd/ + Board/STM32F411_OCM3/  ← HWD declarations + libopencm3 implementations
 ```
@@ -66,26 +68,30 @@ Inc/hwd/ + Board/STM32F411_OCM3/  ← HWD declarations + libopencm3 implementati
 ### Servo Initialization
 
 ```c
-// Full initialization with all optional components:
-Servo_InitFull(&servo, &config, &motor->interface, &sensor->interface, &brake->interface);
+// Повна ініціалізація з усіма компонентами:
+Servo_InitFull(&servo, &config, &motor->interface, &sensor->interface,
+               &brake->interface, &current->interface);
 
-// Motor only (sensor and brake = NULL):
+// Лише мотор (решта NULL):
 Servo_Init(&servo, &config, &motor->interface);
 ```
 
-`Servo_InitWithBrake()` does **not exist** — use `Servo_InitFull()` with `brake` parameter.
+`Servo_InitWithBrake()` **не існує** — використовувати `Servo_InitFull()`.
+`Servo_InitFull` приймає **6 параметрів**: servo, config, motor, sensor, brake, current (усі крім motor — опціональні NULL).
+
+### Режими керування (`Servo_Mode_t`)
+
+| Режим | Активні контури | Функція |
+|-------|----------------|---------|
+| `SERVO_MODE_POSITION` | pos→vel→trq | `Servo_SetPosition(rad)` |
+| `SERVO_MODE_VELOCITY` | vel→trq | `Servo_SetVelocity(rad/s)` |
+| `SERVO_MODE_TORQUE` | trq | `Servo_SetTorque(A)` |
+| `SERVO_MODE_IDLE` | — | `Servo_Stop()` |
 
 ## Configuration System
 
-Three-layer system resolved at compile time via `Inc/config.h`:
-
-1. `Inc/config_lib.h` — math constants (PI, conversions), cannot be overridden
-2. `Inc/config_user.h` — project-specific values, **highest priority**
-3. `Inc/config_defaults.h` — library defaults (all wrapped in `#ifndef`)
-
-**Include order:** `config_lib.h` → `config_user.h` → `config_defaults.h`
-
-In this repository, `config_user.h` lives inside `Inc/`. The template at `Templates/config_user_template.h` shows three complete example configurations.
+`Inc/config.h` містить:
+- `POSITION_ERROR_THRESHOLD = 0.01f` рад (≈ 0.57°) — поріг `Servo_IsAtTarget()`
 
 ## Drivers
 
@@ -106,7 +112,15 @@ Incremental_Encoder_EXTI_Handler(driver, pin_a, pin_b);  // оновлює count
 Incremental_Encoder_IC_Handler(driver, period_us);        // оновлює period_us
 ```
 
-**Critical:** `HW_ReadRaw()` повертає лише сирі дані — ніколи градуси. Конвертація у `position.c`.
+**Critical:** `HW_ReadRaw()` повертає `Position_Raw_Data_t.angle_rad` у **радіанах** — ніколи градуси. `position.c` нормалізує до `[0, 2π)` і рахує `velocity_rad_s`.
+
+**Публічний API position (всі в радіанах):**
+```c
+Position_Sensor_GetPosition(sensor, &pos_rad);          // 0..2π рад
+Position_Sensor_GetVelocity(sensor, &vel_rad_s);        // рад/с
+Position_Sensor_GetAbsolutePosition(sensor, &abs_rad);  // необмежений рад
+Position_Sensor_SetPosition(sensor, pos_rad);           // встановити нуль
+```
 
 `Position_Sensor_Init(sensor)` — multi-turn відстежується всередині кожного драйвера (інкрементальний через `count`, AS5600 через `revolution_count` у `HW_ReadRaw`).
 
@@ -116,7 +130,7 @@ PWM мотор підтримує два режими:
 - `PWM_MOTOR_TYPE_SINGLE_PWM_DIR` — один PWM канал + DIR GPIO
 - `PWM_MOTOR_TYPE_DUAL_PWM` — два PWM канали (H-bridge: L298N, TB6612)
 
-**Power rate limiting:** `Motor_Params_t.max_power_rate` обмежує швидкість зміни потужності (захист від PID-осциляцій). `Motor_EmergencyStop()` обходить rate limiting напряму.
+`Motor_Params_t.max_power_rate` **не існує** — rate limiting прибрано. Slew rate знаходиться у `Cascade_Config_t.slew_rate`.
 
 API: `Motor_Init`, `Motor_SetPower(motor, float power)`, `Motor_Stop`, `Motor_EmergencyStop`.
 `Motor_Update()` не існує — оновлення відбувається всередині `Motor_SetPower`.
@@ -141,12 +155,51 @@ HWD_ADC_StartScan();               // один раз після всіх ADC In
 ACS712_Create(&driver, &config);   // factory
 Current_Sensor_Calibrate(&driver.interface);  // при нульовому струмі
 
-// У control loop:
+// У control loop (оновлення EMA фільтра):
 Current_Sensor_Update(&driver.interface);
+// Servo_Update() сам читає струм через GetCurrent — не потрібно викликати у servo loop
 Current_Sensor_GetCurrent(&driver.interface, &current_a);
 ```
 
 `Current_Sensor_GetStats`, `Current_Sensor_DeInit` — **не існують**.
+
+**Два порогові струми:**
+- `Cascade_Config_t.vel.out_max` — робочий ліміт струму (А), обмежує вихід vel-контуру
+- `Safety_Config_t.critical_current_a` — аварійний поріг, тригерить `EmergencyStop`
+
+## Cascade PID Controller
+
+Каскадний контролер (`Inc/ctrl/cascade.h`, `Src/ctrl/cascade.c`):
+
+```
+CASCADE_MODE_POS:  pos-PID(рад) → vel_sp(рад/с) → vel-PID → current_sp(А) → trq-PID → %
+CASCADE_MODE_VEL:                  vel-PID(рад/с) → current_sp(А) → trq-PID → %
+CASCADE_MODE_TRQ:                                    current_sp(А) → trq-PID → %
+```
+
+**Feedforward (спрощена модель):**
+```c
+ff = ff_j * current_sp + ff_b * omega   // в %
+// ff_j [%/А], ff_b [%·с/рад]
+// У CASCADE_MODE_TRQ ff_b не застосовується
+```
+
+**Slew rate:** `config.slew_rate` [%/с] обмежує зміну команди двигуну. `0` = вимкнено.
+
+**`Cascade_PID_Params_t`** для кожного контуру: `kp`, `ki`, `kd`, `out_min`, `out_max`, `i_limit`.
+`i_limit > 0` — клемпує внесок інтегратора до `±i_limit` (в одиницях виходу).
+
+**`PID_Params_t.i_limit`**: якщо `> 0` — незалежний ліміт інтегратора; `= 0` — старий механізм (clamp відносно `out_min/out_max - p_term`).
+
+**`pid_mgr.c` видалено з `SERVOLIB_CTRL`** — замінено `cascade.c`.
+
+## Safety
+
+`Safety_Config_t` (всі одиниці в радіанах/рад·с):
+- `min_position`, `max_position` — рад
+- `max_velocity` — рад/с
+- `max_acceleration` — рад/с²
+- `critical_current_a` — А (аварійне вимкнення при перевищенні + таймаут)
 
 ## HWD Layer
 
