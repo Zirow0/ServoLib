@@ -21,7 +21,6 @@ extern "C" {
 typedef struct {
     float max_power;          /**< Максимальна потужність (%) */
     float min_power;          /**< Мінімальна потужність — мертва зона (%) */
-    float max_power_rate;     /**< Макс. зміна потужності за один виклик (%), 0 = без обмеження */
     bool  invert_direction;   /**< Інвертувати напрямок */
 } Motor_Params_t;
 
@@ -34,7 +33,6 @@ typedef struct {
     Motor_State_t     state;            /**< Поточний стан */
     Motor_Direction_t direction;        /**< Напрямок обертання */
     float             current_power;    /**< Поточна потужність (%) */
-    float             prev_power;       /**< Потужність попереднього виклику (для rate limit) */
 
     bool              is_initialized;   /**< Прапорець ініціалізації */
     bool              emergency_flag;   /**< Прапорець аварійного режиму */

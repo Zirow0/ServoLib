@@ -75,7 +75,7 @@ Servo_Status_t Safety_Update(Safety_System_t* safety,
 
     // Перевірка струму
     if (safety->config.enable_current_protection) {
-        if (current_a > safety->config.max_current_a) {
+        if (current_a > safety->config.critical_current_a) {
             if (safety->state.overcurrent_start == 0) {
                 safety->state.overcurrent_start = current_time;
             }

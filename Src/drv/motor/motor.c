@@ -23,14 +23,6 @@ static float ProcessPower(Motor_Data_t* data, float power)
     if      (power >  max) power =  max;
     else if (power < -max) power = -max;
 
-    /* Rate limiting */
-    float rate = data->params.max_power_rate;
-    if (rate > 0.0f) {
-        float delta = power - data->prev_power;
-        if      (delta >  rate) power = data->prev_power + rate;
-        else if (delta < -rate) power = data->prev_power - rate;
-    }
-
     /* Мертва зона */
     float dead = data->params.min_power;
     if (power > -dead && power < dead) {
@@ -42,7 +34,6 @@ static float ProcessPower(Motor_Data_t* data, float power)
         power = -power;
     }
 
-    data->prev_power = power;
     return power;
 }
 
@@ -79,8 +70,7 @@ Servo_Status_t Motor_Init(Motor_Interface_t* motor, const Motor_Params_t* params
     data->params        = *params;
     data->state         = MOTOR_STATE_IDLE;
     data->direction     = MOTOR_DIR_FORWARD;
-    data->current_power = 0.0f;
-    data->prev_power    = 0.0f;
+    data->current_power  = 0.0f;
     data->is_initialized = true;
     data->emergency_flag = false;
     data->last_error    = ERR_NONE;
@@ -146,7 +136,6 @@ Servo_Status_t Motor_Stop(Motor_Interface_t* motor)
     }
 
     data->current_power = 0.0f;
-    data->prev_power    = 0.0f;
     data->state         = MOTOR_STATE_IDLE;
 
     return SERVO_OK;
@@ -170,7 +159,6 @@ Servo_Status_t Motor_EmergencyStop(Motor_Interface_t* motor)
     }
 
     data->current_power  = 0.0f;
-    data->prev_power     = 0.0f;
     data->emergency_flag = true;
     data->state          = MOTOR_STATE_ERROR;
 

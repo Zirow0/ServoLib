@@ -36,20 +36,20 @@ typedef enum {
  */
 typedef struct {
     /* Межі положення */
-    float min_position;          /**< Мінімальне положення (град) */
-    float max_position;          /**< Максимальне положення (град) */
+    float min_position;          /**< Мінімальне положення (рад) */
+    float max_position;          /**< Максимальне положення (рад) */
     bool enable_position_limits; /**< Увімкнути обмеження положення */
 
     /* Межі швидкості */
-    float max_velocity;          /**< Максимальна швидкість (град/с) */
+    float max_velocity;          /**< Максимальна швидкість (рад/с) */
     bool enable_velocity_limit;  /**< Увімкнути обмеження швидкості */
 
     /* Межі прискорення */
-    float max_acceleration;      /**< Максимальне прискорення (град/с²) */
+    float max_acceleration;      /**< Максимальне прискорення (рад/с²) */
     bool enable_acceleration_limit; /**< Увімкнути обмеження прискорення */
 
-    /* Струмовий захист */
-    float    max_current_a;      /**< Максимальний струм (А) */
+    /* Струмовий захист (аварійне вимкнення при перевищенні) */
+    float    critical_current_a; /**< Критичний струм аварійного вимкнення (А) */
     uint32_t current_timeout_ms; /**< Таймаут перевантаження (мс) */
     bool enable_current_protection; /**< Увімкнути струмовий захист */
 

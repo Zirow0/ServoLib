@@ -43,7 +43,7 @@ set(SERVOLIB_BRAKE
 set(SERVOLIB_CTRL
     ${SL}/ctrl/servo.c
     ${SL}/ctrl/pid.c
-    ${SL}/ctrl/pid_mgr.c
+    ${SL}/ctrl/cascade.c
     ${SL}/ctrl/safety.c
     ${SL}/ctrl/traj.c
     ${SL}/ctrl/time.c

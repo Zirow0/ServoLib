@@ -44,9 +44,9 @@ typedef enum {
  */
 typedef struct {
     Trajectory_Type_t type;  /**< Тип траєкторії */
-    float max_velocity;      /**< Максимальна швидкість (град/с) */
-    float max_acceleration;  /**< Максимальне прискорення (град/с²) */
-    float max_jerk;          /**< Максимальний ривок (град/с³) */
+    float max_velocity;      /**< Максимальна швидкість (рад/с) */
+    float max_acceleration;  /**< Максимальне прискорення (рад/с²) */
+    float max_jerk;          /**< Максимальний ривок (рад/с³) */
 } Trajectory_Params_t;
 
 /**

@@ -111,51 +111,78 @@ int main(void)
         .update_frequency = 1000.0f,
         .enable_brake     = true,
 
-        .pid_params = {
-            .Kp           = 1.0f,
-            .Ki           = 0.1f,
-            .Kd           = 0.05f,
-            .out_min      = -100.0f,
-            .out_max      =  100.0f,
-            .enabled_terms = PID_ENABLE_P | PID_ENABLE_I | PID_ENABLE_D,
+        .cascade_config = {
+            /* pos-контур: положення → setpoint швидкості (рад/с) */
+            .pos = {
+                .kp      = 5.0f,
+                .ki      = 0.0f,
+                .kd      = 0.3f,
+                .out_min = -10.0f,   /* рад/с */
+                .out_max =  10.0f,
+                .i_limit =  5.0f,
+            },
+            /* vel-контур: швидкість → setpoint струму (А) */
+            .vel = {
+                .kp      = 1.0f,
+                .ki      = 0.5f,
+                .kd      = 0.0f,
+                .out_min = -3.0f,    /* А — робочий ліміт струму */
+                .out_max =  3.0f,
+                .i_limit =  2.0f,
+            },
+            /* trq-контур: струм → команда двигуну (%) */
+            .trq = {
+                .kp      = 20.0f,
+                .ki      = 5.0f,
+                .kd      = 0.0f,
+                .out_min = -100.0f,  /* % */
+                .out_max =  100.0f,
+                .i_limit =  80.0f,
+            },
+            .ff_j      = 0.0f,    /* %/А, налаштовується на реальному стенді */
+            .ff_b      = 0.0f,    /* %·с/рад */
+            .slew_rate = 0.0f,    /* %/с, 0 = вимкнено */
         },
 
         .safety_config = {
-            .min_position          = 0.0f,
-            .max_position          = 360.0f,
+            .min_position           = 0.0f,          /* рад */
+            .max_position           = 6.2832f,        /* 2π рад = 360° */
             .enable_position_limits = true,
 
-            .max_velocity          = 360.0f,   /* grad/s */
+            .max_velocity           = 6.2832f,        /* рад/с ≈ 360°/с */
             .enable_velocity_limit  = true,
 
-            .max_acceleration      = 720.0f,
+            .max_acceleration       = 12.5664f,       /* рад/с² ≈ 720°/с² */
             .enable_acceleration_limit = false,
 
-            .enable_current_protection  = false,
+            .critical_current_a     = 4.0f,           /* А — аварійне вимкнення */
+            .current_timeout_ms     = 100,
+            .enable_current_protection = true,
 
-            .watchdog_timeout_ms   = 500,
-            .enable_watchdog       = true,
+            .watchdog_timeout_ms    = 500,
+            .enable_watchdog        = true,
         },
 
         .traj_params = {
             .type             = TRAJ_TYPE_LINEAR,
-            .max_velocity     = 180.0f,    /* grad/s */
-            .max_acceleration = 360.0f,    /* grad/s^2 */
+            .max_velocity     = 3.1416f,   /* рад/с ≈ 180°/с */
+            .max_acceleration = 6.2832f,   /* рад/с² ≈ 360°/с² */
             .max_jerk         = 0.0f,
         },
     };
     Servo_InitFull(&servo, &srv_cfg,
                    &motor.interface,
                    &encoder.interface,
-                   &brake.interface);
+                   &brake.interface,
+                   &current_driver.interface);
 
-    HWD_UART_WriteString("-> SetPosition 90.0\r\n");
-    Servo_SetPosition(&servo, 90.0f);
+    HWD_UART_WriteString("-> SetPosition pi/2 (90 deg)\r\n");
+    Servo_SetPosition(&servo, 1.5708f);  /* π/2 рад = 90° */
 
     char buf[64];
 
     while (1) {
-        Current_Sensor_Update(&current_driver.interface);
+        Current_Sensor_Update(&current_driver.interface);  /* оновлення ADC EMA */
         Servo_Update(&servo);
 
         /* Вивід стану раз на 100 мс */

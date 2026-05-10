@@ -4,7 +4,8 @@
  * @author ServoCore Team
  * @date 2025
  *
- * Координація всіх підсистем сервоприводу
+ * Координація всіх підсистем сервоприводу.
+ * Одиниці вимірювання: кут — рад, швидкість — рад/с.
  */
 
 #ifndef SERVOCORE_CTRL_SERVO_H
@@ -20,7 +21,8 @@ extern "C" {
 #include "../drv/motor/motor.h"
 #include "../drv/position/position.h"
 #include "../drv/brake/brake.h"
-#include "pid.h"
+#include "../drv/current/current.h"
+#include "cascade.h"
 #include "safety.h"
 #include "traj.h"
 #include "time.h"
@@ -34,8 +36,8 @@ typedef struct {
     /* Параметри осі */
     Axis_Config_t axis_config;
 
-    /* Параметри PID */
-    PID_Params_t pid_params;
+    /* Каскадний PID */
+    Cascade_Config_t cascade_config;
 
     /* Параметри безпеки */
     Safety_Config_t safety_config;
@@ -43,14 +45,11 @@ typedef struct {
     /* Параметри траєкторії */
     Trajectory_Params_t traj_params;
 
-    /* Параметри гальм (застаріло - налаштовуються в GPIO_Brake_Create) */
-    // Brake_Params_t brake_params;  // Тепер не потрібно, таймінги задаються при створенні GPIO драйвера
-
     /* Частота оновлення (Hz) */
     float update_frequency;
 
     /* Прапорці */
-    bool enable_brake;              /**< Увімкнути використання гальм */
+    bool enable_brake;  /**< Увімкнути використання гальм */
 } Servo_Config_t;
 
 /**
@@ -64,30 +63,28 @@ typedef struct {
     Axis_State_t state;
 
     /* Компоненти */
-    Motor_Interface_t* motor;               /**< Інтерфейс двигуна */
-    Position_Sensor_Interface_t* sensor;    /**< Інтерфейс датчика положення (опціонально) */
-    PID_Controller_t pid;                   /**< PID регулятор */
-    Safety_System_t safety;                 /**< Система безпеки */
-    Trajectory_Generator_t traj;            /**< Генератор траєкторій */
-    Brake_Interface_t* brake;               /**< Інтерфейс гальм (опціонально) */
+    Motor_Interface_t*          motor;    /**< Інтерфейс двигуна */
+    Position_Sensor_Interface_t* sensor;  /**< Інтерфейс датчика положення (опціонально) */
+    Brake_Interface_t*          brake;    /**< Інтерфейс гальм (опціонально) */
+    Current_Sensor_Interface_t* current;  /**< Інтерфейс датчика струму (опціонально) */
+
+    /* Регулятори */
+    Cascade_Controller_t cascade;  /**< Каскадний PID регулятор */
+    Safety_System_t      safety;   /**< Система безпеки */
+    Trajectory_Generator_t traj;   /**< Генератор траєкторій */
 
     /* Таймінги */
     Periodic_Timer_t update_timer;  /**< Таймер оновлення */
 
     /* Прапорці */
-    bool is_initialized;            /**< Прапорець ініціалізації */
-    bool enable_trajectory;         /**< Увімкнути генератор траєкторій */
+    bool is_initialized;     /**< Прапорець ініціалізації */
+    bool enable_trajectory;  /**< Увімкнути генератор траєкторій */
 } Servo_Controller_t;
 
 /* Exported functions --------------------------------------------------------*/
 
 /**
- * @brief Ініціалізація сервоприводу
- *
- * @param servo Вказівник на контролер
- * @param config Конфігурація
- * @param motor Інтерфейс двигуна
- * @return Servo_Status_t Статус виконання
+ * @brief Ініціалізація сервоприводу (лише мотор)
  */
 Servo_Status_t Servo_Init(Servo_Controller_t* servo,
                           const Servo_Config_t* config,
@@ -96,109 +93,78 @@ Servo_Status_t Servo_Init(Servo_Controller_t* servo,
 /**
  * @brief Повна ініціалізація сервоприводу з усіма компонентами
  *
- * @param servo Вказівник на контролер
- * @param config Конфігурація
- * @param motor Інтерфейс двигуна
- * @param sensor Інтерфейс датчика положення (NULL якщо не використовується)
- * @param brake Інтерфейс гальм (NULL якщо не використовуються)
+ * @param servo   Вказівник на контролер
+ * @param config  Конфігурація
+ * @param motor   Інтерфейс двигуна
+ * @param sensor  Датчик положення (NULL якщо не використовується)
+ * @param brake   Гальмо (NULL якщо не використовується)
+ * @param current Датчик струму (NULL якщо не використовується)
  * @return Servo_Status_t Статус виконання
  */
 Servo_Status_t Servo_InitFull(Servo_Controller_t* servo,
                                const Servo_Config_t* config,
                                Motor_Interface_t* motor,
                                Position_Sensor_Interface_t* sensor,
-                               Brake_Interface_t* brake);
+                               Brake_Interface_t* brake,
+                               Current_Sensor_Interface_t* current);
 
 /**
- * @brief Основний цикл оновлення сервоприводу
- *
- * Викликати періодично в головному циклі
- *
- * @param servo Вказівник на контролер
- * @return Servo_Status_t Статус виконання
+ * @brief Основний цикл оновлення — викликати періодично
  */
 Servo_Status_t Servo_Update(Servo_Controller_t* servo);
 
 /**
- * @brief Встановлення цільового положення
- *
- * @param servo Вказівник на контролер
- * @param position Цільове положення (градуси)
- * @return Servo_Status_t Статус виконання
+ * @brief Встановлення цільового положення (рад)
  */
-Servo_Status_t Servo_SetPosition(Servo_Controller_t* servo, float position);
+Servo_Status_t Servo_SetPosition(Servo_Controller_t* servo, float position_rad);
 
 /**
- * @brief Встановлення швидкості
- *
- * @param servo Вказівник на контролер
- * @param velocity Швидкість (град/с)
- * @return Servo_Status_t Статус виконання
+ * @brief Встановлення цільової кутової швидкості (рад/с)
  */
-Servo_Status_t Servo_SetVelocity(Servo_Controller_t* servo, float velocity);
+Servo_Status_t Servo_SetVelocity(Servo_Controller_t* servo, float velocity_rad_s);
+
+/**
+ * @brief Встановлення цільового струму (А)
+ */
+Servo_Status_t Servo_SetTorque(Servo_Controller_t* servo, float current_a);
 
 /**
  * @brief Зупинка сервоприводу
- *
- * @param servo Вказівник на контролер
- * @return Servo_Status_t Статус виконання
  */
 Servo_Status_t Servo_Stop(Servo_Controller_t* servo);
 
 /**
  * @brief Аварійна зупинка
- *
- * @param servo Вказівник на контролер
- * @return Servo_Status_t Статус виконання
  */
 Servo_Status_t Servo_EmergencyStop(Servo_Controller_t* servo);
 
 /**
- * @brief Отримання поточного положення
- *
- * @param servo Вказівник на контролер
- * @return float Поточне положення (градуси)
+ * @brief Поточне положення (рад)
  */
 float Servo_GetPosition(const Servo_Controller_t* servo);
 
 /**
- * @brief Отримання поточної швидкості
- *
- * @param servo Вказівник на контролер
- * @return float Поточна швидкість (град/с)
+ * @brief Поточна кутова швидкість (рад/с)
  */
 float Servo_GetVelocity(const Servo_Controller_t* servo);
 
 /**
- * @brief Отримання стану
- *
- * @param servo Вказівник на контролер
- * @return Servo_State_t Поточний стан
+ * @brief Поточний стан
  */
 Servo_State_t Servo_GetState(const Servo_Controller_t* servo);
 
 /**
  * @brief Калібрування нульового положення
- *
- * @param servo Вказівник на контролер
- * @return Servo_Status_t Статус виконання
  */
 Servo_Status_t Servo_CalibrateZero(Servo_Controller_t* servo);
 
 /**
  * @brief Увімкнення/вимкнення режиму траєкторій
- *
- * @param servo Вказівник на контролер
- * @param enable true для увімкнення
- * @return Servo_Status_t Статус виконання
  */
 Servo_Status_t Servo_EnableTrajectory(Servo_Controller_t* servo, bool enable);
 
 /**
  * @brief Перевірка чи досягнуто цільового положення
- *
- * @param servo Вказівник на контролер
- * @return bool true якщо досягнуто
  */
 bool Servo_IsAtTarget(const Servo_Controller_t* servo);
 
