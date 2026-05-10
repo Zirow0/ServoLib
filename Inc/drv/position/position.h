@@ -90,30 +90,30 @@ Servo_Status_t Position_Sensor_Init(Position_Sensor_Interface_t* sensor);
 Servo_Status_t Position_Sensor_Update(Position_Sensor_Interface_t* sensor);
 
 /**
- * @brief Отримання позиції (0..360°)
+ * @brief Отримання позиції (0..2π рад)
  */
 Servo_Status_t Position_Sensor_GetPosition(Position_Sensor_Interface_t* sensor,
-                                           float* position_deg);
+                                           float* position_rad);
 
 /**
- * @brief Отримання швидкості (град/с)
+ * @brief Отримання кутової швидкості (рад/с)
  */
 Servo_Status_t Position_Sensor_GetVelocity(Position_Sensor_Interface_t* sensor,
-                                           float* velocity_deg_s);
+                                           float* velocity_rad_s);
 
 /**
- * @brief Отримання абсолютної позиції з урахуванням multi-turn (може бути > 360°)
+ * @brief Отримання абсолютної позиції з урахуванням multi-turn (рад, необмежена)
  */
 Servo_Status_t Position_Sensor_GetAbsolutePosition(Position_Sensor_Interface_t* sensor,
-                                                   float* abs_position_deg);
+                                                   float* abs_position_rad);
 
 /**
  * @brief Встановлення поточної позиції як нової нульової точки
  *
- * @param position_deg Нова позиція (0 = скидання в нуль)
+ * @param position_rad Нова позиція (рад, 0 = скидання в нуль)
  */
 Servo_Status_t Position_Sensor_SetPosition(Position_Sensor_Interface_t* sensor,
-                                           float position_deg);
+                                           float position_rad);
 
 #ifdef __cplusplus
 }

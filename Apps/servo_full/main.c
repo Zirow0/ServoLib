@@ -206,7 +206,7 @@ int main(void)
             if (vel_f < 0) vel_f = -vel_f;
             if (cur_f < 0) cur_f = -cur_f;
 
-            snprintf(buf, sizeof(buf), "pos:%d.%02d vel:%d.%02d cur:%d.%02dA target:%d\r\n",
+            snprintf(buf, sizeof(buf), "pos:%d.%02drad vel:%d.%02drad/s cur:%d.%02dA target:%d\r\n",
                      pos_i, pos_f, vel_i, vel_f, cur_i, cur_f,
                      (int)Servo_IsAtTarget(&servo));
             HWD_UART_WriteString(buf);

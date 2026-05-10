@@ -99,42 +99,42 @@ Servo_Status_t Position_Sensor_Update(Position_Sensor_Interface_t* sensor)
 }
 
 Servo_Status_t Position_Sensor_GetPosition(Position_Sensor_Interface_t* sensor,
-                                           float* position_deg)
+                                           float* position_rad)
 {
-    if (sensor == NULL || position_deg == NULL) return SERVO_INVALID;
+    if (sensor == NULL || position_rad == NULL) return SERVO_INVALID;
     if (!sensor->data.is_initialized)           return SERVO_NOT_INIT;
 
-    *position_deg = RAD2DEG(sensor->data.position_rad);
+    *position_rad = sensor->data.position_rad;
     return SERVO_OK;
 }
 
 Servo_Status_t Position_Sensor_GetVelocity(Position_Sensor_Interface_t* sensor,
-                                           float* velocity_deg_s)
+                                           float* velocity_rad_s)
 {
-    if (sensor == NULL || velocity_deg_s == NULL) return SERVO_INVALID;
+    if (sensor == NULL || velocity_rad_s == NULL) return SERVO_INVALID;
     if (!sensor->data.is_initialized)             return SERVO_NOT_INIT;
 
-    *velocity_deg_s = RAD2DEG(sensor->data.velocity_rad_s);
+    *velocity_rad_s = sensor->data.velocity_rad_s;
     return SERVO_OK;
 }
 
 Servo_Status_t Position_Sensor_GetAbsolutePosition(Position_Sensor_Interface_t* sensor,
-                                                   float* abs_position_deg)
+                                                   float* abs_position_rad)
 {
-    if (sensor == NULL || abs_position_deg == NULL) return SERVO_INVALID;
+    if (sensor == NULL || abs_position_rad == NULL) return SERVO_INVALID;
     if (!sensor->data.is_initialized)               return SERVO_NOT_INIT;
 
-    *abs_position_deg = RAD2DEG(sensor->data.absolute_position_rad);
+    *abs_position_rad = sensor->data.absolute_position_rad;
     return SERVO_OK;
 }
 
 Servo_Status_t Position_Sensor_SetPosition(Position_Sensor_Interface_t* sensor,
-                                           float position_deg)
+                                           float position_rad)
 {
     if (sensor == NULL)                return SERVO_INVALID;
     if (!sensor->data.is_initialized) return SERVO_NOT_INIT;
 
-    float new_rad   = DEG2RAD(position_deg);
+    float new_rad   = position_rad;
     /* Сирий кут з драйвера (без поточного зсуву) */
     float raw_angle = sensor->data.absolute_position_rad - sensor->data.angle_offset_rad;
 
