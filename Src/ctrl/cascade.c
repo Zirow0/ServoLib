@@ -126,16 +126,25 @@ float Cascade_Compute(Cascade_Controller_t* casc,
     /* Feedforward (спрощена модель):
      *   ff_j * current_sp  — передбачає момент інерції (% / A)
      *   ff_b * omega        — компенсує в'язке тертя (% / (рад/с))
-     * У режимі TRQ ff_b не застосовується: користувач задає струм напряму. */
+     * У режимі TRQ ff_b не застосовується: користувач задає струм напряму.
+     * FF клемпується до [out_min, out_max] перед передачею в trq-PID, щоб
+     * зміщені межі PID залишались коректними (out_min - ff < out_max - ff). */
     float ff = 0.0f;
     if (casc->config.ff_j != 0.0f || casc->config.ff_b != 0.0f) {
         ff = casc->config.ff_j * current_sp;
         if (casc->mode != CASCADE_MODE_TRQ) {
             ff += casc->config.ff_b * omega;
         }
+        ff = CascadeClamp(ff, casc->config.trq.out_min, casc->config.trq.out_max);
     }
 
-    /* trq-PID + FF */
+    /* trq-PID: межі зміщуються на -ff, щоб PID компенсував лише залишкову
+     * похибку після feedforward. Це забезпечує коректний anti-windup —
+     * інтегратор не накопичується понад (out_max - ff), тому
+     * pid_out + ff гарантовано в [out_min, out_max]. */
+    PID_SetOutputLimits(&casc->trq_pid,
+                        casc->config.trq.out_min - ff,
+                        casc->config.trq.out_max - ff);
     PID_Compute(&casc->trq_pid, current_sp, current_a, time_us);
     float power = CascadeClamp(PID_GetOutput(&casc->trq_pid) + ff,
                                 casc->config.trq.out_min,
