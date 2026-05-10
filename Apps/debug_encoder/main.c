@@ -35,25 +35,28 @@ int main(void)
     Incremental_Encoder_Create(&encoder, ENCODER_CPR, &enc_hw);
     Position_Sensor_Init(&encoder.interface);
 
-    char buf[48];
+    char buf[64];
 
     while (1) {
         Position_Sensor_Update(&encoder.interface);
 
-        float pos = 0.0f, vel = 0.0f, pos_absolut = 0.0f;
-        Position_Sensor_GetPosition(&encoder.interface, &pos);
-        Position_Sensor_GetVelocity(&encoder.interface, &vel);
-        Position_Sensor_GetAbsolutePosition(&encoder.interface, &pos_absolut);
-        /* Вивід: "pos:123.45 vel:-67.89\r\n" */
-        int pos_int = (int)pos;
-        int pos_frac = (int)((pos - (float)pos_int) * 100.0f);
-        int vel_int = (int)vel;
-        int vel_frac = (int)((vel - (float)vel_int) * 100.0f);
-        if (vel_frac < 0) { vel_frac = -vel_frac; }
-        if (pos_frac < 0) { pos_frac = -pos_frac; }
+        float pos_rad = 0.0f, vel_rad_s = 0.0f, abs_pos_rad = 0.0f;
+        Position_Sensor_GetPosition(&encoder.interface, &pos_rad);
+        Position_Sensor_GetVelocity(&encoder.interface, &vel_rad_s);
+        Position_Sensor_GetAbsolutePosition(&encoder.interface, &abs_pos_rad);
 
-        snprintf(buf, sizeof(buf), "pos:%d.%02d vel:%d.%02d a_pos:%d\r\n",
-                 pos_int, pos_frac, vel_int, vel_frac, (int)pos_absolut);
+        /* Конвертація для зручного виводу: рад → градуси */
+        int pos_i  = (int)(pos_rad * 57.2958f);
+        int pos_f  = (int)((pos_rad * 57.2958f - (float)pos_i) * 100.0f);
+        int vel_i  = (int)(vel_rad_s * 57.2958f);
+        int vel_f  = (int)((vel_rad_s * 57.2958f - (float)vel_i) * 100.0f);
+        int abs_i  = (int)(abs_pos_rad * 57.2958f);
+        if (pos_f < 0) { pos_f = -pos_f; }
+        if (vel_f < 0) { vel_f = -vel_f; }
+
+        /* Вивід: "pos:123.45deg vel:-67.89deg/s a_pos:720deg\r\n" */
+        snprintf(buf, sizeof(buf), "pos:%d.%02ddeg vel:%d.%02ddeg/s a_pos:%ddeg\r\n",
+                 pos_i, pos_f, vel_i, vel_f, abs_i);
         HWD_UART_WriteString(buf);
 
         HWD_GPIO_TogglePin(&led_pin);
