@@ -94,21 +94,28 @@ float Cascade_Compute(Cascade_Controller_t* casc,
             err -= CASCADE_PI;
 
             /* pos-PID: virtual setpoint = theta + err, щоб PID бачив правильну похибку
-             * при D-on-measurement (D рахується від theta, незалежно від setpoint) */
+             * при D-on-measurement (D рахується від theta, незалежно від setpoint).
+             * Обмежуємо вхід vel-контуру одразу на виході pos-контуру. */
             PID_Compute(&casc->pos_pid, theta + err, theta, time_us);
-            float vel_sp = PID_GetOutput(&casc->pos_pid);
+            float vel_sp = CascadeClamp(PID_GetOutput(&casc->pos_pid),
+                                        casc->config.pos.out_min,
+                                        casc->config.pos.out_max);
             casc->last_vel_sp = vel_sp;
 
-            /* vel-PID */
+            /* vel-PID: обмежуємо вхід trq-контуру одразу на виході vel-контуру */
             PID_Compute(&casc->vel_pid, vel_sp, omega, time_us);
-            current_sp = PID_GetOutput(&casc->vel_pid);
+            current_sp = CascadeClamp(PID_GetOutput(&casc->vel_pid),
+                                      casc->config.vel.out_min,
+                                      casc->config.vel.out_max);
             casc->last_current_sp = current_sp;
             break;
         }
 
         case CASCADE_MODE_VEL: {
             PID_Compute(&casc->vel_pid, casc->target_vel, omega, time_us);
-            current_sp = PID_GetOutput(&casc->vel_pid);
+            current_sp = CascadeClamp(PID_GetOutput(&casc->vel_pid),
+                                      casc->config.vel.out_min,
+                                      casc->config.vel.out_max);
             casc->last_vel_sp    = 0.0f;
             casc->last_current_sp = current_sp;
             break;
@@ -116,7 +123,9 @@ float Cascade_Compute(Cascade_Controller_t* casc,
 
         case CASCADE_MODE_TRQ:
         default: {
-            current_sp = casc->target_current;
+            current_sp = CascadeClamp(casc->target_current,
+                                      casc->config.vel.out_min,
+                                      casc->config.vel.out_max);
             casc->last_vel_sp    = 0.0f;
             casc->last_current_sp = current_sp;
             break;
@@ -126,25 +135,18 @@ float Cascade_Compute(Cascade_Controller_t* casc,
     /* Feedforward (спрощена модель):
      *   ff_j * current_sp  — передбачає момент інерції (% / A)
      *   ff_b * omega        — компенсує в'язке тертя (% / (рад/с))
-     * У режимі TRQ ff_b не застосовується: користувач задає струм напряму.
-     * FF клемпується до [out_min, out_max] перед передачею в trq-PID, щоб
-     * зміщені межі PID залишались коректними (out_min - ff < out_max - ff). */
+     * current_sp вже обмежений вище, тому внесок ff_j природно обмежений.
+     * У режимі TRQ ff_b не застосовується: користувач задає струм напряму. */
     float ff = 0.0f;
     if (casc->config.ff_j != 0.0f || casc->config.ff_b != 0.0f) {
         ff = casc->config.ff_j * current_sp;
         if (casc->mode != CASCADE_MODE_TRQ) {
             ff += casc->config.ff_b * omega;
         }
-        ff = CascadeClamp(ff, casc->config.trq.out_min, casc->config.trq.out_max);
     }
 
-    /* trq-PID: межі зміщуються на -ff, щоб PID компенсував лише залишкову
-     * похибку після feedforward. Це забезпечує коректний anti-windup —
-     * інтегратор не накопичується понад (out_max - ff), тому
-     * pid_out + ff гарантовано в [out_min, out_max]. */
-    PID_SetOutputLimits(&casc->trq_pid,
-                        casc->config.trq.out_min - ff,
-                        casc->config.trq.out_max - ff);
+    /* trq-PID + FF. Фінальне обмеження — єдине місце де обрізається вихід
+     * останнього каскаду перед поверненням. */
     PID_Compute(&casc->trq_pid, current_sp, current_a, time_us);
     float power = CascadeClamp(PID_GetOutput(&casc->trq_pid) + ff,
                                 casc->config.trq.out_min,
