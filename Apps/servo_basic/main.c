@@ -1,5 +1,5 @@
 #include "board_config.h"
-#include "ctrl/servo.h"
+#include "ctrl/cascade.h"
 #include "drv/motor/pwm.h"
 #include "drv/position/incremental_encoder.h"
 #include "drv/brake/gpio_brake.h"
@@ -18,7 +18,7 @@ static Incremental_Encoder_Driver_t encoder;
 static GPIO_Brake_Driver_t          brake;
 static ACS712_Driver_t              current_driver;
 static HWD_ADC_Handle_t             current_adc;
-static Servo_Controller_t           servo;
+static Cascade_Controller_t         cascade;
 
 static const HWD_GPIO_Pin_t led_pin = {
     .port = (void*)LED_GPIO_PORT,
@@ -31,7 +31,7 @@ int main(void)
 {
     Board_Init();
 
-    HWD_UART_WriteString("ServoLib servo_full debug\r\n");
+    HWD_UART_WriteString("ServoLib servo_basic\r\n");
 
     /* ── Датчик струму ACS712 ────────────────────────────────────────────── */
     static const HWD_ADC_Config_t adc_cfg = {
@@ -91,7 +91,7 @@ int main(void)
         .gpio_pin_b  = ENCODER_GPIO_PIN_B,
         .timer_base  = ENCODER_TIMER_BASE,
         .timer_rcc   = ENCODER_TIMER_RCC,
-        .ic_channel  = 0U,  /* TIM_IC1 = CH1 (0-based, відповідає enum tim_ic_id) */
+        .ic_channel  = 0U,
     };
     Incremental_Encoder_Create(&encoder, ENCODER_CPR, &enc_hw);
     Position_Sensor_Init(&encoder.interface);
@@ -105,110 +105,89 @@ int main(void)
         .release_time_ms = 30,
     };
     GPIO_Brake_Create(&brake, &brk_cfg);
+    Brake_Release(&brake.interface);
 
-    /* ── Сервоконтролер ──────────────────────────────────────────────────── */
-    Servo_Config_t srv_cfg = {
-        .update_frequency = 1000.0f,
-        .enable_brake     = true,
-
-        .cascade_config = {
-            /* pos-контур: положення → setpoint швидкості (рад/с) */
-            .pos = {
-                .kp      = 5.0f,
-                .ki      = 0.0f,
-                .kd      = 0.3f,
-                .out_min = -10.0f,   /* рад/с */
-                .out_max =  10.0f,
-                .i_limit =  5.0f,
-            },
-            /* vel-контур: швидкість → setpoint струму (А) */
-            .vel = {
-                .kp      = 0.5f,
-                .ki      = 5.0f,
-                .kd      = 0.0f,
-                .out_min = -3.0f,    /* А — робочий ліміт струму */
-                .out_max =  3.0f,
-                .i_limit =  2.0f,
-            },
-            /* trq-контур: струм → команда двигуну (%) */
-            .trq = {
-                .kp      = 0.0f,
-                .ki      = 0.0f,
-                .kd      = 0.0f,
-                .out_min = -100.0f,  /* % */
-                .out_max =  100.0f,
-                .i_limit =  30.0f,
-            },
-            .ff_j      = 1.4f,    /* %/А, налаштовується на реальному стенді */
-            .ff_b      = 0.0f,    /* %·с/рад */
-            .slew_rate = 5000.0f,    /* %/с, 0 = вимкнено */
+    /* ── Каскадний PID ───────────────────────────────────────────────────── */
+    static const Cascade_Config_t casc_cfg = {
+        /* pos-контур: положення → setpoint швидкості (рад/с) */
+        .pos = {
+            .kp      = 5.0f,
+            .ki      = 0.0f,
+            .kd      = 0.3f,
+            .out_min = -10.0f,
+            .out_max =  10.0f,
+            .i_limit =  5.0f,
         },
-
-        .safety_config = {
-            .min_position           = 0.0f,          /* рад */
-            .max_position           = 6.2832f,        /* 2π рад = 360° */
-            .enable_position_limits = true,
-
-            .max_velocity           = 60.2832f,        /* рад/с ≈ 360°/с */
-            .enable_velocity_limit  = true,
-
-            .max_acceleration       = 120.5664f,       /* рад/с² ≈ 720°/с² */
-            .enable_acceleration_limit = false,
-
-            .critical_current_a     = 4.0f,           /* А — аварійне вимкнення */
-            .current_timeout_ms     = 100,
-            .enable_current_protection = true,
-
-            .watchdog_timeout_ms    = 500,
-            .enable_watchdog        = true,
+        /* vel-контур: швидкість → setpoint струму (А) */
+        .vel = {
+            .kp      = 0.5f,
+            .ki      = 5.0f,
+            .kd      = 0.0f,
+            .out_min = -3.0f,
+            .out_max =  3.0f,
+            .i_limit =  2.0f,
         },
-
-        .traj_params = {
-            .type             = TRAJ_TYPE_LINEAR,
-            .max_velocity     = 3.1416f,   /* рад/с ≈ 180°/с */
-            .max_acceleration = 6.2832f,   /* рад/с² ≈ 360°/с² */
-            .max_jerk         = 0.0f,
+        /* trq-контур: струм → команда двигуну (%) */
+        .trq = {
+            .kp      = 0.0f,
+            .ki      = 5.0f,
+            .kd      = 0.0f,
+            .out_min = -100.0f,
+            .out_max =  100.0f,
+            .i_limit =  30.0f,
         },
+        .ff_j      = 10.0f,
+        .ff_b      = 0.0f,
+        .slew_rate = 2000.0f,
     };
-    Servo_InitFull(&servo, &srv_cfg,
-                   &motor.interface,
-                   &encoder.interface,
-                   &brake.interface,
-                   &current_driver.interface);
+    Cascade_Init(&cascade, &casc_cfg, CASCADE_MODE_POS);
 
-    HWD_UART_WriteString("-> SetPosition pi/2 (90 deg)\r\n");
-//    Servo_SetPosition(&servo, 1.5708f);  /* π/2 рад = 90° */
-    Servo_SetTorque(&servo, 0.3f);
+    /* Цільове положення: π/2 рад (90°) */
+  //  cascade.target_pos = 1.5708f;
+    cascade.target_current = 0.4f;
+
+    HWD_UART_WriteString("-> target: pi/2 (90 deg)\r\n");
+
     char buf[64];
 
     while (1) {
-        Current_Sensor_Update(&current_driver.interface);  /* оновлення ADC EMA */
-        Servo_Update(&servo);
+        /* Оновлення датчиків */
+        Current_Sensor_Update(&current_driver.interface);
+        Brake_Update(&brake.interface);
+
+        Position_Sensor_Update(&encoder.interface);
+
+        float pos_rad = 0.0f;
+        float vel_rad_s = 0.0f;
+        float current_a = 0.0f;
+
+        Position_Sensor_GetPosition(&encoder.interface, &pos_rad);
+        Position_Sensor_GetVelocity(&encoder.interface, &vel_rad_s);
+        Current_Sensor_GetCurrent(&current_driver.interface, &current_a);
+
+        /* Каскадний PID → команда двигуну */
+        uint32_t now_us = HWD_Timer_GetMicros();
+        float power = Cascade_Compute(&cascade, pos_rad, vel_rad_s, current_a, now_us);
+        Motor_SetPower(&motor.interface, power);
 
         /* Вивід стану раз на 100 мс */
         static uint32_t last_print = 0;
-        uint32_t now = HWD_Timer_GetMillis();
-        if (now - last_print >= 100) {
-            last_print = now;
+        uint32_t now_ms = HWD_Timer_GetMillis();
+        if (now_ms - last_print >= 100) {
+            last_print = now_ms;
 
-            float pos = Servo_GetPosition(&servo);
-            float vel = Servo_GetVelocity(&servo);
-            float cur = 0.0f;
-            Current_Sensor_GetCurrent(&current_driver.interface, &cur);
-
-            int pos_i = (int)pos;
-            int pos_f = (int)((pos - (float)pos_i) * 100.0f);
-            int vel_i = (int)vel;
-            int vel_f = (int)((vel - (float)vel_i) * 100.0f);
-            int cur_i = (int)cur;
-            int cur_f = (int)((cur - (float)cur_i) * 100.0f);
+            int pos_i = (int)pos_rad;
+            int pos_f = (int)((pos_rad - (float)pos_i) * 100.0f);
+            int vel_i = (int)vel_rad_s;
+            int vel_f = (int)((vel_rad_s - (float)vel_i) * 100.0f);
+            int cur_i = (int)current_a;
+            int cur_f = (int)((current_a - (float)cur_i) * 100.0f);
             if (pos_f < 0) pos_f = -pos_f;
             if (vel_f < 0) vel_f = -vel_f;
             if (cur_f < 0) cur_f = -cur_f;
 
-            snprintf(buf, sizeof(buf), "pos:%d.%02drad vel:%d.%02drad/s cur:%d.%02dA target:%d\r\n",
-                     pos_i, pos_f, vel_i, vel_f, cur_i, cur_f,
-                     (int)Servo_IsAtTarget(&servo));
+            snprintf(buf, sizeof(buf), "pos:%d.%02drad vel:%d.%02drad/s cur:%d.%02dA\r\n",
+                     pos_i, pos_f, vel_i, vel_f, cur_i, cur_f);
             HWD_UART_WriteString(buf);
 
             HWD_GPIO_TogglePin(&led_pin);
