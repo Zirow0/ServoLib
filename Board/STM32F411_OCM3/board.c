@@ -110,7 +110,7 @@ static void spi_setup(void)
 }
 #endif /* USE_HWD_SPI */
 
-#ifdef USE_HWD_UART
+#if defined(USE_HWD_UART) && !defined(USE_COMM_ASYNC)
 static void uart_setup(void)
 {
     rcc_periph_clock_enable(UART_DEBUG_RCC);
@@ -131,7 +131,7 @@ static void uart_setup(void)
     usart_set_mode(UART_DEBUG, USART_MODE_TX_RX);
     usart_enable(UART_DEBUG);
 }
-#endif /* USE_HWD_UART */
+#endif /* USE_HWD_UART && !USE_COMM_ASYNC */
 
 #ifdef USE_HWD_I2C
 static void i2c_setup(void)
@@ -202,7 +202,7 @@ Servo_Status_t Board_Init(void)
     micros_timer_setup();
     systick_setup();
 
-#ifdef USE_HWD_UART
+#if defined(USE_HWD_UART) && !defined(USE_COMM_ASYNC)
     uart_setup();
 #endif
 

@@ -126,6 +126,32 @@ extern "C" {
 #define SENSOR_I2C_APB_MHZ      50U
 #endif
 
+/* Async COMM (USART1 + DMA2, PA9/PA10, AF7) ---------------------------------*/
+/* Визначте USE_COMM_ASYNC у CMakeLists.txt цілі (compile_definitions).
+ * Несумісно з USE_HWD_UART на одному USART: board.c пропускає uart_setup()
+ * коли USE_COMM_ASYNC активний. */
+#ifdef USE_COMM_ASYNC
+#include <libopencm3/stm32/usart.h>
+#include <libopencm3/stm32/gpio.h>
+#include <libopencm3/stm32/dma.h>
+#define COMM_USART              USART1
+#define COMM_BAUD               115200U
+#define COMM_GPIO_PORT          GPIOA
+#define COMM_TX_PIN             GPIO9
+#define COMM_RX_PIN             GPIO10
+/* DMA2: RX = Stream2 Ch4, TX = Stream7 Ch4 */
+#define COMM_RX_DMA             DMA2
+#define COMM_RX_DMA_STREAM      2U
+#define COMM_RX_DMA_CHANNEL     4U
+#define COMM_TX_DMA             DMA2
+#define COMM_TX_DMA_STREAM      7U
+#define COMM_TX_DMA_CHANNEL     4U
+/* Буфери */
+#define COMM_RX_BUF_SIZE        64U
+#define COMM_TX_BUF_SIZE        64U
+#define COMM_TX_QUEUE_LEN       4U
+#endif /* USE_COMM_ASYNC */
+
 /* SysTick -------------------------------------------------------------------*/
 #define SYSTICK_FREQ            1000U  /* 1 kHz = 1 ms */
 

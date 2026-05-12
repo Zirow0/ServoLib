@@ -49,6 +49,21 @@ set(SERVOLIB_CTRL
     ${SL}/ctrl/time.c
 )
 
+# Async комунікація (frame_codec + packet_codec + servo_comm)
+# Використовувати разом з board-specific hwd_uart_async.c та hwd_crc32.c
+set(LIB ${CMAKE_SOURCE_DIR}/Lib)
+set(SERVOLIB_COMM
+    ${SL}/comm/servo_comm.c
+    ${LIB}/frame_codec/src/frame_codec.c
+    ${LIB}/frame_codec/src/cobs.c
+    ${LIB}/frame_codec/src/crc32_soft.c
+    ${LIB}/packet_codec/src/packet_codec.c
+)
+set(SERVOLIB_COMM_INCLUDES
+    ${LIB}/frame_codec/include
+    ${LIB}/packet_codec/include
+)
+
 # Повна бібліотека
 set(SERVOLIB_ALL
     ${SERVOLIB_UTIL}

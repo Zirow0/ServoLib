@@ -1,0 +1,6 @@
+[submodule "Lib/frame_codec"]
+	path = Lib/frame_codec
+	url = https://github.com/Zirow0/frame_codec
+[submodule "Lib/packet_codec"]
+	path = Lib/packet_codec
+	url = https://github.com/Zirow0/packet_codec

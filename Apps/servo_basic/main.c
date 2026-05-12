@@ -8,10 +8,37 @@
 #include "hwd/hwd_adc.h"
 #include "hwd/hwd_timer.h"
 #include "hwd/hwd_gpio.h"
-#include "hwd/hwd_uart.h"
 
-#include <stdio.h>
+#include "comm/servo_comm.h"
+#include "hwd_uart_async.h"
 
+/* ================================================================
+ * UART async екземпляр
+ * USART1: PA9 TX, PA10 RX
+ * RX DMA2 Stream2 Ch4, TX DMA2 Stream7 Ch4
+ * ================================================================ */
+static const uart_hw_config_t comm_hw = {
+    .usart      = COMM_USART,
+    .tx_port    = COMM_GPIO_PORT,  .tx_pin    = COMM_TX_PIN,
+    .rx_port    = COMM_GPIO_PORT,  .rx_pin    = COMM_RX_PIN,
+    .rx_dma     = COMM_RX_DMA,
+    .rx_stream  = COMM_RX_DMA_STREAM,
+    .rx_channel = COMM_RX_DMA_CHANNEL,
+    .tx_dma     = COMM_TX_DMA,
+    .tx_stream  = COMM_TX_DMA_STREAM,
+    .tx_channel = COMM_TX_DMA_CHANNEL,
+};
+
+static uart_instance_t comm_inst;
+
+static bool comm_send(const uint8_t *data, size_t len)
+{
+    return uart_send(&comm_inst, data, len);
+}
+
+/* ================================================================
+ * Апаратні об'єкти
+ * ================================================================ */
 static PWM_Motor_Driver_t           motor;
 static HWD_PWM_Handle_t             pwm_fwd;
 static Incremental_Encoder_Driver_t encoder;
@@ -30,8 +57,11 @@ static const HWD_GPIO_Pin_t led_pin = {
 int main(void)
 {
     Board_Init();
+    frame_crc32_init();
 
-    HWD_UART_WriteString("ServoLib servo_basic\r\n");
+    /* ── Comm ────────────────────────────────────────────────────────────── */
+    servo_comm_init(comm_send);
+    uart_init(&comm_inst, &comm_hw, COMM_BAUD, servo_comm_on_rx);
 
     /* ── Датчик струму ACS712 ────────────────────────────────────────────── */
     static const HWD_ADC_Config_t adc_cfg = {
@@ -109,7 +139,6 @@ int main(void)
 
     /* ── Каскадний PID ───────────────────────────────────────────────────── */
     static const Cascade_Config_t casc_cfg = {
-        /* pos-контур: положення → setpoint швидкості (рад/с) */
         .pos = {
             .kp      = 5.0f,
             .ki      = 0.0f,
@@ -118,7 +147,6 @@ int main(void)
             .out_max =  10.0f,
             .i_limit =  5.0f,
         },
-        /* vel-контур: швидкість → setpoint струму (А) */
         .vel = {
             .kp      = 0.5f,
             .ki      = 5.0f,
@@ -127,7 +155,6 @@ int main(void)
             .out_max =  3.0f,
             .i_limit =  2.0f,
         },
-        /* trq-контур: струм → команда двигуну (%) */
         .trq = {
             .kp      = 0.0f,
             .ki      = 5.0f,
@@ -140,24 +167,30 @@ int main(void)
         .ff_b      = 0.0f,
         .slew_rate = 2000.0f,
     };
-    Cascade_Init(&cascade, &casc_cfg, CASCADE_MODE_POS);
-
-    /* Цільове положення: π/2 рад (90°) */
-  //  cascade.target_pos = 1.5708f;
+    Cascade_Init(&cascade, &casc_cfg, CASCADE_MODE_TRQ);
     cascade.target_current = 0.4f;
 
-    HWD_UART_WriteString("-> target: pi/2 (90 deg)\r\n");
-
-    char buf[64];
-
     while (1) {
-        /* Оновлення датчиків */
+        /* ── RX: декодування та прийом команд (тільки тут — CRC32 safe) ── */
+        servo_comm_process_rx();
+
+        servo_command_t cmd;
+        if (servo_comm_get_command(&cmd)) {
+            Cascade_SetMode(&cascade, (Cascade_Mode_t)cmd.mode);
+            switch ((Cascade_Mode_t)cmd.mode) {
+                case CASCADE_MODE_POS: cascade.target_pos     = cmd.target; break;
+                case CASCADE_MODE_VEL: cascade.target_vel     = cmd.target; break;
+                case CASCADE_MODE_TRQ: cascade.target_current = cmd.target; break;
+                default: break;
+            }
+        }
+
+        /* ── Оновлення датчиків ──────────────────────────────────────────── */
         Current_Sensor_Update(&current_driver.interface);
         Brake_Update(&brake.interface);
-
         Position_Sensor_Update(&encoder.interface);
 
-        float pos_rad = 0.0f;
+        float pos_rad   = 0.0f;
         float vel_rad_s = 0.0f;
         float current_a = 0.0f;
 
@@ -165,30 +198,34 @@ int main(void)
         Position_Sensor_GetVelocity(&encoder.interface, &vel_rad_s);
         Current_Sensor_GetCurrent(&current_driver.interface, &current_a);
 
-        /* Каскадний PID → команда двигуну */
+        /* ── Каскадний PID → команда двигуну ────────────────────────────── */
         uint32_t now_us = HWD_Timer_GetMicros();
         float power = Cascade_Compute(&cascade, pos_rad, vel_rad_s, current_a, now_us);
         Motor_SetPower(&motor.interface, power);
 
-        /* Вивід стану раз на 100 мс */
-        static uint32_t last_print = 0;
+        /* ── TX: телеметрія 100 Гц ───────────────────────────────────────── */
+        static uint32_t last_telem = 0;
         uint32_t now_ms = HWD_Timer_GetMillis();
-        if (now_ms - last_print >= 100) {
-            last_print = now_ms;
+        if (now_ms - last_telem >= 10U) {
+            last_telem = now_ms;
 
-            int pos_i = (int)pos_rad;
-            int pos_f = (int)((pos_rad - (float)pos_i) * 100.0f);
-            int vel_i = (int)vel_rad_s;
-            int vel_f = (int)((vel_rad_s - (float)vel_i) * 100.0f);
-            int cur_i = (int)current_a;
-            int cur_f = (int)((current_a - (float)cur_i) * 100.0f);
-            if (pos_f < 0) pos_f = -pos_f;
-            if (vel_f < 0) vel_f = -vel_f;
-            if (cur_f < 0) cur_f = -cur_f;
+            float target = 0.0f;
+            switch (cascade.mode) {
+                case CASCADE_MODE_POS: target = cascade.target_pos;     break;
+                case CASCADE_MODE_VEL: target = cascade.target_vel;     break;
+                case CASCADE_MODE_TRQ: target = cascade.target_current; break;
+                default: break;
+            }
 
-            snprintf(buf, sizeof(buf), "pos:%d.%02drad vel:%d.%02drad/s cur:%d.%02dA\r\n",
-                     pos_i, pos_f, vel_i, vel_f, cur_i, cur_f);
-            HWD_UART_WriteString(buf);
+            servo_telemetry_t telem = {
+                .position_rad   = pos_rad,
+                .velocity_rad_s = vel_rad_s,
+                .current_a      = current_a,
+                .target         = target,
+                .mode           = (uint8_t)cascade.mode,
+                .timestamp_ms   = now_ms,
+            };
+            servo_comm_send_telemetry(&telem);
 
             HWD_GPIO_TogglePin(&led_pin);
         }
