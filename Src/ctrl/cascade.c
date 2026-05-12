@@ -204,3 +204,36 @@ Servo_Status_t Cascade_SetMode(Cascade_Controller_t* casc, Cascade_Mode_t mode)
     casc->mode = mode;
     return Cascade_Reset(casc);
 }
+
+Servo_Status_t Cascade_ApplyConfig(Cascade_Controller_t* casc,
+                                    const Cascade_Config_t* config)
+{
+    if (casc == NULL || config == NULL) {
+        return SERVO_ERROR_NULL_PTR;
+    }
+
+    casc->config = *config;
+
+    /* pos-PID: оновити коефіцієнти та ліміти без скидання інтегратора */
+    PID_SetTunings(&casc->pos_pid,
+                   config->pos.kp, config->pos.ki, config->pos.kd);
+    PID_SetOutputLimits(&casc->pos_pid,
+                        config->pos.out_min, config->pos.out_max);
+    casc->pos_pid.params.i_limit = config->pos.i_limit;
+
+    /* vel-PID */
+    PID_SetTunings(&casc->vel_pid,
+                   config->vel.kp, config->vel.ki, config->vel.kd);
+    PID_SetOutputLimits(&casc->vel_pid,
+                        config->vel.out_min, config->vel.out_max);
+    casc->vel_pid.params.i_limit = config->vel.i_limit;
+
+    /* trq-PID */
+    PID_SetTunings(&casc->trq_pid,
+                   config->trq.kp, config->trq.ki, config->trq.kd);
+    PID_SetOutputLimits(&casc->trq_pid,
+                        config->trq.out_min, config->trq.out_max);
+    casc->trq_pid.params.i_limit = config->trq.i_limit;
+
+    return SERVO_OK;
+}

@@ -174,6 +174,7 @@ int main(void)
         /* ── RX: декодування та прийом команд (тільки тут — CRC32 safe) ── */
         servo_comm_process_rx();
 
+        /* Команда: зміна режиму та setpoint */
         servo_command_t cmd;
         if (servo_comm_get_command(&cmd)) {
             Cascade_SetMode(&cascade, (Cascade_Mode_t)cmd.mode);
@@ -183,6 +184,43 @@ int main(void)
                 case CASCADE_MODE_TRQ: cascade.target_current = cmd.target; break;
                 default: break;
             }
+        }
+
+        /* Конфігурація: оновити PID параметри online */
+        cascade_config_t wire_cfg;
+        if (servo_comm_get_cascade_config(&wire_cfg)) {
+            const Cascade_Config_t new_cfg = {
+                .pos = {
+                    .kp      = wire_cfg.pos_kp,
+                    .ki      = wire_cfg.pos_ki,
+                    .kd      = wire_cfg.pos_kd,
+                    .out_min = wire_cfg.pos_out_min,
+                    .out_max = wire_cfg.pos_out_max,
+                    .i_limit = wire_cfg.pos_i_limit,
+                },
+                .vel = {
+                    .kp      = wire_cfg.vel_kp,
+                    .ki      = wire_cfg.vel_ki,
+                    .kd      = wire_cfg.vel_kd,
+                    .out_min = wire_cfg.vel_out_min,
+                    .out_max = wire_cfg.vel_out_max,
+                    .i_limit = wire_cfg.vel_i_limit,
+                },
+                .trq = {
+                    .kp      = wire_cfg.trq_kp,
+                    .ki      = wire_cfg.trq_ki,
+                    .kd      = wire_cfg.trq_kd,
+                    .out_min = wire_cfg.trq_out_min,
+                    .out_max = wire_cfg.trq_out_max,
+                    .i_limit = wire_cfg.trq_i_limit,
+                },
+                .ff_j      = wire_cfg.ff_j,
+                .ff_b      = wire_cfg.ff_b,
+                .slew_rate = wire_cfg.slew_rate,
+            };
+            Cascade_ApplyConfig(&cascade, &new_cfg);
+            /* Відправити конфіг назад хосту як підтвердження */
+            servo_comm_send_cascade_config(&wire_cfg);
         }
 
         /* ── Оновлення датчиків ──────────────────────────────────────────── */
@@ -203,7 +241,7 @@ int main(void)
         float power = Cascade_Compute(&cascade, pos_rad, vel_rad_s, current_a, now_us);
         Motor_SetPower(&motor.interface, power);
 
-        /* ── TX: телеметрія 100 Гц ───────────────────────────────────────── */
+        /* ── TX: каскадна телеметрія 100 Гц ─────────────────────────────── */
         static uint32_t last_telem = 0;
         uint32_t now_ms = HWD_Timer_GetMillis();
         if (now_ms - last_telem >= 10U) {
@@ -217,15 +255,30 @@ int main(void)
                 default: break;
             }
 
-            servo_telemetry_t telem = {
+            cascade_telemetry_t telem = {
+                .timestamp_ms   = now_ms,
                 .position_rad   = pos_rad,
                 .velocity_rad_s = vel_rad_s,
                 .current_a      = current_a,
                 .target         = target,
+                .vel_sp         = cascade.last_vel_sp,
+                .current_sp     = cascade.last_current_sp,
+                .ff             = cascade.last_ff,
+                .power          = cascade.last_power,
+                .pos_p          = cascade.pos_pid.p_term,
+                .pos_i          = cascade.pos_pid.i_term,
+                .pos_d          = cascade.pos_pid.d_term,
+                .vel_p          = cascade.vel_pid.p_term,
+                .vel_i          = cascade.vel_pid.i_term,
+                .vel_d          = cascade.vel_pid.d_term,
+                .vel_integral   = cascade.vel_pid.integral,
+                .trq_p          = cascade.trq_pid.p_term,
+                .trq_i          = cascade.trq_pid.i_term,
+                .trq_d          = cascade.trq_pid.d_term,
+                .trq_integral   = cascade.trq_pid.integral,
                 .mode           = (uint8_t)cascade.mode,
-                .timestamp_ms   = now_ms,
             };
-            servo_comm_send_telemetry(&telem);
+            servo_comm_send_cascade(&telem);
 
             HWD_GPIO_TogglePin(&led_pin);
         }

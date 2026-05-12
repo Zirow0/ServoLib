@@ -145,6 +145,20 @@ Servo_Status_t Cascade_Reset(Cascade_Controller_t* casc);
  */
 Servo_Status_t Cascade_SetMode(Cascade_Controller_t* casc, Cascade_Mode_t mode);
 
+/**
+ * @brief Застосувати нову конфігурацію без скидання інтеграторів
+ *
+ * Оновлює коефіцієнти та ліміти всіх трьох PID контурів + FF + slew rate.
+ * Інтегральний стан та попередні значення зберігаються — безпечно
+ * викликати під час роботи для online тюнінгу.
+ *
+ * @param casc   Вказівник на контролер
+ * @param config Нова конфігурація
+ * @return Servo_Status_t Статус виконання
+ */
+Servo_Status_t Cascade_ApplyConfig(Cascade_Controller_t* casc,
+                                    const Cascade_Config_t* config);
+
 #ifdef __cplusplus
 }
 #endif

@@ -148,7 +148,7 @@ extern "C" {
 #define COMM_TX_DMA_CHANNEL     4U
 /* Буфери */
 #define COMM_RX_BUF_SIZE        64U
-#define COMM_TX_BUF_SIZE        64U
+#define COMM_TX_BUF_SIZE        96U   /* FRAME_ENCODED_SIZE(1+84) = 91 */
 #define COMM_TX_QUEUE_LEN       4U
 #endif /* USE_COMM_ASYNC */
 

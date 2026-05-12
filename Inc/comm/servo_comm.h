@@ -37,12 +37,34 @@ void servo_comm_process_rx(void);
 bool servo_comm_get_command(servo_command_t *cmd_out);
 
 /* ================================================================
- * Відправити повну телеметрію (struct mode).
+ * Відправити повну servo_telemetry_t (struct mode).
  * ================================================================ */
 void servo_comm_send_telemetry(const servo_telemetry_t *telem);
 
 /* ================================================================
- * Відправити один параметр телеметрії (param mode).
+ * Відправити один параметр servo_telemetry_t (param mode).
  * field_idx: TELEM_FIELD_* константи з servo_protocol.h
  * ================================================================ */
 void servo_comm_send_param(const servo_telemetry_t *telem, uint8_t field_idx);
+
+/* ================================================================
+ * Відправити повну cascade_telemetry_t (struct mode).
+ * ================================================================ */
+void servo_comm_send_cascade(const cascade_telemetry_t *telem);
+
+/* ================================================================
+ * Відправити один параметр cascade_telemetry_t (param mode).
+ * field_idx: CASC_TELEM_* константи з servo_protocol.h
+ * ================================================================ */
+void servo_comm_send_cascade_param(const cascade_telemetry_t *telem, uint8_t field_idx);
+
+/* ================================================================
+ * Відправити поточну конфігурацію каскаду хосту (struct mode).
+ * ================================================================ */
+void servo_comm_send_cascade_config(const cascade_config_t *cfg);
+
+/* ================================================================
+ * Отримати нову конфігурацію каскаду від хоста.
+ * Повертає true якщо є нова (одноразово).
+ * ================================================================ */
+bool servo_comm_get_cascade_config(cascade_config_t *cfg_out);
