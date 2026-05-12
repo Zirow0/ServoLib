@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 export LIBOPENCM3_DIR=/path/to/libopencm3
 ```
 
-**Build targets** (`Apps/`): `debug_encoder`, `debug_motor`, `debug_brake`, `servo_full`
+**Build targets** (`Apps/`): `debug_encoder`, `debug_motor`, `debug_brake`, `servo_full`, `servo_basic`
 
 ```bash
 # Configure (інтерактивний вибір плати, цілі та програматора):
@@ -44,13 +44,16 @@ cmake --build build/<BOARD>/<APP> --target flash
 Apps/                          ← Debug/application targets (main.c per target)
     ↓
 Src/ctrl/                      ← Cascade PID, Safety, Trajectory, Servo coordinator
+Src/comm/                      ← Async comm шар (hardware-independent)
     ↓
 Src/drv/                       ← Motor, Position sensor, Brake, Current drivers
     ↓
 Inc/hwd/ + Board/STM32F411_OCM3/  ← HWD declarations + libopencm3 implementations
+Lib/frame_codec/               ← COBS framing + CRC32 (git submodule)
+Lib/packet_codec/              ← msg_id | payload layer (git submodule)
 ```
 
-**Key principle:** `ctrl/`, `drv/` are fully hardware-independent. Only `Board/` imports libopencm3. Never call libopencm3 functions from `ctrl/` or `drv/`.
+**Key principle:** `ctrl/`, `drv/`, `comm/` are fully hardware-independent. Only `Board/` imports libopencm3. Never call libopencm3 functions from `ctrl/`, `drv/` or `comm/`.
 
 ### Universal Interface Pattern
 
@@ -193,6 +196,8 @@ ff = ff_j * current_sp + ff_b * omega   // в %
 
 **`pid_mgr.c` видалено з `SERVOLIB_CTRL`** — замінено `cascade.c`.
 
+**`Cascade_ApplyConfig(casc, config)`** — оновлює PID коефіцієнти та ліміти без скидання інтеграторів. Безпечно викликати під час роботи для online тюнінгу.
+
 ## Safety
 
 `Safety_Config_t` (всі одиниці в радіанах/рад·с):
@@ -200,6 +205,104 @@ ff = ff_j * current_sp + ff_b * omega   // в %
 - `max_velocity` — рад/с
 - `max_acceleration` — рад/с²
 - `critical_current_a` — А (аварійне вимкнення при перевищенні + таймаут)
+
+## Async Comm Layer (`USE_COMM_ASYNC`)
+
+Підключається через `target_compile_definitions(<app> PRIVATE USE_COMM_ASYNC)` у CMakeLists.txt застосунку. Реалізовано у `servo_basic`.
+
+### Архітектура
+
+```
+frame_codec (COBS + CRC32/MPEG-2)
+    └── packet_codec (msg_id | payload)
+            └── servo_comm.c (encode/decode/dispatch)
+                    └── hwd_uart_async.c (DMA TX queue + DMA RX circular + IDLE IRQ)
+```
+
+**ISR → main loop паттерн (критично для апаратного CRC32):**
+```c
+// ISR: тільки копіює байти у staging буфер, rx_ready=1
+void servo_comm_on_rx(const uint8_t *data, size_t len);  // uart_rx_cb_t
+
+// Main loop: frame_decode + packet_decode (CRC32 тут — не в ISR)
+void servo_comm_process_rx(void);
+```
+
+### Ініціалізація (порядок важливий)
+
+```c
+frame_crc32_init();                              // увімкнути RCC_CRC
+servo_comm_init(comm_send);                      // реєструє send callback
+uart_init(&comm_inst, &comm_hw, COMM_BAUD, servo_comm_on_rx);
+```
+
+`uart_send()` є неблокуючим — копіює у TX pool (4 слоти), DMA передає у фоні.
+
+### Структури протоколу
+
+| Структура | Розмір | Напрям | msg_id |
+|-----------|--------|--------|--------|
+| `servo_telemetry_t` | 21 Б | STM32→хост | `0x02` struct / `0x03` param |
+| `servo_command_t` | 5 Б | хост→STM32 | `0x04` struct / `0x05` param |
+| `cascade_telemetry_t` | 81 Б | STM32→хост | `0x06` struct / `0x07` param |
+| `cascade_config_t` | 84 Б | хост↔STM32 | `0x08` struct / `0x09` param |
+
+**`cascade_telemetry_t`** — повний знімок каскадного PID: сенсори (θ, ω, I), сигнальний ланцюг (target→vel_sp→current_sp→ff→power), P/I/D терм та `integral` (стан anti-windup) для кожного з трьох контурів.
+
+**`cascade_config_t`** — wire-формат налаштувань: kp/ki/kd/out_min/out_max/i_limit для pos, vel, trq + ff_j, ff_b, slew_rate. Підтримує struct mode (повна заміна) та param mode (один коефіцієнт).
+
+### Single-param режим
+
+Payload: `[offset 1B][type 1B][value N bytes]`
+
+Константи індексів: `TELEM_FIELD_*`, `CASC_TELEM_*`, `CASC_CFG_*` у `Inc/comm/servo_protocol.h`.
+
+### API
+
+```c
+// TX
+void servo_comm_send_telemetry(const servo_telemetry_t *);
+void servo_comm_send_param(const servo_telemetry_t *, uint8_t field_idx);
+void servo_comm_send_cascade(const cascade_telemetry_t *);
+void servo_comm_send_cascade_param(const cascade_telemetry_t *, uint8_t field_idx);
+void servo_comm_send_cascade_config(const cascade_config_t *);
+
+// RX (викликати з main loop після servo_comm_process_rx)
+bool servo_comm_get_command(servo_command_t *cmd_out);
+bool servo_comm_get_cascade_config(cascade_config_t *cfg_out);
+```
+
+### Апаратний CRC32
+
+`Board/STM32F411_OCM3/hwd_crc32.c` перевизначає `weak frame_crc32` з `crc32_soft.c`. Потребує `frame_crc32_init()` один раз при старті. Апаратний блок CRC — єдиний глобальний ресурс: не викликати одночасно з ISR та main loop (гарантується паттерном staging буфера).
+
+### Конфігурація у `board_config.h`
+
+```c
+#ifdef USE_COMM_ASYNC
+#define COMM_USART             USART1
+#define COMM_BAUD              115200U
+#define COMM_RX_DMA            DMA2  // Stream2 Ch4
+#define COMM_TX_DMA            DMA2  // Stream7 Ch4
+#define COMM_RX_BUF_SIZE       64U
+#define COMM_TX_BUF_SIZE       96U   // ≥ FRAME_ENCODED_SIZE(1+84) = 91
+#define COMM_TX_QUEUE_LEN      4U
+#endif
+```
+
+`USE_COMM_ASYNC` несумісний з `USE_HWD_UART` на одному USART: `board.c` пропускає `uart_setup()` коли `USE_COMM_ASYNC` визначено.
+
+### CMake
+
+```cmake
+stm32_add_executable(<app> ... ${SERVOLIB_COMM}
+    ${BOARD_DIR}/hwd_uart_async.c
+    ${BOARD_DIR}/hwd_crc32.c)
+target_include_directories(<app> PRIVATE ${CMAKE_SOURCE_DIR}/Src ${SERVOLIB_COMM_INCLUDES})
+target_compile_definitions(<app> PRIVATE USE_COMM_ASYNC)
+```
+
+`SERVOLIB_COMM` та `SERVOLIB_COMM_INCLUDES` визначені у `cmake/ServoLib.cmake`.
 
 ## HWD Layer
 
@@ -228,7 +331,7 @@ HWD_I2C_StartContinuousRead(handle, dev_addr, reg, volatile_buf, size);
 // Запускає I2C IT цикл: TC IRQ копіює дані в buf та перезапускає читання
 ```
 
-Hardware pin assignments are in `Board/STM32F411_OCM3/board_config.h`. Driver selection macros (`USE_MOTOR_PWM`, `USE_BRAKE`, `USE_SENSOR_AS5600`, `USE_SENSOR_ACS712`, etc.) are defined there.
+Hardware pin assignments are in `Board/STM32F411_OCM3/board_config.h`. Driver selection macros (`USE_MOTOR_PWM`, `USE_BRAKE`, `USE_SENSOR_AS5600`, `USE_SENSOR_ACS712`, `USE_COMM_ASYNC`, etc.) are defined there or via CMake `target_compile_definitions`.
 
 `compile_commands.json` (symlink) і `.clangd` генеруються автоматично при `cmake` configure — не редагувати вручну.
 
