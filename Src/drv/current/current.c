@@ -17,10 +17,24 @@
 
 /* Private defines -----------------------------------------------------------*/
 
-#define CURRENT_CALIB_DURATION_MS   50U   /**< Тривалість калібрування (мс) */
-#define CURRENT_CALIB_MIN_SAMPLES   10U   /**< Мінімум зразків для калібрування */
+#define CURRENT_CALIB_DURATION_MS   50U    /**< Тривалість калібрування (мс) */
+#define CURRENT_CALIB_MIN_SAMPLES   10U    /**< Мінімум зразків для калібрування */
+#define CURRENT_UKF_DT              0.001f /**< Крок часу UKF (1 кГц контурний цикл) */
 
 /* Private functions ---------------------------------------------------------*/
+
+static void Current_UKF_StateFunc(const float* x, float dt, float* x_pred, void* user_data)
+{
+    (void)dt;
+    (void)user_data;
+    x_pred[0] = x[0];  /* Модель випадкового блукання: струм зберігається */
+}
+
+static void Current_UKF_MeasurementFunc(const float* x, float* z_pred, void* user_data)
+{
+    (void)user_data;
+    z_pred[0] = x[0];  /* Спостерігаємо струм напряму */
+}
 
 static inline bool Current_Sensor_IsValid(const Current_Sensor_Interface_t* sensor)
 {
@@ -42,7 +56,6 @@ Servo_Status_t Current_Sensor_Init(Current_Sensor_Interface_t* sensor,
 
     memset(&sensor->data, 0, sizeof(Current_Sensor_Data_t));
 
-    sensor->data.ema_alpha               = params->ema_alpha;
     sensor->data.overcurrent_threshold_a = params->overcurrent_threshold_a;
 
     if (sensor->hw.init != NULL) {
@@ -51,6 +64,18 @@ Servo_Status_t Current_Sensor_Init(Current_Sensor_Interface_t* sensor,
             return status;
         }
     }
+
+    /* Ініціалізація UKF: стан [струм_А], вимірювання [струм_А] */
+    float x0[1] = {0.0f};
+    float P0[1] = {1.0f};
+    float Q[1]  = {params->process_noise_q};
+    float R[1]  = {params->measurement_noise_r};
+
+    ukf_init(&sensor->data.ukf, 1, 1,
+             Current_UKF_StateFunc, Current_UKF_MeasurementFunc, NULL);
+    ukf_set_params(&sensor->data.ukf, 0.5f, 2.0f, 0.0f);
+    ukf_set_state(&sensor->data.ukf, x0, P0);
+    ukf_set_noise(&sensor->data.ukf, Q, R);
 
     return SERVO_OK;
 }
@@ -71,9 +96,13 @@ Servo_Status_t Current_Sensor_Update(Current_Sensor_Interface_t* sensor)
 
     float current = raw.current_a - data->zero_offset_a;
 
-    /* 3. EMA фільтрація: y[n] = α·x[n] + (1-α)·y[n-1] */
-    data->filtered_current_a = data->ema_alpha * current
-                              + (1.0f - data->ema_alpha) * data->filtered_current_a;
+    /* UKF фільтрація */
+    ukf_predict(&data->ukf, CURRENT_UKF_DT);
+    ukf_update(&data->ukf, &current);
+
+    float ukf_state[1];
+    ukf_get_state(&data->ukf, ukf_state, NULL);
+    data->filtered_current_a = ukf_state[0];
 
     float abs_current = (current < 0.0f) ? -current : current;
     if (abs_current > data->peak_current_a) {
@@ -113,6 +142,11 @@ Servo_Status_t Current_Sensor_Calibrate(Current_Sensor_Interface_t* sensor)
 
     data->zero_offset_a      = sum / (float)count;
     data->filtered_current_a = 0.0f;
+
+    /* Скидання стану UKF після визначення нуля */
+    float x0[1] = {0.0f};
+    float P0[1] = {1.0f};
+    ukf_set_state(&data->ukf, x0, P0);
 
     return SERVO_OK;
 }

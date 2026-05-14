@@ -7,3 +7,5 @@ stm32_add_executable(debug_current
     ${SERVOLIB_UTIL}
     ${SERVOLIB_CURRENT}
 )
+
+target_link_libraries(debug_current PRIVATE ukf_mcu)

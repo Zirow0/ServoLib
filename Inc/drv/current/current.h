@@ -17,6 +17,7 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 #include "../../core.h"
+#include "ukf_mcu.h"
 
 /* Exported types ------------------------------------------------------------*/
 
@@ -36,15 +37,15 @@ typedef struct {
  */
 typedef struct {
     float overcurrent_threshold_a;  /**< Поріг перевантаження (А), 0.0 = вимкнено */
-    float ema_alpha;                 /**< Коефіцієнт EMA фільтра [0.0 - 1.0],
-                                         вищий = менше фільтрації, швидша реакція */
+    float process_noise_q;          /**< Шум процесу UKF (Q), дисперсія в А² */
+    float measurement_noise_r;      /**< Шум вимірювань UKF (R), дисперсія в А² */
 } Current_Params_t;
 
 /**
  * @brief Внутрішні дані датчика (керується current.c)
  */
 typedef struct {
-    float ema_alpha;
+    ukf_t ukf;
     float overcurrent_threshold_a;
 
     float filtered_current_a;  /**< Відфільтрований струм (А) */

@@ -106,9 +106,10 @@ static Servo_Status_t ACS712_HW_ReadRaw(void* driver_data, Current_Raw_Data_t* r
 
 /* Exported functions --------------------------------------------------------*/
 
-Servo_Status_t ACS712_Create(ACS712_Driver_t* driver, const ACS712_Config_t* config)
+Servo_Status_t ACS712_Create(ACS712_Driver_t* driver, const ACS712_Config_t* config,
+                              const Current_Params_t* current_params)
 {
-    if (driver == NULL || config == NULL) {
+    if (driver == NULL || config == NULL || current_params == NULL) {
         return SERVO_ERROR_NULL_PTR;
     }
 
@@ -137,12 +138,7 @@ Servo_Status_t ACS712_Create(ACS712_Driver_t* driver, const ACS712_Config_t* con
     driver->interface.hw.read_raw = ACS712_HW_ReadRaw;
     driver->interface.driver_data = driver;
 
-    Current_Params_t base_params = {
-        .overcurrent_threshold_a = config->overcurrent_threshold_a,
-        .ema_alpha               = config->ema_alpha,
-    };
-
-    return Current_Sensor_Init(&driver->interface, &base_params);
+    return Current_Sensor_Init(&driver->interface, current_params);
 }
 
 #endif /* USE_SENSOR_ACS712 */

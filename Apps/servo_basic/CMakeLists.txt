@@ -14,6 +14,6 @@ target_include_directories(servo_basic PRIVATE
     ${CMAKE_SOURCE_DIR}/Src
 )
 
-target_link_libraries(servo_basic PRIVATE frame_codec packet_codec)
+target_link_libraries(servo_basic PRIVATE frame_codec packet_codec ukf_mcu)
 
 target_compile_definitions(servo_basic PRIVATE USE_COMM_ASYNC)

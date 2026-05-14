@@ -155,10 +155,21 @@ API: `Brake_Init`, `Brake_Engage`, `Brake_Release`, `Brake_Update`, `Brake_GetSt
 // Ініціалізація:
 HWD_ADC_Init(&adc, &adc_cfg);     // реєстрація каналу
 HWD_ADC_StartScan();               // один раз після всіх ADC Init
-ACS712_Create(&driver, &config);   // factory
-Current_Sensor_Calibrate(&driver.interface);  // при нульовому струмі
 
-// У control loop (оновлення EMA фільтра):
+const ACS712_Config_t acs_cfg = {  // тільки апаратні параметри
+    .variant       = ACS712_30A,
+    .adc           = &adc,
+    .divider_ratio = 0.65f,
+};
+const Current_Params_t current_params = {
+    .overcurrent_threshold_a = 4.0f,
+    .process_noise_q         = 0.001f,  // дисперсія зміни струму за крок (А²)
+    .measurement_noise_r     = 0.02f,   // дисперсія шуму датчика (А²) = σ²
+};
+ACS712_Create(&driver, &acs_cfg, &current_params);  // factory
+Current_Sensor_Calibrate(&driver.interface);         // при нульовому струмі
+
+// У control loop (оновлення UKF):
 Current_Sensor_Update(&driver.interface);
 // Servo_Update() сам читає струм через GetCurrent — не потрібно викликати у servo loop
 Current_Sensor_GetCurrent(&driver.interface, &current_a);
@@ -170,6 +181,14 @@ Current_Sensor_ResetPeak(&driver.interface);                 // скинути �
 ```
 
 `Current_Sensor_GetStats`, `Current_Sensor_DeInit` — **не існують**.
+
+**Налаштування UKF фільтра:**
+- `measurement_noise_r = σ²` де σ — виміряний шум датчика (А) при нульовому струмі
+- `process_noise_q` — стартова точка: у 10-20x менше за `measurement_noise_r`
+- Якщо фільтр запізнюється на стрибки — збільшити `process_noise_q`
+- Якщо на виході ще є шум — збільшити `measurement_noise_r`
+
+**CMake:** застосунки з `SERVOLIB_CURRENT` потребують `target_link_libraries(... ukf_mcu)`.
 
 **Два порогові струми:**
 - `Cascade_Config_t.vel.out_max` — робочий ліміт струму (А), обмежує вихід vel-контуру

@@ -28,13 +28,16 @@ int main(void)
     HWD_ADC_StartScan();
 
     static const ACS712_Config_t acs_cfg = {
-        .variant                 = ACS712_30A,
-        .adc                     = &current_adc,
-        .divider_ratio           = 0.65f,
-        .overcurrent_threshold_a = 4.0f,
-        .ema_alpha               = 0.5f,
+        .variant       = ACS712_30A,
+        .adc           = &current_adc,
+        .divider_ratio = 0.65f,
     };
-    ACS712_Create(&current_driver, &acs_cfg);
+    static const Current_Params_t current_params = {
+        .overcurrent_threshold_a = 4.0f,
+        .process_noise_q         = 0.001f,
+        .measurement_noise_r     = 0.02f,
+    };
+    ACS712_Create(&current_driver, &acs_cfg, &current_params);
 
     /* Калібрування при нульовому струмі */
     HWD_UART_WriteString("Calibrating...\r\n");

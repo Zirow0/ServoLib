@@ -53,11 +53,9 @@ typedef enum {
  * @brief Конфігурація драйвера ACS712T
  */
 typedef struct {
-    ACS712_Variant_t  variant;               /**< Варіант датчика */
-    HWD_ADC_Handle_t* adc;                   /**< Ініціалізований дескриптор каналу АЦП */
-    float             divider_ratio;         /**< Коефіцієнт дільника (< 1.0), напр. 0.66 для 5В→3.3В */
-    float             overcurrent_threshold_a; /**< Поріг перевантаження (А), 0.0 = вимкнено */
-    float             ema_alpha;             /**< Коефіцієнт EMA фільтра [0.0 - 1.0] */
+    ACS712_Variant_t  variant;        /**< Варіант датчика */
+    HWD_ADC_Handle_t* adc;            /**< Ініціалізований дескриптор каналу АЦП */
+    float             divider_ratio;  /**< Коефіцієнт дільника (< 1.0), напр. 0.66 для 5В→3.3В */
 } ACS712_Config_t;
 
 /**
@@ -88,7 +86,8 @@ typedef struct {
  * @param config Конфігурація датчика та базового шару
  * @return Servo_Status_t Статус виконання
  */
-Servo_Status_t ACS712_Create(ACS712_Driver_t* driver, const ACS712_Config_t* config);
+Servo_Status_t ACS712_Create(ACS712_Driver_t* driver, const ACS712_Config_t* config,
+                              const Current_Params_t* current_params);
 
 #ifdef __cplusplus
 }
