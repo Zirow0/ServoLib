@@ -1,8 +1,6 @@
 /**
  * @file current.c
  * @brief Реалізація базової логіки датчика струму
- * @author ServoCore Team
- * @date 2025
  *
  * Спільна логіка: EMA фільтрація, корекція нуля, пік, перевантаження,
  * програмне калібрування через усереднення read_raw.
@@ -42,14 +40,11 @@ Servo_Status_t Current_Sensor_Init(Current_Sensor_Interface_t* sensor,
         return SERVO_INVALID;
     }
 
-    /* Очищення даних */
     memset(&sensor->data, 0, sizeof(Current_Sensor_Data_t));
 
-    /* Збереження параметрів обробки */
     sensor->data.ema_alpha               = params->ema_alpha;
     sensor->data.overcurrent_threshold_a = params->overcurrent_threshold_a;
 
-    /* Ініціалізація апаратури */
     if (sensor->hw.init != NULL) {
         Servo_Status_t status = sensor->hw.init(sensor->driver_data, params);
         if (status != SERVO_OK) {
@@ -66,7 +61,6 @@ Servo_Status_t Current_Sensor_Update(Current_Sensor_Interface_t* sensor)
 
     Current_Sensor_Data_t* data = &sensor->data;
 
-    /* 1. Зчитати миттєвий струм з драйвера */
     Current_Raw_Data_t raw;
     memset(&raw, 0, sizeof(Current_Raw_Data_t));
 
@@ -75,20 +69,17 @@ Servo_Status_t Current_Sensor_Update(Current_Sensor_Interface_t* sensor)
 
     if (!raw.valid) return SERVO_ERROR;
 
-    /* 2. Корекція нульового зміщення */
     float current = raw.current_a - data->zero_offset_a;
 
     /* 3. EMA фільтрація: y[n] = α·x[n] + (1-α)·y[n-1] */
     data->filtered_current_a = data->ema_alpha * current
                               + (1.0f - data->ema_alpha) * data->filtered_current_a;
 
-    /* 4. Відстеження абсолютного піку */
     float abs_current = (current < 0.0f) ? -current : current;
     if (abs_current > data->peak_current_a) {
         data->peak_current_a = abs_current;
     }
 
-    /* 5. Виявлення перевантаження */
     if (data->overcurrent_threshold_a > 0.0f &&
         abs_current > data->overcurrent_threshold_a)
     {

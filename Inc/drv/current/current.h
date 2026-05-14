@@ -1,8 +1,6 @@
 /**
  * @file current.h
  * @brief Універсальний інтерфейс драйвера датчика струму
- * @author ServoCore Team
- * @date 2025
  *
  * Послідовність ініціалізації:
  *   1. XxxDriver_Create(&driver, &config)

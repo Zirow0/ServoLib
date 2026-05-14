@@ -1,8 +1,6 @@
 /**
  * @file brake.c
  * @brief Реалізація універсального інтерфейсу драйвера гальм
- * @author ServoCore Team
- * @date 2025
  */
 
 /* Includes ------------------------------------------------------------------*/
@@ -76,17 +74,14 @@ Servo_Status_t Brake_Update(Brake_Interface_t* brake)
     uint32_t current_time = Brake_GetTimeMs();
     uint32_t elapsed_time = current_time - brake->data.transition_start_time_ms;
 
-    // Обробка перехідних станів
     switch (brake->data.state) {
         case BRAKE_STATE_ENGAGING:
-            // Перевірка завершення переходу ENGAGING → ENGAGED
             if (elapsed_time >= brake->data.engage_time_ms) {
                 brake->data.state = BRAKE_STATE_ENGAGED;
             }
             break;
 
         case BRAKE_STATE_RELEASING:
-            // Перевірка завершення переходу RELEASING → RELEASED
             if (elapsed_time >= brake->data.release_time_ms) {
                 brake->data.state = BRAKE_STATE_RELEASED;
             }
@@ -94,7 +89,6 @@ Servo_Status_t Brake_Update(Brake_Interface_t* brake)
 
         case BRAKE_STATE_ENGAGED:
         case BRAKE_STATE_RELEASED:
-            // Стабільні стани - нічого не робимо
             break;
 
         default:

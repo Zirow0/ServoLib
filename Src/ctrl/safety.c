@@ -1,8 +1,6 @@
 /**
  * @file safety.c
  * @brief Реалізація системи безпеки
- * @author ServoCore Team
- * @date 2025
  */
 
 /* Includes ------------------------------------------------------------------*/
@@ -55,7 +53,6 @@ Servo_Status_t Safety_Update(Safety_System_t* safety,
 
     bool violation = false;
 
-    // Перевірка положення
     if (safety->config.enable_position_limits) {
         if (position < safety->config.min_position || position > safety->config.max_position) {
             safety->state.position_violated = true;
@@ -64,7 +61,6 @@ Servo_Status_t Safety_Update(Safety_System_t* safety,
         }
     }
 
-    // Перевірка швидкості
     if (safety->config.enable_velocity_limit) {
         if (fabsf(velocity) > safety->config.max_velocity) {
             safety->state.velocity_violated = true;
@@ -73,7 +69,6 @@ Servo_Status_t Safety_Update(Safety_System_t* safety,
         }
     }
 
-    // Перевірка струму
     if (safety->config.enable_current_protection) {
         if (current_a > safety->config.critical_current_a) {
             if (safety->state.overcurrent_start == 0) {
@@ -91,7 +86,6 @@ Servo_Status_t Safety_Update(Safety_System_t* safety,
         }
     }
 
-    // Перевірка watchdog
     if (safety->config.enable_watchdog) {
         uint32_t time_since_update = current_time - safety->state.last_update_time;
         if (time_since_update > safety->config.watchdog_timeout_ms) {

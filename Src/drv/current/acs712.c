@@ -1,8 +1,6 @@
 /**
  * @file acs712.c
  * @brief Реалізація драйвера датчика струму ACS712T
- * @author ServoCore Team
- * @date 2025
  *
  * Hardware Callbacks Pattern: тільки апаратні операції.
  * Читає АЦП → конвертує напругу у Ампери → повертає миттєве значення.
@@ -94,14 +92,12 @@ static Servo_Status_t ACS712_HW_ReadRaw(void* driver_data, Current_Raw_Data_t* r
 
     raw->valid = false;
 
-    /* Читання напруги з АЦП (блокуючий polling) */
     float vadc_v = 0.0f;
     Servo_Status_t status = HWD_ADC_ReadVoltage(driver->adc, &vadc_v);
     if (status != SERVO_OK) {
         return status;
     }
 
-    /* Конвертація: I_raw = Vadc × current_coefficient */
     raw->current_a = vadc_v * driver->current_coefficient;
     raw->valid     = true;
 
@@ -128,7 +124,6 @@ Servo_Status_t ACS712_Create(ACS712_Driver_t* driver, const ACS712_Config_t* con
         return SERVO_INVALID;
     }
 
-    /* Очищення структури */
     memset(driver, 0, sizeof(ACS712_Driver_t));
 
     /* Обчислення коефіцієнту конвертації з параметрів варіанту:
@@ -138,14 +133,10 @@ Servo_Status_t ACS712_Create(ACS712_Driver_t* driver, const ACS712_Config_t* con
     driver->current_coefficient   = 1.0f / (sensitivity * config->divider_ratio);
     driver->adc                   = config->adc;
 
-    /* Налаштування hardware callbacks */
     driver->interface.hw.init     = ACS712_HW_Init;
     driver->interface.hw.read_raw = ACS712_HW_ReadRaw;
-
-    /* Вказівник для callbacks */
     driver->interface.driver_data = driver;
 
-    /* Ініціалізація базового шару */
     Current_Params_t base_params = {
         .overcurrent_threshold_a = config->overcurrent_threshold_a,
         .ema_alpha               = config->ema_alpha,

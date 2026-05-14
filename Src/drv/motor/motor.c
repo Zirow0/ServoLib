@@ -18,18 +18,15 @@
  */
 static float ProcessPower(Motor_Data_t* data, float power)
 {
-    /* Обмеження в межах max_power */
     float max = data->params.max_power;
     if      (power >  max) power =  max;
     else if (power < -max) power = -max;
 
-    /* Мертва зона */
     float dead = data->params.min_power;
     if (power > -dead && power < dead) {
         power = 0.0f;
     }
 
-    /* Інверсія напрямку */
     if (data->params.invert_direction) {
         power = -power;
     }

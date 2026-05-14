@@ -1,8 +1,6 @@
 /**
  * @file time.c
  * @brief Реалізація керування часом
- * @author ServoCore Team
- * @date 2025
  */
 
 /* Includes ------------------------------------------------------------------*/
@@ -81,7 +79,7 @@ Servo_Status_t Time_InitExecutionTimer(Execution_Timer_t* timer)
     }
 
     memset(timer, 0, sizeof(Execution_Timer_t));
-    timer->min_duration = 0xFFFFFFFF;  // Максимальне значення
+    timer->min_duration = 0xFFFFFFFF;
 
     return SERVO_OK;
 }
@@ -106,7 +104,6 @@ Servo_Status_t Time_StopMeasurement(Execution_Timer_t* timer)
     timer->end_time = Time_GetMicros();
     timer->duration = timer->end_time - timer->start_time;
 
-    // Оновлення статистики
     if (timer->duration < timer->min_duration) {
         timer->min_duration = timer->duration;
     }

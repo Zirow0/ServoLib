@@ -1,8 +1,6 @@
 /**
  * @file cascade.h
  * @brief Каскадний PID регулятор з feedforward
- * @author ServoCore Team
- * @date 2025
  *
  * Три контури керування:
  *   pos-контур:  похибка положення (рад)   → setpoint кутової швидкості (рад/с)

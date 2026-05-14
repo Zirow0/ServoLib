@@ -1,8 +1,6 @@
 /**
  * @file cascade.c
  * @brief Реалізація каскадного PID регулятора з feedforward
- * @author ServoCore Team
- * @date 2025
  */
 
 /* Includes ------------------------------------------------------------------*/

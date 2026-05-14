@@ -1,8 +1,6 @@
 /**
  * @file gpio_brake.c
  * @brief Реалізація GPIO драйвера електронних гальм
- * @author ServoCore Team
- * @date 2025
  */
 
 /* Includes ------------------------------------------------------------------*/
@@ -22,11 +20,7 @@
  */
 static Servo_Status_t GPIO_Brake_HW_Init(void* driver_data)
 {
-    // GPIO вже ініціалізований в Board layer (CubeMX)
-    // Тут можна додати додаткову конфігурацію якщо потрібно
-
-    (void)driver_data;  // Unused в цій реалізації
-
+    (void)driver_data;
     return SERVO_OK;
 }
 
@@ -41,7 +35,6 @@ static Servo_Status_t GPIO_Brake_HW_Engage(void* driver_data)
         return SERVO_ERROR_NULL_PTR;
     }
 
-    // Встановлення активного стану GPIO
     HWD_GPIO_PinState_t state = driver->active_high ? HWD_GPIO_PIN_SET : HWD_GPIO_PIN_RESET;
 
     return HWD_GPIO_WritePin(driver->gpio_port, driver->gpio_pin, state);
@@ -58,7 +51,6 @@ static Servo_Status_t GPIO_Brake_HW_Release(void* driver_data)
         return SERVO_ERROR_NULL_PTR;
     }
 
-    // Встановлення неактивного стану GPIO
     HWD_GPIO_PinState_t state = driver->active_high ? HWD_GPIO_PIN_RESET : HWD_GPIO_PIN_SET;
 
     return HWD_GPIO_WritePin(driver->gpio_port, driver->gpio_pin, state);
@@ -76,23 +68,17 @@ Servo_Status_t GPIO_Brake_Create(GPIO_Brake_Driver_t* driver, const GPIO_Brake_C
         return SERVO_ERROR_NULL_PTR;
     }
 
-    // Очистка структури
     memset(driver, 0, sizeof(GPIO_Brake_Driver_t));
 
-    // Збереження GPIO конфігурації
-    driver->gpio_port = config->gpio_port;
-    driver->gpio_pin = config->gpio_pin;
+    driver->gpio_port   = config->gpio_port;
+    driver->gpio_pin    = config->gpio_pin;
     driver->active_high = config->active_high;
 
-    // Налаштування hardware callbacks
-    driver->interface.hw.init    = GPIO_Brake_HW_Init;
-    driver->interface.hw.engage  = GPIO_Brake_HW_Engage;
-    driver->interface.hw.release = GPIO_Brake_HW_Release;
-
-    // Вказівник на driver_data (для callbacks)
+    driver->interface.hw.init     = GPIO_Brake_HW_Init;
+    driver->interface.hw.engage   = GPIO_Brake_HW_Engage;
+    driver->interface.hw.release  = GPIO_Brake_HW_Release;
     driver->interface.driver_data = driver;
 
-    // Ініціалізація базового інтерфейсу з таймінгами
     Brake_Params_t params = {
         .engage_time_ms = config->engage_time_ms,
         .release_time_ms = config->release_time_ms

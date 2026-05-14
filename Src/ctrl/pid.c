@@ -1,8 +1,6 @@
 /**
  * @file pid.c
  * @brief Реалізація PID регулятора
- * @author ServoCore Team
- * @date 2025
  */
 
 /* Includes ------------------------------------------------------------------*/
@@ -63,7 +61,6 @@ Servo_Status_t PID_SetOutputLimits(PID_Controller_t* pid, float min, float max)
     pid->params.out_min = min;
     pid->params.out_max = max;
 
-    // Обмеження поточного виходу
     pid->output = Clamp(pid->output, min, max);
 
     return SERVO_OK;

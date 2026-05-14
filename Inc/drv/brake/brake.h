@@ -1,8 +1,6 @@
 /**
  * @file brake.h
  * @brief Універсальний інтерфейс драйвера гальм з hardware callbacks
- * @author ServoCore Team
- * @date 2025
  */
 
 #ifndef SERVOCORE_DRV_BRAKE_H

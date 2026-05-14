@@ -1,8 +1,6 @@
 /**
  * @file servo.c
  * @brief Реалізація головного контролера сервоприводу
- * @author ServoCore Team
- * @date 2025
  */
 
 /* Includes ------------------------------------------------------------------*/
@@ -80,21 +78,17 @@ Servo_Status_t Servo_Update(Servo_Controller_t* servo)
         return SERVO_OK;
     }
 
-    /* Зчитування датчиків */
     UpdateSensorData(servo);
 
-    /* Зчитування струму (якщо є датчик) */
     float current_a = 0.0f;
     if (servo->current != NULL) {
         Current_Sensor_GetCurrent(servo->current, &current_a);
     }
 
-    /* Оновлення гальм */
     if (servo->brake != NULL && servo->config.enable_brake) {
         Brake_Update(servo->brake);
     }
 
-    /* Перевірка безпеки */
     Servo_Status_t safety_status = Safety_Update(&servo->safety,
                                                   servo->state.position,
                                                   servo->state.velocity,
@@ -145,7 +139,6 @@ Servo_Status_t Servo_Update(Servo_Controller_t* servo)
         servo->state.state = SERVO_STATE_RUNNING;
 
     } else {
-        /* IDLE */
         Motor_Stop(servo->motor);
         servo->state.state = SERVO_STATE_READY;
     }

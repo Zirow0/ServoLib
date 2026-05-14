@@ -1,8 +1,6 @@
 /**
  * @file traj.c
  * @brief Реалізація генератора траєкторій
- * @author ServoCore Team
- * @date 2025
  */
 
 /* Includes ------------------------------------------------------------------*/
@@ -185,7 +183,6 @@ static void ComputeTrapezoidalTrajectory(Trajectory_Generator_t* traj)
     } else if (t <= t_total) {
         // Фаза уповільнення
         traj->state = TRAJ_STATE_DECEL;
-        // float t_decel = t - t_accel - t_cruise;  // UNUSED
         float remaining_time = t_total - t;
         traj->current_velocity = direction * a_max * remaining_time;
         traj->current_position = traj->target_position - direction * 0.5f * a_max * remaining_time * remaining_time;
