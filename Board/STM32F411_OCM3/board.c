@@ -46,7 +46,7 @@ static void gpio_misc_setup(void)
     gpio_set_output_options(BRAKE_CTRL_GPIO_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_2MHZ, BRAKE_CTRL_PIN);
     gpio_clear(BRAKE_CTRL_GPIO_PORT, BRAKE_CTRL_PIN);
 
-#if defined(USE_MOTOR_PWM) && !defined(USE_HWD_SPI)
+#ifdef USE_MOTOR_PWM
     /* Motor DIR — PA7, вихід push-pull, за замовчуванням LOW */
     gpio_mode_setup(MOTOR_DIR_GPIO_PORT, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, MOTOR_DIR_PIN);
     gpio_set_output_options(MOTOR_DIR_GPIO_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_25MHZ, MOTOR_DIR_PIN);
@@ -54,8 +54,7 @@ static void gpio_misc_setup(void)
 #endif
 }
 
-/* PA6 конфліктує з SPI1 (AF5) — одночасно не можна */
-#if defined(USE_MOTOR_PWM) && !defined(USE_HWD_SPI)
+#ifdef USE_MOTOR_PWM
 static void pwm_gpio_setup(void)
 {
     gpio_mode_setup(MOTOR_PWM_GPIO_PORT, GPIO_MODE_AF, GPIO_PUPD_NONE,
@@ -65,50 +64,7 @@ static void pwm_gpio_setup(void)
     gpio_set_af(MOTOR_PWM_GPIO_PORT, MOTOR_PWM_GPIO_AF,
                 MOTOR_PWM_GPIO_CH1);
 }
-#endif /* USE_MOTOR_PWM && !USE_HWD_SPI */
-
-#ifdef USE_HWD_SPI
-static void spi_setup(void)
-{
-    rcc_periph_clock_enable(ENCODER_SPI_RCC);
-    rcc_periph_clock_enable(ENCODER_SPI_DATA_RCC);
-
-    /* PA5 → SCK */
-    gpio_mode_setup(ENCODER_SPI_SCK_PORT, GPIO_MODE_AF, GPIO_PUPD_NONE, ENCODER_SPI_SCK);
-    gpio_set_output_options(ENCODER_SPI_SCK_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_25MHZ, ENCODER_SPI_SCK);
-    gpio_set_af(ENCODER_SPI_SCK_PORT, ENCODER_SPI_GPIO_AF, ENCODER_SPI_SCK);
-
-    /* PB4 → MISO, PB5 → MOSI */
-    gpio_mode_setup(ENCODER_SPI_DATA_PORT, GPIO_MODE_AF, GPIO_PUPD_NONE,
-                    ENCODER_SPI_MISO | ENCODER_SPI_MOSI);
-    gpio_set_output_options(ENCODER_SPI_DATA_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_25MHZ,
-                            ENCODER_SPI_MISO | ENCODER_SPI_MOSI);
-    gpio_set_af(ENCODER_SPI_DATA_PORT, ENCODER_SPI_GPIO_AF,
-                ENCODER_SPI_MISO | ENCODER_SPI_MOSI);
-
-    /* CS — PA4, вихід, початково HIGH (неактивний) */
-    gpio_mode_setup(ENCODER_CS_GPIO_PORT, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, ENCODER_CS_PIN);
-    gpio_set_output_options(ENCODER_CS_GPIO_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_25MHZ, ENCODER_CS_PIN);
-    gpio_set(ENCODER_CS_GPIO_PORT, ENCODER_CS_PIN);
-
-    /* MSEL — PB0, вихід, HIGH = SPI4-wire 24-bit mode */
-    gpio_mode_setup(ENCODER_MSEL_GPIO_PORT, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, ENCODER_MSEL_PIN);
-    gpio_set_output_options(ENCODER_MSEL_GPIO_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_2MHZ, ENCODER_MSEL_PIN);
-    gpio_set(ENCODER_MSEL_GPIO_PORT, ENCODER_MSEL_PIN);
-
-    /* CPOL=0, CPHA=1 (MODE 1), APB2/128 ≈ 781 kHz, 8-bit MSB first */
-    spi_init_master(ENCODER_SPI,
-                    SPI_CR1_BAUDRATE_FPCLK_DIV_128,
-                    SPI_CR1_CPOL_CLK_TO_0_WHEN_IDLE,
-                    SPI_CR1_CPHA_CLK_TRANSITION_2,
-                    SPI_CR1_DFF_8BIT,
-                    SPI_CR1_MSBFIRST);
-
-    spi_enable_software_slave_management(ENCODER_SPI);
-    spi_set_nss_high(ENCODER_SPI);
-    spi_enable(ENCODER_SPI);
-}
-#endif /* USE_HWD_SPI */
+#endif /* USE_MOTOR_PWM */
 
 #if defined(USE_HWD_UART) && !defined(USE_COMM_ASYNC)
 static void uart_setup(void)
@@ -132,31 +88,6 @@ static void uart_setup(void)
     usart_enable(UART_DEBUG);
 }
 #endif /* USE_HWD_UART && !USE_COMM_ASYNC */
-
-#ifdef USE_HWD_I2C
-static void i2c_setup(void)
-{
-    rcc_periph_clock_enable(SENSOR_I2C_RCC);
-
-    /* PB6 SCL, PB7 SDA — AF4, open-drain з підтяжкою */
-    gpio_mode_setup(SENSOR_I2C_GPIO_PORT, GPIO_MODE_AF,
-                    GPIO_PUPD_PULLUP,
-                    SENSOR_I2C_SCL | SENSOR_I2C_SDA);
-    gpio_set_output_options(SENSOR_I2C_GPIO_PORT, GPIO_OTYPE_OD,
-                            GPIO_OSPEED_25MHZ,
-                            SENSOR_I2C_SCL | SENSOR_I2C_SDA);
-    gpio_set_af(SENSOR_I2C_GPIO_PORT, SENSOR_I2C_GPIO_AF,
-                SENSOR_I2C_SCL | SENSOR_I2C_SDA);
-
-    i2c_reset(SENSOR_I2C);
-    i2c_peripheral_disable(SENSOR_I2C);
-
-    /* 400 kHz Fast Mode, APB1 = 50 MHz */
-    i2c_set_speed(SENSOR_I2C, i2c_speed_fm_400k, SENSOR_I2C_APB_MHZ);
-
-    i2c_peripheral_enable(SENSOR_I2C);
-}
-#endif /* USE_HWD_I2C */
 
 static void micros_timer_setup(void)
 {
@@ -186,17 +117,9 @@ Servo_Status_t Board_Init(void)
     gpio_rcc_setup();
     gpio_misc_setup();
 
-#if defined(USE_MOTOR_PWM) && !defined(USE_HWD_SPI)
+#ifdef USE_MOTOR_PWM
     pwm_gpio_setup();
     rcc_periph_clock_enable(MOTOR_PWM_TIMER_RCC);
-#endif
-
-#ifdef USE_HWD_SPI
-    spi_setup();
-#endif
-
-#ifdef USE_HWD_I2C
-    i2c_setup();
 #endif
 
     micros_timer_setup();

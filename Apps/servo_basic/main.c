@@ -106,8 +106,8 @@ int main(void)
     PWM_Motor_Create(&motor, &mot_cfg);
 
     Motor_Params_t mot_params = {
-        .max_power        = 100.0f,
-        .min_power        = 5.0f,
+        .max_power        = 99.9f,
+        .min_power        = 4.0f,
         .invert_direction = false,
     };
     Motor_Init(&motor.interface, &mot_params);
@@ -140,35 +140,53 @@ int main(void)
     /* ── Каскадний PID ───────────────────────────────────────────────────── */
     static const Cascade_Config_t casc_cfg = {
         .pos = {
-            .kp      = 5.0f,
+            .kp      = 6.0f,
             .ki      = 0.0f,
-            .kd      = 0.3f,
-            .out_min = -10.0f,
-            .out_max =  10.0f,
-            .i_limit =  5.0f,
+            .kd      = 0.06f,
+            .out_min = -0.2f,
+            .out_max =  0.2f,
+            .i_limit =  0.1f,
         },
         .vel = {
-            .kp      = 0.5f,
-            .ki      = 5.0f,
+            .kp      = 1.0f,
+            .ki      = 35.0f,
             .kd      = 0.0f,
-            .out_min = -3.0f,
-            .out_max =  3.0f,
+            .out_min = -3.5f,
+            .out_max =  3.5f,
             .i_limit =  2.0f,
         },
         .trq = {
             .kp      = 0.0f,
-            .ki      = 5.0f,
+            .ki      = 700.0f,
             .kd      = 0.0f,
             .out_min = -100.0f,
             .out_max =  100.0f,
-            .i_limit =  30.0f,
+            .i_limit =  40.0f,
         },
-        .ff_j      = 10.0f,
-        .ff_b      = 0.0f,
-        .slew_rate = 2000.0f,
+        .ff_j      = 70.0f,
+        .ff_b      = 70.0f,
+        .slew_rate = 5000.0f,
     };
-    Cascade_Init(&cascade, &casc_cfg, CASCADE_MODE_TRQ);
-    cascade.target_current = 0.4f;
+    Cascade_Init(&cascade, &casc_cfg, CASCADE_MODE_POS);
+    cascade.target_pos = 0.0f;
+
+    /* Seed wire-config з тих самих значень що й casc_cfg — гарантує
+     * коректне param-mode оновлення (один коефіцієнт не затирає решту). */
+    const cascade_config_t seed = {
+        .pos_kp      = casc_cfg.pos.kp,      .pos_ki      = casc_cfg.pos.ki,
+        .pos_kd      = casc_cfg.pos.kd,      .pos_out_min = casc_cfg.pos.out_min,
+        .pos_out_max = casc_cfg.pos.out_max,  .pos_i_limit = casc_cfg.pos.i_limit,
+        .vel_kp      = casc_cfg.vel.kp,      .vel_ki      = casc_cfg.vel.ki,
+        .vel_kd      = casc_cfg.vel.kd,      .vel_out_min = casc_cfg.vel.out_min,
+        .vel_out_max = casc_cfg.vel.out_max,  .vel_i_limit = casc_cfg.vel.i_limit,
+        .trq_kp      = casc_cfg.trq.kp,      .trq_ki      = casc_cfg.trq.ki,
+        .trq_kd      = casc_cfg.trq.kd,      .trq_out_min = casc_cfg.trq.out_min,
+        .trq_out_max = casc_cfg.trq.out_max,  .trq_i_limit = casc_cfg.trq.i_limit,
+        .ff_j        = casc_cfg.ff_j,
+        .ff_b        = casc_cfg.ff_b,
+        .slew_rate   = casc_cfg.slew_rate,
+    };
+    servo_comm_seed_cascade_config(&seed);
 
     while (1) {
         /* ── RX: декодування та прийом команд (тільки тут — CRC32 safe) ── */

@@ -35,10 +35,6 @@ extern "C" {
 #define USE_SENSOR_POSITION
 #define USE_SENSOR_INCREMENTAL
 
-// #define USE_HWD_SPI
-// #define USE_HWD_I2C
-// #define USE_SENSOR_AS5600
-
 #define USE_HWD_ADC
 #define USE_SENSOR_CURRENT
 #define USE_SENSOR_ACS712
@@ -75,7 +71,6 @@ extern "C" {
 #define ENCODER_GPIO_PIN_B      GPIO4
 #define ENCODER_GPIO_RCC_B      RCC_GPIOB
 #define ENCODER_GPIO_AF         GPIO_AF2
-//#define ENCODER_CPR             4000U
 #define ENCODER_CPR             222000U
 
 /* Microsecond Timer (TIM5) --------------------------------------------------*/
