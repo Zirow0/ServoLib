@@ -55,7 +55,6 @@ cmake_install.cmake
 Makefile
 *.cmake
 !CMakeLists.txt
-!CMakePresets.json
 # Виняток для проєктних cmake-скриптів у директорії cmake/
 !cmake/
 !cmake/**

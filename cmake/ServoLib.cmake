@@ -8,10 +8,7 @@ set(SL ${CMAKE_SOURCE_DIR}/Src)
 set(SERVOLIB_UTIL
     ${SL}/core.c
     ${SL}/hwd/hwd.c
-    ${SL}/util/math.c
     ${SL}/util/derivative.c
-    ${SL}/util/buf.c
-    ${SL}/util/checksum.c
 )
 
 # Підсистема двигуна

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 # ─── Параметри вибору цілі ────────────────────────────────────────────────────
-# Передаються через -D або через CMakePresets.json
+# Передаються через -D або через configure.sh
 set(BOARD "STM32F411_OCM3" CACHE STRING "Плата/контролер [STM32F411_OCM3]")
 set(APP   ""               CACHE STRING "Застосунок для збірки (обов'язково)")
 
@@ -22,7 +22,6 @@ if(NOT APP)
     message(FATAL_ERROR
         "APP не вказано.\n"
         "Використання: cmake -DBOARD=STM32F411_OCM3 -DAPP=<назва> ...\n"
-        "Або:          cmake --preset <назва_пресету>\n\n"
         "Доступні застосунки (Apps/):\n"
         "  debug_encoder  — тільки датчик положення\n"
         "  debug_motor    — тільки двигун\n"

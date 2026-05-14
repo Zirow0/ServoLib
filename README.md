@@ -208,8 +208,7 @@ ServoLib/
 ├── configure.sh
 ├── build.sh
 ├── flash.sh
-├── CMakeLists.txt
-└── CMakePresets.json
+└── CMakeLists.txt
 ```
 
 ---
