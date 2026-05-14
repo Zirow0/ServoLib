@@ -86,7 +86,6 @@ static void ComputeSCurveTrajectory(Trajectory_Generator_t* traj)
     else if (t <= t_accel_total) {
         traj->state = TRAJ_STATE_ACCEL;
         float t_phase = t - t_jerk - t_accel_const;
-        float jerk = -direction * j_max;
         traj->current_acceleration = direction * (a_max - j_max * t_phase);
         traj->current_velocity = direction * (v_max - 0.5f * j_max * (t_jerk - t_phase) * (t_jerk - t_phase));
         traj->current_position = traj->start_position + direction *
@@ -125,7 +124,6 @@ static void ComputeSCurveTrajectory(Trajectory_Generator_t* traj)
         // Фаза 7: Зменшення уповільнення (jerk > 0)
         else {
             float t_phase = remaining_time;
-            float jerk = direction * j_max;
             traj->current_acceleration = -direction * (a_max - j_max * (t_jerk - t_phase));
             traj->current_velocity = direction * 0.5f * j_max * t_phase * t_phase;
             traj->current_position = traj->target_position - direction * (1.0f / 6.0f) * j_max * t_phase * t_phase * t_phase;

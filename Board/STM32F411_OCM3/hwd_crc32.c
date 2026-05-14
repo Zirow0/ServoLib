@@ -13,6 +13,7 @@
 #ifdef USE_COMM_ASYNC
 
 #include "frame_codec.h"
+#include "hwd_uart_async.h"
 
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/crc.h>
