@@ -150,12 +150,30 @@ float Cascade_Compute(Cascade_Controller_t* casc,
     }
 
     /* trq-PID + FF. Фінальне обмеження — єдине місце де обрізається вихід
-     * останнього каскаду перед поверненням. */
+     * останнього каскаду перед поверненням.
+     *
+     * Back-calculation anti-windup для FF: якщо сума pid_out + ff насичується,
+     * integral зменшується на величину насичення — інтегратор не "переважує" FF. */
     casc->last_ff = ff;
     PID_Compute(&casc->trq_pid, current_sp, current_a, time_us);
-    float power = CascadeClamp(PID_GetOutput(&casc->trq_pid) + ff,
+    float raw_power = PID_GetOutput(&casc->trq_pid) + ff;
+    float power = CascadeClamp(raw_power,
                                 casc->config.trq.out_min,
                                 casc->config.trq.out_max);
+    if (raw_power != power) {
+        float excess = raw_power - power;
+        float i_min, i_max;
+        if (casc->trq_pid.params.i_limit > 0.0f) {
+            i_min = -casc->trq_pid.params.i_limit;
+            i_max =  casc->trq_pid.params.i_limit;
+        } else {
+            i_min = casc->config.trq.out_min - casc->trq_pid.p_term;
+            i_max = casc->config.trq.out_max - casc->trq_pid.p_term;
+        }
+        casc->trq_pid.integral = CascadeClamp(
+            casc->trq_pid.integral - excess, i_min, i_max);
+        casc->trq_pid.i_term = casc->trq_pid.integral;
+    }
 
     /* Slew rate limiter.
      * dt = час від попереднього кроку (рахується через prev_time_us,
@@ -210,6 +228,12 @@ Servo_Status_t Cascade_ApplyConfig(Cascade_Controller_t* casc,
 {
     if (casc == NULL || config == NULL) {
         return SERVO_ERROR_NULL_PTR;
+    }
+
+    if (config->pos.out_min >= config->pos.out_max ||
+        config->vel.out_min >= config->vel.out_max ||
+        config->trq.out_min >= config->trq.out_max) {
+        return SERVO_INVALID;
     }
 
     casc->config = *config;

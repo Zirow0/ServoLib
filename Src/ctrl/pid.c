@@ -105,7 +105,7 @@ Servo_Status_t PID_Compute(PID_Controller_t* pid, float setpoint, float input, u
                 : 0.0f;
 
     /* Інтегральна складова з anti-windup */
-    if (pid->params.enabled_terms & PID_ENABLE_I) {
+    if ((pid->params.enabled_terms & PID_ENABLE_I) && pid->params.Ki != 0.0f) {
         pid->integral += pid->params.Ki * dt * error;
         /* anti-windup: якщо i_limit > 0 — клемпуємо внесок інтегратора до ±i_limit.
          * Інакше — клемпуємо з урахуванням P-term (резервний механізм). */
