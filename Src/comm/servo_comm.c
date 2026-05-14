@@ -49,17 +49,27 @@ void servo_comm_init(servo_comm_send_fn send_fn)
     rx_staging_len    = 0;
     cmd_ready         = 0;
     cascade_cfg_ready = 0;
+    memset(&pending_cascade_cfg, 0, sizeof(pending_cascade_cfg));
 }
 
-/* ISR: тільки копіює байти */
-void servo_comm_on_rx(const uint8_t *data, size_t len)
+void servo_comm_seed_cascade_config(const cascade_config_t *cfg)
 {
-    if (rx_ready) return;
-    if (len > COMM_RX_STAGING_SIZE) return;
+    if (cfg == NULL) return;
+    pending_cascade_cfg = *cfg;
+}
+
+/* ISR: тільки копіює байти.
+ * Повертає true якщо дані прийняті, false якщо staging зайнятий — щоб
+ * IDLE handler не просував rx_last_pos і наступний IDLE повторив доставку. */
+bool servo_comm_on_rx(const uint8_t *data, size_t len)
+{
+    if (rx_ready) return false;
+    if (len > COMM_RX_STAGING_SIZE) return false;
 
     memcpy((uint8_t *)rx_staging, data, len);
     rx_staging_len = len;
     rx_ready = 1;
+    return true;
 }
 
 /* Main loop: декодує та диспетчеризує */

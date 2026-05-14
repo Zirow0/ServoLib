@@ -257,9 +257,10 @@ static void uart_idle_handler(uart_instance_t *inst)
                        - DMA_SNDTR(hw->rx_dma, hw->rx_stream);
 
     if (current_pos != inst->rx_last_pos && inst->rx_cb) {
+        bool accepted;
         if (current_pos > inst->rx_last_pos) {
-            inst->rx_cb(inst->rx_buf + inst->rx_last_pos,
-                        current_pos - inst->rx_last_pos);
+            accepted = inst->rx_cb(inst->rx_buf + inst->rx_last_pos,
+                                   current_pos - inst->rx_last_pos);
         } else {
             /* wrap-around: лінеаризуємо в тимчасовий буфер */
             size_t  part1 = COMM_RX_BUF_SIZE - inst->rx_last_pos;
@@ -267,10 +268,14 @@ static void uart_idle_handler(uart_instance_t *inst)
             uint8_t tmp[COMM_RX_BUF_SIZE];
             memcpy(tmp,         inst->rx_buf + inst->rx_last_pos, part1);
             memcpy(tmp + part1, inst->rx_buf,                     part2);
-            inst->rx_cb(tmp, part1 + part2);
+            accepted = inst->rx_cb(tmp, part1 + part2);
+        }
+        /* Просуваємо rx_last_pos лише якщо callback прийняв дані.
+         * Інакше наступний IDLE повторно доставить той самий фрейм. */
+        if (accepted) {
+            inst->rx_last_pos = current_pos;
         }
     }
-    inst->rx_last_pos = current_pos;
 }
 
 static void uart_dma_tx_handler(uart_instance_t *inst)

@@ -18,10 +18,19 @@ typedef bool (*servo_comm_send_fn)(const uint8_t *data, size_t len);
 void servo_comm_init(servo_comm_send_fn send_fn);
 
 /* ================================================================
+ * Ініціалізувати pending_cascade_cfg початковими значеннями.
+ * Викликати після servo_comm_init з поточною конфігурацією.
+ *
+ * Без цього виклику param-mode оновлення (один коефіцієнт)
+ * повертатимуть структуру з нульовими значеннями в інших полях.
+ * ================================================================ */
+void servo_comm_seed_cascade_config(const cascade_config_t *cfg);
+
+/* ================================================================
  * ISR callback — підключається як uart_rx_cb_t.
  * Тільки копіює байти у staging буфер, декодування — у main loop.
  * ================================================================ */
-void servo_comm_on_rx(const uint8_t *data, size_t len);
+bool servo_comm_on_rx(const uint8_t *data, size_t len);
 
 /* ================================================================
  * Декодування та диспетчеризація — викликати з main loop.

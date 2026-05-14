@@ -17,7 +17,7 @@
 #define COMM_TX_QUEUE_LEN   4
 #endif
 
-typedef void (*uart_rx_cb_t)(const uint8_t *data, size_t len);
+typedef bool (*uart_rx_cb_t)(const uint8_t *data, size_t len);
 
 /* Апаратна конфігурація — задається один раз у main.
  * RCC, NVIC, GPIO AF визначаються автоматично. */

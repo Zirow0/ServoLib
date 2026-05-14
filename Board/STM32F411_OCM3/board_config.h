@@ -76,7 +76,7 @@ extern "C" {
 #define ENCODER_GPIO_RCC_B      RCC_GPIOB
 #define ENCODER_GPIO_AF         GPIO_AF2
 //#define ENCODER_CPR             4000U
-#define ENCODER_CPR             306800U
+#define ENCODER_CPR             222000U
 
 /* Microsecond Timer (TIM5) --------------------------------------------------*/
 #define MICROS_TIMER            TIM5
@@ -135,7 +135,7 @@ extern "C" {
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/dma.h>
 #define COMM_USART              USART1
-#define COMM_BAUD               115200U
+#define COMM_BAUD               1000000U
 #define COMM_GPIO_PORT          GPIOA
 #define COMM_TX_PIN             GPIO9
 #define COMM_RX_PIN             GPIO10
@@ -147,7 +147,7 @@ extern "C" {
 #define COMM_TX_DMA_STREAM      7U
 #define COMM_TX_DMA_CHANNEL     4U
 /* Буфери */
-#define COMM_RX_BUF_SIZE        64U
+#define COMM_RX_BUF_SIZE        128U  /* > max incoming frame (cascade_config = 91 B) */
 #define COMM_TX_BUF_SIZE        96U   /* FRAME_ENCODED_SIZE(1+84) = 91 */
 #define COMM_TX_QUEUE_LEN       4U
 #endif /* USE_COMM_ASYNC */
