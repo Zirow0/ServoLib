@@ -1,3 +1,24 @@
+# ─── Зовнішні залежності (FetchContent) ───────────────────────────────────────
+
+include(FetchContent)
+
+FetchContent_Declare(frame_codec
+    GIT_REPOSITORY git@github.com:Zirow0/frame_codec.git
+    GIT_TAG        master
+    GIT_SHALLOW    TRUE
+)
+FetchContent_Declare(packet_codec
+    GIT_REPOSITORY git@github.com:Zirow0/packet_codec.git
+    GIT_TAG        master
+    GIT_SHALLOW    TRUE
+)
+FetchContent_Declare(ukf_mcu
+    GIT_REPOSITORY git@github.com:Zirow0/ukf_mcu.git
+    GIT_TAG        master
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(frame_codec packet_codec ukf_mcu)
+
 # ─── ServoLib source groups ───────────────────────────────────────────────────
 # Кожна група — мінімальний набір файлів для конкретної підсистеми.
 # Застосовуйте у Apps/*/CMakeLists.txt на власний розсуд.
@@ -48,17 +69,9 @@ set(SERVOLIB_CTRL
 
 # Async комунікація (frame_codec + packet_codec + servo_comm)
 # Використовувати разом з board-specific hwd_uart_async.c та hwd_crc32.c
-set(LIB ${CMAKE_SOURCE_DIR}/Lib)
+# frame_codec та packet_codec підключаються через target_link_libraries
 set(SERVOLIB_COMM
     ${SL}/comm/servo_comm.c
-    ${LIB}/frame_codec/src/frame_codec.c
-    ${LIB}/frame_codec/src/cobs.c
-    ${LIB}/frame_codec/src/crc32_soft.c
-    ${LIB}/packet_codec/src/packet_codec.c
-)
-set(SERVOLIB_COMM_INCLUDES
-    ${LIB}/frame_codec/include
-    ${LIB}/packet_codec/include
 )
 
 # Повна бібліотека
