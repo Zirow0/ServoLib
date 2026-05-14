@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 export LIBOPENCM3_DIR=/path/to/libopencm3
 ```
 
-**Build targets** (`Apps/`): `debug_encoder`, `debug_motor`, `debug_brake`, `servo_full`, `servo_basic`
+**Build targets** (`Apps/`): `debug_encoder`, `debug_motor`, `debug_brake`, `debug_current`, `servo_full`, `servo_basic`
 
 ```bash
 # Configure (інтерактивний вибір плати, цілі та програматора):
@@ -162,6 +162,11 @@ Current_Sensor_Calibrate(&driver.interface);  // при нульовому ст�
 Current_Sensor_Update(&driver.interface);
 // Servo_Update() сам читає струм через GetCurrent — не потрібно викликати у servo loop
 Current_Sensor_GetCurrent(&driver.interface, &current_a);
+
+// Додаткові функції:
+Current_Sensor_GetPeakCurrent(&driver.interface, &peak_a);  // абсолютний пік з старту
+Current_Sensor_IsOvercurrent(&driver.interface);             // true якщо перевантаження
+Current_Sensor_ResetPeak(&driver.interface);                 // скинути пік та прапорець
 ```
 
 `Current_Sensor_GetStats`, `Current_Sensor_DeInit` — **не існують**.
@@ -194,7 +199,7 @@ ff = ff_j * current_sp + ff_b * omega   // в %
 
 **`PID_Params_t.i_limit`**: якщо `> 0` — незалежний ліміт інтегратора; `= 0` — старий механізм (clamp відносно `out_min/out_max - p_term`).
 
-**`pid_mgr.c` видалено з `SERVOLIB_CTRL`** — замінено `cascade.c`.
+**`pid_mgr.c` не входить до `SERVOLIB_CTRL`** — замінено `cascade.c`. Файли `Inc/ctrl/pid_mgr.h` та `Src/ctrl/pid_mgr.c` залишені в репозиторії, але жодна ціль їх не компілює.
 
 **`Cascade_ApplyConfig(casc, config)`** — оновлює PID коефіцієнти та ліміти без скидання інтеграторів. Безпечно викликати під час роботи для online тюнінгу.
 
@@ -221,8 +226,8 @@ frame_codec (COBS + CRC32/MPEG-2)
 
 **ISR → main loop паттерн (критично для апаратного CRC32):**
 ```c
-// ISR: тільки копіює байти у staging буфер, rx_ready=1
-void servo_comm_on_rx(const uint8_t *data, size_t len);  // uart_rx_cb_t
+// ISR: тільки копіює байти у staging буфер, повертає bool (uart_rx_cb_t)
+bool servo_comm_on_rx(const uint8_t *data, size_t len);
 
 // Main loop: frame_decode + packet_decode (CRC32 тут — не в ISR)
 void servo_comm_process_rx(void);
@@ -234,7 +239,10 @@ void servo_comm_process_rx(void);
 frame_crc32_init();                              // увімкнути RCC_CRC
 servo_comm_init(comm_send);                      // реєструє send callback
 uart_init(&comm_inst, &comm_hw, COMM_BAUD, servo_comm_on_rx);
+servo_comm_seed_cascade_config(&initial_wire_cfg); // ініціалізувати буфер param-mode
 ```
+
+`servo_comm_seed_cascade_config()` — потрібно викликати після `servo_comm_init()` з початковими значеннями конфігурації. Без цього param-mode оновлення (один коефіцієнт) повертатимуть структуру з нульовими значеннями в інших полях.
 
 `uart_send()` є неблокуючим — копіює у TX pool (4 слоти), DMA передає у фоні.
 
@@ -247,7 +255,7 @@ uart_init(&comm_inst, &comm_hw, COMM_BAUD, servo_comm_on_rx);
 | `cascade_telemetry_t` | 81 Б | STM32→хост | `0x06` struct / `0x07` param |
 | `cascade_config_t` | 84 Б | хост↔STM32 | `0x08` struct / `0x09` param |
 
-**`cascade_telemetry_t`** — повний знімок каскадного PID: сенсори (θ, ω, I), сигнальний ланцюг (target→vel_sp→current_sp→ff→power), P/I/D терм та `integral` (стан anti-windup) для кожного з трьох контурів.
+**`cascade_telemetry_t`** — повний знімок каскадного PID: сенсори (θ, ω, I), сигнальний ланцюг (target→vel_sp→current_sp→ff→power), P/I/D терми для всіх трьох контурів. Поле `integral` (стан anti-windup) є лише у **vel** та **trq** контурів — у pos контуру `integral` в wire-структурі відсутній.
 
 **`cascade_config_t`** — wire-формат налаштувань: kp/ki/kd/out_min/out_max/i_limit для pos, vel, trq + ff_j, ff_b, slew_rate. Підтримує struct mode (повна заміна) та param mode (один коефіцієнт).
 
@@ -260,6 +268,10 @@ Payload: `[offset 1B][type 1B][value N bytes]`
 ### API
 
 ```c
+// Ініціалізація
+void servo_comm_init(servo_comm_send_fn send_fn);
+void servo_comm_seed_cascade_config(const cascade_config_t *cfg);  // до uart_init
+
 // TX
 void servo_comm_send_telemetry(const servo_telemetry_t *);
 void servo_comm_send_param(const servo_telemetry_t *, uint8_t field_idx);
@@ -281,10 +293,10 @@ bool servo_comm_get_cascade_config(cascade_config_t *cfg_out);
 ```c
 #ifdef USE_COMM_ASYNC
 #define COMM_USART             USART1
-#define COMM_BAUD              115200U
+#define COMM_BAUD              1000000U  // 1 Мбод
 #define COMM_RX_DMA            DMA2  // Stream2 Ch4
 #define COMM_TX_DMA            DMA2  // Stream7 Ch4
-#define COMM_RX_BUF_SIZE       64U
+#define COMM_RX_BUF_SIZE       128U  // > max incoming frame (cascade_config = 91 B)
 #define COMM_TX_BUF_SIZE       96U   // ≥ FRAME_ENCODED_SIZE(1+84) = 91
 #define COMM_TX_QUEUE_LEN      4U
 #endif

@@ -73,6 +73,7 @@ External Libs (Lib/)         — frame_codec, packet_codec
 | `debug_encoder` | Тест інкрементального енкодера + блокуючий UART            |
 | `debug_motor`   | Тест двигуна PWM+DIR + блокуючий UART                      |
 | `debug_brake`   | Тест гальма GPIO + блокуючий UART                          |
+| `debug_current` | Тест датчика струму ACS712 + блокуючий UART                |
 | `servo_full`    | Повний сервопривід (Servo_Controller_t + Safety)           |
 | `servo_basic`   | Каскадний PID напряму + async UART DMA комунікація         |
 
@@ -154,9 +155,10 @@ UART DMA RX (circular) → IDLE IRQ → staging buf → frame_decode → packet_
 ### API
 
 ```c
-// Ініціалізація
+// Ініціалізація (порядок важливий)
 frame_crc32_init();
 servo_comm_init(send_fn);
+servo_comm_seed_cascade_config(&initial_cfg);     // ініціалізація буфера param-mode
 uart_init(&inst, &hw, baud, servo_comm_on_rx);
 
 // Main loop
