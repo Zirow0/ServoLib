@@ -87,16 +87,16 @@ int main(void)
 
     /* ── Інкрементальний енкодер ─────────────────────────────────────────── */
     static const Incremental_Encoder_HW_t enc_hw = {
-        .gpio_port_a = ENCODER_GPIO_PORT_A,
-        .gpio_pin_a  = ENCODER_GPIO_PIN_A,
-        .gpio_af_a   = ENCODER_GPIO_AF,
-        .gpio_port_b = ENCODER_GPIO_PORT_B,
-        .gpio_pin_b  = ENCODER_GPIO_PIN_B,
-        .timer_base  = ENCODER_TIMER_BASE,
-        .timer_rcc   = ENCODER_TIMER_RCC,
+        .gpio_port_a = ENC0_GPIO_PORT_A,
+        .gpio_pin_a  = ENC0_GPIO_PIN_A,
+        .gpio_af_a   = ENC0_GPIO_AF,
+        .gpio_port_b = ENC0_GPIO_PORT_B,
+        .gpio_pin_b  = ENC0_GPIO_PIN_B,
+        .timer_base  = ENC0_TIMER_BASE,
+        .timer_rcc   = ENC0_TIMER_RCC,
         .ic_channel  = 0U,  /* TIM_IC1 = CH1 (0-based, відповідає enum tim_ic_id) */
     };
-    Incremental_Encoder_Create(&encoder, ENCODER_CPR, &enc_hw);
+    Incremental_Encoder_Create(&encoder, ENC0_CPR, &enc_hw);
     Position_Sensor_Init(&encoder.interface);
 
     /* ── Гальмо ──────────────────────────────────────────────────────────── */
