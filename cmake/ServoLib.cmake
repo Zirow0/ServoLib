@@ -68,7 +68,7 @@ set(SERVOLIB_CTRL
 )
 
 # Async комунікація (frame_codec + packet_codec + servo_comm)
-# Використовувати разом з board-specific hwd_uart_async.c та hwd_crc32.c
+# Використовувати разом з MCU_ASYNC_SRCS (hwd_uart_async.c + hwd_crc32.c)
 # frame_codec та packet_codec підключаються через target_link_libraries
 set(SERVOLIB_COMM
     ${SL}/comm/servo_comm.c

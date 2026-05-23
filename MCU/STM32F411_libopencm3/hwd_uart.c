@@ -9,8 +9,8 @@
  */
 
 /* Includes ------------------------------------------------------------------*/
-#include "./board_config.h"
-#include "../../Inc/hwd/hwd_uart.h"
+#include "board_config.h"
+#include "hwd/hwd_uart.h"
 
 #ifdef USE_HWD_UART
 

@@ -1,8 +1,10 @@
 # ─── cmake/stm32.cmake — спільна логіка збірки для STM32 + libopencm3 ────────
-# Потребує змінних із файлу плати:
-#   DEVICE    — ідентифікатор чипу для genlink.py (напр. "stm32f411ceu6")
-#   BOARD_DIR — шлях до Board/<назва>/
-#   BOARD_SRCS — список hwd_*.c файлів плати
+# Потребує змінних із файлу плати (cmake/targets/<BOARD>.cmake):
+#   DEVICE        — ідентифікатор чипу для genlink.py (напр. "stm32f411ceu6")
+#   MCU_DIR       — шлях до MCU/<mcu>/ (реалізації hwd_*.c)
+#   BOARD_DIR     — шлях до Board/<назва>/ (board.c, board_config.h)
+#   BOARD_SRCS    — board.c + MCU_SRCS (сумісність з Apps)
+#   MCU_ASYNC_SRCS — hwd_uart_async.c + hwd_crc32.c (опціонально)
 
 # ─── libopencm3 ───────────────────────────────────────────────────────────────
 
@@ -104,7 +106,8 @@ function(stm32_add_executable TARGET)
 
     target_include_directories(${TARGET} PRIVATE
         ${CMAKE_SOURCE_DIR}/Inc
-        ${CMAKE_SOURCE_DIR}/Board/${BOARD}
+        ${BOARD_DIR}
+        ${MCU_DIR}
         ${OCM3_DIR}/include
     )
 

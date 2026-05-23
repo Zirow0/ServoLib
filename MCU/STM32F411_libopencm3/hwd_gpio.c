@@ -14,7 +14,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "hwd/hwd_gpio.h"
-#include "./board_config.h"
+#include "board_config.h"
 #include <libopencm3/stm32/gpio.h>
 #include <stdint.h>
 

@@ -6,8 +6,7 @@ stm32_add_executable(servo_basic
     ${BOARD_SRCS}
     ${SERVOLIB_ALL}
     ${SERVOLIB_COMM}
-    ${BOARD_DIR}/hwd_uart_async.c
-    ${BOARD_DIR}/hwd_crc32.c
+    ${MCU_ASYNC_SRCS}
 )
 
 target_include_directories(servo_basic PRIVATE

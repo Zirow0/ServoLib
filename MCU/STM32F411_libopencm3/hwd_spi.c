@@ -18,7 +18,7 @@
  */
 
 /* Includes ------------------------------------------------------------------*/
-#include "./board_config.h"
+#include "board_config.h"
 
 #ifdef USE_HWD_SPI
 

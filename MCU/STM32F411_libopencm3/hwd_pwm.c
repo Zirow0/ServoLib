@@ -16,7 +16,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "hwd/hwd_pwm.h"
-#include "./board_config.h"
+#include "board_config.h"
 #include <libopencm3/stm32/timer.h>
 
 /* Private functions ---------------------------------------------------------*/

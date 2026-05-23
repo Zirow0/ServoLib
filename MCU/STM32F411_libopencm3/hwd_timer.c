@@ -11,7 +11,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "hwd/hwd_timer.h"
-#include "./board_config.h"
+#include "board_config.h"
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/timer.h>
