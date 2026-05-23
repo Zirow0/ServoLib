@@ -3,17 +3,19 @@
  * @brief Конфігурація STM32F411CEU6 — Encoder Hub
  *
  * Підключення:
- *   ENC0: A=PA0 (EXTI0),  B=PA1 (EXTI1)
- *   ENC1: A=PA2 (EXTI2),  B=PA3 (EXTI3)
- *   ENC2: A=PA4 (EXTI4),  B=PA5 (EXTI5)
- *   ENC3: A=PA6 (EXTI6),  B=PA7 (EXTI7)
- *   ENC4: A=PA8 (EXTI8),  B=PB9 (EXTI9)
- *   ENC5: A=PB10 (EXTI10),B=PA11 (EXTI11)
+ *   ENC0: A=PA0 (EXTI0, TIM2_CH1 AF1), B=PB4 (EXTI4)
+ *   ENC1: A=PA1 (EXTI1, TIM2_CH2 AF1), B=PA5 (EXTI5)
+ *   ENC2: A=PA2 (EXTI2, TIM2_CH3 AF1), B=PB7 (EXTI7)
+ *   ENC3: A=PA3 (EXTI3, TIM2_CH4 AF1), B=PB9 (EXTI9)
+ *   ENC4: A=PA6 (EXTI6, TIM3_CH1 AF2), B=PB10 (EXTI10)
+ *   ENC5: A=PA8 (EXTI8, TIM1_CH1 AF1), B=PA11 (EXTI11)
  *   SPI2 slave: NSS=PB12, SCK=PB13, MISO=PB14, MOSI=PB15 (AF5)
  *   DRDY out:   PB0
- *   USART1 debug: TX=PA9, RX=PA10 (AF7, 1 Мбод)
- *   TIM2 (32-bit): free-running µs counter
- *   TIM3: 10 kHz update interrupt (UKF trigger)
+ *   USART1 debug: TX=PA9, RX=PA10 (AF7, 115200)
+ *   TIM2 (32-bit): free-running µs counter + IC CH1-CH4 для ENC0-3
+ *   TIM3: IC CH1 для ENC4
+ *   TIM1: IC CH1 для ENC5
+ *   TIM5: 10 kHz update interrupt (UKF trigger)
  */
 
 #ifndef ENCODER_HUB_BOARD_CONFIG_H
@@ -54,72 +56,76 @@ extern "C" {
 #define UPDATE_TIMER_PRESCALER  (0U)
 #define UPDATE_TIMER_PERIOD     (9999U)  /* 100 MHz / 1 / 10000 = 10 kHz */
 
-/* Encoders (EXTI-only mode: timer_base=0, gpio_af=0) ------------------------*/
-/* Швидкість вимірюється через EXTI timestamp з TIM2 (Incremental_Encoder_IC_Handler).
- * timer_base=0 вмикає EXTI-only гілку у драйвері (без TIM IC). */
+/* Encoders (IC timer mode: A-pin → AF, timer_base = відповідний TIM) --------*/
 #define ENCODER_COUNT  6U
 
-/* CPR (counts per revolution після X4) — однаковий для всіх 6; налаштувати під реальний енкодер */
+/* CPR (counts per revolution після X4) — налаштувати під реальний енкодер */
 #define HUB_ENCODER_CPR  4000U
 
-/* ENC0: A=PA0 (EXTI0), B=PA1 (EXTI1) */
+/* ENC0: A=PA0 (EXTI0, TIM2_CH1 AF1), B=PB4 (EXTI4) */
 #define ENC0_GPIO_PORT_A    GPIOA
 #define ENC0_GPIO_PIN_A     GPIO0
-#define ENC0_GPIO_PORT_B    GPIOA
-#define ENC0_GPIO_PIN_B     GPIO1
-#define ENC0_GPIO_AF        0U
-#define ENC0_TIMER_BASE     0U
-#define ENC0_TIMER_RCC      0U
+#define ENC0_GPIO_PORT_B    GPIOB
+#define ENC0_GPIO_PIN_B     GPIO4
+#define ENC0_GPIO_AF        GPIO_AF1
+#define ENC0_TIMER_BASE     TIM2
+#define ENC0_TIMER_RCC      RCC_TIM2
+#define ENC0_IC_CHANNEL     0U
 #define ENC0_CPR            HUB_ENCODER_CPR
 
-/* ENC1: A=PA2 (EXTI2), B=PA3 (EXTI3) */
+/* ENC1: A=PA1 (EXTI1, TIM2_CH2 AF1), B=PA5 (EXTI5) */
 #define ENC1_GPIO_PORT_A    GPIOA
-#define ENC1_GPIO_PIN_A     GPIO2
+#define ENC1_GPIO_PIN_A     GPIO1
 #define ENC1_GPIO_PORT_B    GPIOA
-#define ENC1_GPIO_PIN_B     GPIO3
-#define ENC1_GPIO_AF        0U
-#define ENC1_TIMER_BASE     0U
-#define ENC1_TIMER_RCC      0U
+#define ENC1_GPIO_PIN_B     GPIO5
+#define ENC1_GPIO_AF        GPIO_AF1
+#define ENC1_TIMER_BASE     TIM2
+#define ENC1_TIMER_RCC      RCC_TIM2
+#define ENC1_IC_CHANNEL     1U
 #define ENC1_CPR            HUB_ENCODER_CPR
 
-/* ENC2: A=PA4 (EXTI4), B=PA5 (EXTI5) */
+/* ENC2: A=PA2 (EXTI2, TIM2_CH3 AF1), B=PB7 (EXTI7) */
 #define ENC2_GPIO_PORT_A    GPIOA
-#define ENC2_GPIO_PIN_A     GPIO4
-#define ENC2_GPIO_PORT_B    GPIOA
-#define ENC2_GPIO_PIN_B     GPIO5
-#define ENC2_GPIO_AF        0U
-#define ENC2_TIMER_BASE     0U
-#define ENC2_TIMER_RCC      0U
+#define ENC2_GPIO_PIN_A     GPIO2
+#define ENC2_GPIO_PORT_B    GPIOB
+#define ENC2_GPIO_PIN_B     GPIO7
+#define ENC2_GPIO_AF        GPIO_AF1
+#define ENC2_TIMER_BASE     TIM2
+#define ENC2_TIMER_RCC      RCC_TIM2
+#define ENC2_IC_CHANNEL     2U
 #define ENC2_CPR            HUB_ENCODER_CPR
 
-/* ENC3: A=PA6 (EXTI6), B=PA7 (EXTI7) */
+/* ENC3: A=PA3 (EXTI3, TIM2_CH4 AF1), B=PB9 (EXTI9) */
 #define ENC3_GPIO_PORT_A    GPIOA
-#define ENC3_GPIO_PIN_A     GPIO6
-#define ENC3_GPIO_PORT_B    GPIOA
-#define ENC3_GPIO_PIN_B     GPIO7
-#define ENC3_GPIO_AF        0U
-#define ENC3_TIMER_BASE     0U
-#define ENC3_TIMER_RCC      0U
+#define ENC3_GPIO_PIN_A     GPIO3
+#define ENC3_GPIO_PORT_B    GPIOB
+#define ENC3_GPIO_PIN_B     GPIO9
+#define ENC3_GPIO_AF        GPIO_AF1
+#define ENC3_TIMER_BASE     TIM2
+#define ENC3_TIMER_RCC      RCC_TIM2
+#define ENC3_IC_CHANNEL     3U
 #define ENC3_CPR            HUB_ENCODER_CPR
 
-/* ENC4: A=PA8 (EXTI8), B=PB9 (EXTI9) */
+/* ENC4: A=PA6 (EXTI6, TIM3_CH1 AF2), B=PB10 (EXTI10) */
 #define ENC4_GPIO_PORT_A    GPIOA
-#define ENC4_GPIO_PIN_A     GPIO8
+#define ENC4_GPIO_PIN_A     GPIO6
 #define ENC4_GPIO_PORT_B    GPIOB
-#define ENC4_GPIO_PIN_B     GPIO9
-#define ENC4_GPIO_AF        0U
-#define ENC4_TIMER_BASE     0U
-#define ENC4_TIMER_RCC      0U
+#define ENC4_GPIO_PIN_B     GPIO10
+#define ENC4_GPIO_AF        GPIO_AF2
+#define ENC4_TIMER_BASE     TIM3
+#define ENC4_TIMER_RCC      RCC_TIM3
+#define ENC4_IC_CHANNEL     0U
 #define ENC4_CPR            HUB_ENCODER_CPR
 
-/* ENC5: A=PB10 (EXTI10), B=PA11 (EXTI11) */
-#define ENC5_GPIO_PORT_A    GPIOB
-#define ENC5_GPIO_PIN_A     GPIO10
+/* ENC5: A=PA8 (EXTI8, TIM1_CH1 AF1), B=PA11 (EXTI11) */
+#define ENC5_GPIO_PORT_A    GPIOA
+#define ENC5_GPIO_PIN_A     GPIO8
 #define ENC5_GPIO_PORT_B    GPIOA
 #define ENC5_GPIO_PIN_B     GPIO11
-#define ENC5_GPIO_AF        0U
-#define ENC5_TIMER_BASE     0U
-#define ENC5_TIMER_RCC      0U
+#define ENC5_GPIO_AF        GPIO_AF1
+#define ENC5_TIMER_BASE     TIM1
+#define ENC5_TIMER_RCC      RCC_TIM1
+#define ENC5_IC_CHANNEL     0U
 #define ENC5_CPR            HUB_ENCODER_CPR
 
 /* SPI2 Slave (PB12-PB15, AF5) ----------------------------------------------*/

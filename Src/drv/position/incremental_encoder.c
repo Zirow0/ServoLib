@@ -85,6 +85,7 @@ static const uint8_t s_exti_nvic[16] = {
 
 static uint8_t get_timer_nvic(uint32_t timer_base)
 {
+    if (timer_base == TIM1) return NVIC_TIM1_CC_IRQ;  /* advanced timer: CC irq окремий */
     if (timer_base == TIM2) return NVIC_TIM2_IRQ;
     if (timer_base == TIM3) return NVIC_TIM3_IRQ;
     if (timer_base == TIM4) return NVIC_TIM4_IRQ;
@@ -334,8 +335,9 @@ void exti15_10_isr(void)
     }
 }
 
-void tim2_isr(void) { dispatch_tim_ic(TIM2); }
-void tim3_isr(void) { dispatch_tim_ic(TIM3); }
-void tim4_isr(void) { dispatch_tim_ic(TIM4); }
+void tim1_cc_isr(void) { dispatch_tim_ic(TIM1); }
+void tim2_isr(void)    { dispatch_tim_ic(TIM2); }
+void tim3_isr(void)    { dispatch_tim_ic(TIM3); }
+void tim4_isr(void)    { dispatch_tim_ic(TIM4); }
 
 #endif /* USE_SENSOR_INCREMENTAL */

@@ -47,21 +47,19 @@ static void gpio_misc_setup(void)
     gpio_clear(DRDY_GPIO_PORT, DRDY_PIN);
 }
 
-/* Всі 12 пінів енкодерів — вхід з підтяжкою до живлення */
+/* Всі 12 пінів енкодерів — вхід з підтяжкою до живлення.
+ * A-піни (PA0-3, PA6, PA8) будуть переведені в AF mode драйвером при Init. */
 static void encoder_gpio_setup(void)
 {
-    /* PA0-PA7: ENC0_A, ENC0_B, ENC1_A, ENC1_B, ENC2_A, ENC2_B, ENC3_A, ENC3_B */
+    /* PA0=ENC0_A, PA1=ENC1_A, PA2=ENC2_A, PA3=ENC3_A,
+     * PA5=ENC1_B, PA6=ENC4_A, PA8=ENC5_A, PA11=ENC5_B */
     gpio_mode_setup(GPIOA, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP,
                     GPIO0 | GPIO1 | GPIO2 | GPIO3 |
-                    GPIO4 | GPIO5 | GPIO6 | GPIO7);
+                    GPIO5 | GPIO6 | GPIO8 | GPIO11);
 
-    /* PA8: ENC4_A, PA11: ENC5_B */
-    gpio_mode_setup(GPIOA, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP,
-                    GPIO8 | GPIO11);
-
-    /* PB9: ENC4_B, PB10: ENC5_A */
+    /* PB4=ENC0_B, PB7=ENC2_B, PB9=ENC3_B, PB10=ENC4_B */
     gpio_mode_setup(GPIOB, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP,
-                    GPIO9 | GPIO10);
+                    GPIO4 | GPIO7 | GPIO9 | GPIO10);
 }
 
 /* SPI2 slave: PB12=NSS, PB13=SCK, PB14=MISO, PB15=MOSI (AF5) */
