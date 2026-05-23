@@ -145,7 +145,7 @@ extern "C" {
 #define UART_DEBUG_TX_PIN       GPIO9
 #define UART_DEBUG_RX_PIN       GPIO10
 #define UART_DEBUG_GPIO_AF      GPIO_AF7
-#define UART_DEBUG_BAUDRATE     1000000U
+#define UART_DEBUG_BAUDRATE     115200U
 #endif
 
 /* LED -----------------------------------------------------------------------*/
@@ -159,6 +159,7 @@ extern volatile uint32_t g_uptime_ms;
 
 /* Board API -----------------------------------------------------------------*/
 Servo_Status_t Board_Init(void);
+void           Board_StartUpdateTimer(void);  /* викликати з App після init UKF */
 
 #ifdef __cplusplus
 }

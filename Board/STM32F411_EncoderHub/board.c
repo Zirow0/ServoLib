@@ -120,8 +120,9 @@ static void micros_timer_setup(void)
     timer_enable_counter(MICROS_TIMER);
 }
 
-/* TIM3: 10 kHz interrupt — тригер UKF update для 6 енкодерів */
-static void update_timer_setup(void)
+/* TIM5: 10 kHz interrupt — тригер UKF update для 6 енкодерів.
+ * Викликати з App після ініціалізації всіх енкодерів та UKF. */
+void Board_StartUpdateTimer(void)
 {
     rcc_periph_clock_enable(UPDATE_TIMER_RCC);
 
@@ -156,7 +157,6 @@ Servo_Status_t Board_Init(void)
     encoder_gpio_setup();
     spi_slave_gpio_setup();
     micros_timer_setup();
-    update_timer_setup();
     systick_setup();
 
 #ifdef USE_HWD_UART
