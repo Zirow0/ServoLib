@@ -153,65 +153,65 @@ static Servo_Status_t IncEnc_HW_Init(void *driver_data)
     s_exti_map[line_a] = drv;
     s_exti_map[line_b] = drv;
 
-    if (s_tim_count < ENC_MAX) {
-        /* Вирахувати ccr_reg тут — єдине місце де TIM_CCRx потрібні */
-        /* ic_channel 0-based: 0=CH1, 1=CH2, 2=CH3, 3=CH4 (відповідає enum tim_ic_id) */
-        volatile uint32_t *ccr;
-        switch (hw->ic_channel) {
-            case 0U: ccr = &TIM_CCR1(hw->timer_base); break;
-            case 1U: ccr = &TIM_CCR2(hw->timer_base); break;
-            case 2U: ccr = &TIM_CCR3(hw->timer_base); break;
-            default:  ccr = &TIM_CCR4(hw->timer_base); break;
-        }
-        s_tim_map[s_tim_count].timer_base = hw->timer_base;
-        s_tim_map[s_tim_count].ic_ch      = hw->ic_channel;
-        s_tim_map[s_tim_count].ccr_reg    = ccr;
-        s_tim_map[s_tim_count].last_ccr   = 0U;
-        s_tim_map[s_tim_count].driver     = drv;
-        s_tim_count++;
-    }
-
     /* ── Тактування ── */
     rcc_periph_clock_enable(RCC_SYSCFG);
-    rcc_periph_clock_enable(hw->timer_rcc);
 
-    /* ── Пін A → AF (TIM IC) + pull-up ── */
-    gpio_mode_setup(hw->gpio_port_a, GPIO_MODE_AF, GPIO_PUPD_PULLUP, hw->gpio_pin_a);
-    gpio_set_af(hw->gpio_port_a, hw->gpio_af_a, hw->gpio_pin_a);
+    if (hw->timer_base != 0U) {
+        /* ── IC timer mode: пін A → AF, налаштування TIM IC ── */
+        rcc_periph_clock_enable(hw->timer_rcc);
+
+        if (s_tim_count < ENC_MAX) {
+            volatile uint32_t *ccr;
+            switch (hw->ic_channel) {
+                case 0U: ccr = &TIM_CCR1(hw->timer_base); break;
+                case 1U: ccr = &TIM_CCR2(hw->timer_base); break;
+                case 2U: ccr = &TIM_CCR3(hw->timer_base); break;
+                default:  ccr = &TIM_CCR4(hw->timer_base); break;
+            }
+            s_tim_map[s_tim_count].timer_base = hw->timer_base;
+            s_tim_map[s_tim_count].ic_ch      = hw->ic_channel;
+            s_tim_map[s_tim_count].ccr_reg    = ccr;
+            s_tim_map[s_tim_count].last_ccr   = 0U;
+            s_tim_map[s_tim_count].driver     = drv;
+            s_tim_count++;
+        }
+
+        gpio_mode_setup(hw->gpio_port_a, GPIO_MODE_AF, GPIO_PUPD_PULLUP, hw->gpio_pin_a);
+        gpio_set_af(hw->gpio_port_a, hw->gpio_af_a, hw->gpio_pin_a);
+
+        timer_set_mode(hw->timer_base, TIM_CR1_CKD_CK_INT, TIM_CR1_CMS_EDGE, TIM_CR1_DIR_UP);
+        timer_set_prescaler(hw->timer_base, APB1_TIMER_CLOCK / 1000000U - 1U);
+        timer_set_period(hw->timer_base, 0xFFFFFFFFU);
+
+        static const enum tim_ic_input ic_in_map[4] = {
+            TIM_IC_IN_TI1, TIM_IC_IN_TI2, TIM_IC_IN_TI3, TIM_IC_IN_TI4
+        };
+        enum tim_ic_id    ic_id = (enum tim_ic_id)hw->ic_channel;
+        enum tim_ic_input ic_in = ic_in_map[hw->ic_channel < 4U ? hw->ic_channel : 0U];
+
+        timer_ic_set_input(hw->timer_base, ic_id, ic_in);
+        timer_ic_set_filter(hw->timer_base, ic_id, TIM_IC_OFF);
+        timer_ic_set_prescaler(hw->timer_base, ic_id, TIM_IC_PSC_OFF);
+        timer_ic_set_polarity(hw->timer_base, ic_id, TIM_IC_RISING);
+        timer_ic_enable(hw->timer_base, ic_id);
+
+        timer_enable_irq(hw->timer_base, (uint32_t)((1U << 1U) << hw->ic_channel));
+
+        uint8_t tim_nvic = get_timer_nvic(hw->timer_base);
+        if (tim_nvic != 0xFFU) {
+            nvic_set_priority(tim_nvic, 1U);
+            nvic_enable_irq(tim_nvic);
+        }
+
+        timer_enable_counter(hw->timer_base);
+    } else {
+        /* ── EXTI-only mode: пін A → GPIO input, IC не використовується ──
+         * period_us оновлюється ззовні через Incremental_Encoder_IC_Handler */
+        gpio_mode_setup(hw->gpio_port_a, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, hw->gpio_pin_a);
+    }
 
     /* ── Пін B → GPIO input + pull-up ── */
     gpio_mode_setup(hw->gpio_port_b, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, hw->gpio_pin_b);
-
-    /* ── TIM Input Capture ── */
-    /* Prescaler: APB1_TIMER_CLOCK / 1 MHz → 1 мкс/тік */
-    timer_set_mode(hw->timer_base, TIM_CR1_CKD_CK_INT, TIM_CR1_CMS_EDGE, TIM_CR1_DIR_UP);
-    timer_set_prescaler(hw->timer_base, APB1_TIMER_CLOCK / 1000000U - 1U);
-    timer_set_period(hw->timer_base, 0xFFFFFFFFU);
-
-    /* ic_channel 0-based → enum tim_ic_id напряму (TIM_IC1=0, TIM_IC2=1, ...) */
-    /* TIM_IC_IN_TIx: TI1=1, TI2=2, TI3=5, TI4=6 — потрібен lookup */
-    static const enum tim_ic_input ic_in_map[4] = {
-        TIM_IC_IN_TI1, TIM_IC_IN_TI2, TIM_IC_IN_TI3, TIM_IC_IN_TI4
-    };
-    enum tim_ic_id    ic_id = (enum tim_ic_id)hw->ic_channel;
-    enum tim_ic_input ic_in = ic_in_map[hw->ic_channel < 4U ? hw->ic_channel : 0U];
-
-    timer_ic_set_input(hw->timer_base, ic_id, ic_in);
-    timer_ic_set_filter(hw->timer_base, ic_id, TIM_IC_OFF);
-    timer_ic_set_prescaler(hw->timer_base, ic_id, TIM_IC_PSC_OFF);
-    timer_ic_set_polarity(hw->timer_base, ic_id, TIM_IC_RISING);
-    timer_ic_enable(hw->timer_base, ic_id);
-
-    /* CC IRQ: TIM_DIER_CC1IE = (1<<1); для CHx (0-based): зсув на ic_ch */
-    timer_enable_irq(hw->timer_base, (uint32_t)((1U << 1U) << hw->ic_channel));
-
-    uint8_t tim_nvic = get_timer_nvic(hw->timer_base);
-    if (tim_nvic != 0xFFU) {
-        nvic_set_priority(tim_nvic, 1U);
-        nvic_enable_irq(tim_nvic);
-    }
-
-    timer_enable_counter(hw->timer_base);
 
     /* ── Ініціалізація enc_state з фактичного стану пінів ── */
     uint32_t idr_a = GPIO_IDR(hw->gpio_port_a);
