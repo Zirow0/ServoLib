@@ -12,6 +12,8 @@
 #include "comm/servo_comm.h"
 #include "hwd_uart_async.h"
 
+#include <math.h>
+
 /* ================================================================
  * UART async екземпляр
  * USART1: PA9 TX, PA10 RX
@@ -39,6 +41,10 @@ static bool comm_send(const uint8_t *data, size_t len)
 /* ================================================================
  * Апаратні об'єкти
  * ================================================================ */
+#define STOP_VEL_THRESHOLD_RAD_S  0.05f  /* рад/с — поріг для накладання гальма */
+
+typedef enum { APP_RUNNING, APP_STOPPING, APP_STOPPED } App_State_t;
+
 static PWM_Motor_Driver_t           motor;
 static HWD_PWM_Handle_t             pwm_fwd;
 static Incremental_Encoder_Driver_t encoder;
@@ -46,6 +52,7 @@ static GPIO_Brake_Driver_t          brake;
 static ACS712_Driver_t              current_driver;
 static HWD_ADC_Handle_t             current_adc;
 static Cascade_Controller_t         cascade;
+static App_State_t                  app_state = APP_RUNNING;
 
 static const HWD_GPIO_Pin_t led_pin = {
     .port = (void*)LED_GPIO_PORT,
@@ -195,9 +202,20 @@ int main(void)
         /* ── RX: декодування та прийом команд (тільки тут — CRC32 safe) ── */
         servo_comm_process_rx();
 
-        /* Команда: зміна режиму та setpoint */
+        /* Команда зупинки: перейти у VEL mode з target=0, чекати нульової швидкості */
+        if (servo_comm_get_stop()) {
+            Cascade_SetMode(&cascade, CASCADE_MODE_VEL);
+            cascade.target_vel = 0.0f;
+            app_state = APP_STOPPING;
+        }
+
+        /* Команда руху: зміна режиму та setpoint (відновлення з STOPPED теж) */
         servo_command_t cmd;
         if (servo_comm_get_command(&cmd)) {
+            if (app_state == APP_STOPPED) {
+                Brake_Release(&brake.interface);
+                app_state = APP_RUNNING;
+            }
             Cascade_SetMode(&cascade, (Cascade_Mode_t)cmd.mode);
             switch ((Cascade_Mode_t)cmd.mode) {
                 case CASCADE_MODE_POS: cascade.target_pos     = cmd.target; break;
@@ -257,10 +275,22 @@ int main(void)
         Position_Sensor_GetVelocity(&encoder.interface, &vel_rad_s);
         Current_Sensor_GetCurrent(&current_driver.interface, &current_a);
 
+        /* ── Стан зупинки: очікуємо нульової швидкості → гальмо ────────── */
+        if (app_state == APP_STOPPING) {
+            if (fabsf(vel_rad_s) < STOP_VEL_THRESHOLD_RAD_S) {
+                Motor_Stop(&motor.interface);
+                Brake_Engage(&brake.interface);
+                Cascade_Reset(&cascade);
+                app_state = APP_STOPPED;
+            }
+        }
+
         /* ── Каскадний PID → команда двигуну ────────────────────────────── */
         uint32_t now_us = HWD_Timer_GetMicros();
-        float power = Cascade_Compute(&cascade, pos_rad, vel_rad_s, current_a, now_us);
-        Motor_SetPower(&motor.interface, power);
+        if (app_state != APP_STOPPED) {
+            float power = Cascade_Compute(&cascade, pos_rad, vel_rad_s, current_a, now_us);
+            Motor_SetPower(&motor.interface, power);
+        }
 
         /* ── TX: каскадна телеметрія 100 Гц ─────────────────────────────── */
         static uint32_t last_telem = 0;
