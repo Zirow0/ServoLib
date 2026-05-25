@@ -177,8 +177,11 @@ int main(void)
         .ff_b      = 70.0f,
         .slew_rate = 5000.0f,
     };
-    Cascade_Init(&cascade, &casc_cfg, CASCADE_MODE_POS);
-    cascade.target_pos = 0.0f;
+    /* Стартуємо в VEL mode з нульовою ціллю — мотор не рухається до першої
+     * команди з хоста. POS mode з target=0 при агресивних ff_j/ff_b може
+     * спричинити розкачування якщо перший IC-вимір дає хибну швидкість. */
+    Cascade_Init(&cascade, &casc_cfg, CASCADE_MODE_VEL);
+    cascade.target_vel = 0.0f;
 
     /* Seed wire-config з тих самих значень що й casc_cfg — гарантує
      * коректне param-mode оновлення (один коефіцієнт не затирає решту). */

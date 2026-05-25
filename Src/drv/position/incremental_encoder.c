@@ -21,6 +21,7 @@
 #include "../../../Inc/drv/position/incremental_encoder.h"
 #include "../../../Inc/hwd/hwd_timer.h"
 #include <libopencm3/stm32/exti.h>
+#include <stdbool.h>
 #include <string.h>
 
 /* Private defines -----------------------------------------------------------*/
@@ -38,6 +39,7 @@ typedef struct {
     uint32_t                      ic_ch;        /**< 1..4 */
     volatile uint32_t            *ccr_reg;      /**< вказівник на TIM_CCRx, вирахований в HW_Init */
     uint32_t                      last_ccr;
+    bool                          first_pulse;  /**< перший імпульс — лише ініціалізує last_ccr */
     Incremental_Encoder_Driver_t *driver;
 } EncTimEntry_t;
 
@@ -124,12 +126,22 @@ static void dispatch_tim_ic(uint32_t timer_base)
         if (!timer_get_flag(timer_base, flag)) { continue; }
         timer_clear_flag(timer_base, flag);
 
-        uint32_t ccr    = *e->ccr_reg;
+        uint32_t ccr = *e->ccr_reg;
+
+        if (e->first_pulse) {
+            /* Перший імпульс: last_ccr=0 не відповідає реальному стану таймера —
+             * обчислений period був би часом від старту, а не між-імпульсним.
+             * Лише ініціалізуємо last_ccr, не передаємо швидкість. */
+            e->last_ccr    = ccr;
+            e->first_pulse = false;
+            continue;
+        }
+
         /* uint16_t cast: коректний wrap для 16-bit таймерів (TIM3/TIM4);
          * для 32-bit (TIM2) обмежує max вимірюваний період до ~65 мс,
          * що відповідає ~2 RPM при CPR=4000 — прийнятно для servo */
         uint32_t period = (uint32_t)(uint16_t)(ccr - e->last_ccr);
-        e->last_ccr     = ccr;
+        e->last_ccr = ccr;
         if (e->driver != NULL && period > 0U) {
             Incremental_Encoder_IC_Handler(e->driver, period);
         }
@@ -169,11 +181,12 @@ static Servo_Status_t IncEnc_HW_Init(void *driver_data)
                 case 2U: ccr = &TIM_CCR3(hw->timer_base); break;
                 default:  ccr = &TIM_CCR4(hw->timer_base); break;
             }
-            s_tim_map[s_tim_count].timer_base = hw->timer_base;
-            s_tim_map[s_tim_count].ic_ch      = hw->ic_channel;
-            s_tim_map[s_tim_count].ccr_reg    = ccr;
-            s_tim_map[s_tim_count].last_ccr   = 0U;
-            s_tim_map[s_tim_count].driver     = drv;
+            s_tim_map[s_tim_count].timer_base   = hw->timer_base;
+            s_tim_map[s_tim_count].ic_ch        = hw->ic_channel;
+            s_tim_map[s_tim_count].ccr_reg      = ccr;
+            s_tim_map[s_tim_count].last_ccr     = 0U;
+            s_tim_map[s_tim_count].first_pulse  = true;
+            s_tim_map[s_tim_count].driver       = drv;
             s_tim_count++;
         }
 
