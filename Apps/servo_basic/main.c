@@ -43,7 +43,7 @@ static bool comm_send(const uint8_t *data, size_t len)
  * ================================================================ */
 #define STOP_VEL_THRESHOLD_RAD_S  0.05f  /* рад/с — поріг для накладання гальма */
 
-typedef enum { APP_RUNNING, APP_STOPPING, APP_STOPPED } App_State_t;
+typedef enum { APP_RUNNING, APP_STOPPING, APP_STOPPED, APP_ESTOP } App_State_t;
 
 static PWM_Motor_Driver_t           motor;
 static HWD_PWM_Handle_t             pwm_fwd;
@@ -202,16 +202,25 @@ int main(void)
         /* ── RX: декодування та прийом команд (тільки тут — CRC32 safe) ── */
         servo_comm_process_rx();
 
+        /* Аварійна зупинка: найвищий пріоритет — вимикаємо мотор та гальмо негайно */
+        if (servo_comm_get_estop()) {
+            Motor_EmergencyStop(&motor.interface);
+            Brake_Engage(&brake.interface);
+            Cascade_Reset(&cascade);
+            app_state = APP_ESTOP;
+        }
+
         /* Команда зупинки: перейти у VEL mode з target=0, чекати нульової швидкості */
-        if (servo_comm_get_stop()) {
+        if (app_state != APP_ESTOP && servo_comm_get_stop()) {
             Cascade_SetMode(&cascade, CASCADE_MODE_VEL);
             cascade.target_vel = 0.0f;
             app_state = APP_STOPPING;
         }
 
-        /* Команда руху: зміна режиму та setpoint (відновлення з STOPPED теж) */
+        /* Команда руху: зміна режиму та setpoint.
+         * Відновлення з STOPPED, але не з APP_ESTOP — потребує апаратного скиду. */
         servo_command_t cmd;
-        if (servo_comm_get_command(&cmd)) {
+        if (app_state != APP_ESTOP && servo_comm_get_command(&cmd)) {
             if (app_state == APP_STOPPED) {
                 Brake_Release(&brake.interface);
                 app_state = APP_RUNNING;
@@ -287,7 +296,7 @@ int main(void)
 
         /* ── Каскадний PID → команда двигуну ────────────────────────────── */
         uint32_t now_us = HWD_Timer_GetMicros();
-        if (app_state != APP_STOPPED) {
+        if (app_state == APP_RUNNING || app_state == APP_STOPPING) {
             float power = Cascade_Compute(&cascade, pos_rad, vel_rad_s, current_a, now_us);
             Motor_SetPower(&motor.interface, power);
         }

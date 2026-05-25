@@ -25,6 +25,7 @@ typedef enum {
     MSG_TYPE_CASCADE_TELEM  = 0x03,  /* cascade_telemetry_t */
     MSG_TYPE_CASCADE_CONFIG = 0x04,  /* cascade_config_t    */
     MSG_TYPE_STOP           = 0x05,  /* без payload         */
+    MSG_TYPE_ESTOP          = 0x06,  /* без payload, миттєво */
 } servo_msg_type_t;
 
 #define MSG_TELEMETRY_STRUCT      MSG_ID(MSG_TYPE_TELEMETRY,      MSG_MODE_STRUCT)
@@ -36,6 +37,7 @@ typedef enum {
 #define MSG_CASCADE_CFG_STRUCT    MSG_ID(MSG_TYPE_CASCADE_CONFIG, MSG_MODE_STRUCT)
 #define MSG_CASCADE_CFG_PARAM     MSG_ID(MSG_TYPE_CASCADE_CONFIG, MSG_MODE_PARAM)
 #define MSG_STOP_STRUCT           MSG_ID(MSG_TYPE_STOP,           MSG_MODE_STRUCT)
+#define MSG_ESTOP_STRUCT          MSG_ID(MSG_TYPE_ESTOP,          MSG_MODE_STRUCT)
 
 /* ================================================================
  * Типи параметрів

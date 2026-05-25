@@ -35,7 +35,8 @@ static volatile int     cmd_ready = 0;
 static cascade_config_t pending_cascade_cfg;
 static volatile int     cascade_cfg_ready = 0;
 
-static volatile int     stop_ready = 0;
+static volatile int     stop_ready  = 0;
+static volatile int     estop_ready = 0;
 
 /* Send callback */
 static servo_comm_send_fn g_send_fn = NULL;
@@ -52,6 +53,7 @@ void servo_comm_init(servo_comm_send_fn send_fn)
     cmd_ready         = 0;
     cascade_cfg_ready = 0;
     stop_ready        = 0;
+    estop_ready       = 0;
     memset(&pending_cascade_cfg, 0, sizeof(pending_cascade_cfg));
 }
 
@@ -121,6 +123,8 @@ void servo_comm_process_rx(void)
         }
     } else if (msg_type == (uint8_t)MSG_TYPE_STOP) {
         stop_ready = 1;
+    } else if (msg_type == (uint8_t)MSG_TYPE_ESTOP) {
+        estop_ready = 1;
     }
 }
 
@@ -136,6 +140,13 @@ bool servo_comm_get_stop(void)
 {
     if (!stop_ready) return false;
     stop_ready = 0;
+    return true;
+}
+
+bool servo_comm_get_estop(void)
+{
+    if (!estop_ready) return false;
+    estop_ready = 0;
     return true;
 }
 
