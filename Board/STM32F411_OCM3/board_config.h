@@ -67,7 +67,7 @@ extern "C" {
 #define ENC0_GPIO_PIN_A         GPIO6
 #define ENC0_GPIO_RCC_A         RCC_GPIOB
 #define ENC0_GPIO_PORT_B        GPIOB
-#define ENC0_GPIO_PIN_B         GPIO4
+#define ENC0_GPIO_PIN_B         GPIO5
 #define ENC0_GPIO_RCC_B         RCC_GPIOB
 #define ENC0_GPIO_AF            GPIO_AF2
 #define ENC0_TIMER_BASE         TIM4
@@ -95,7 +95,7 @@ extern "C" {
 #define UART_DEBUG_TX_PIN       GPIO9
 #define UART_DEBUG_RX_PIN       GPIO10
 #define UART_DEBUG_GPIO_AF      GPIO_AF7
-#define UART_DEBUG_BAUDRATE     115200U
+#define UART_DEBUG_BAUDRATE     1000000U
 #endif
 
 /* ADC (ADC1 → PA4, CH4) ----------------------------------------------------*/

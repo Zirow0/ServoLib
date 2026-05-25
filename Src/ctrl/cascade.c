@@ -135,16 +135,15 @@ float Cascade_Compute(Cascade_Controller_t* casc,
     }
 
     /* Feedforward (спрощена модель):
-     *   ff_j * current_sp  — передбачає момент інерції (% / A)
-     *   ff_b * omega        — компенсує в'язке тертя (% / (рад/с))
-     * current_sp вже обмежений вище, тому внесок ff_j природно обмежений.
-     * У режимі TRQ ff_b не застосовується: користувач задає струм напряму. */
+     *   ff_j * vel_sp — компенсація за цільовою швидкістю [%·с/рад]
+     *   ff_b * omega   — компенсація в'язкого тертя [%·с/рад]
+     * Базується на командних/кінематичних сигналах, не на виході зворотного зв'язку.
+     * У режимі TRQ feedforward не застосовується. */
     float ff = 0.0f;
-    if (casc->config.ff_j != 0.0f || casc->config.ff_b != 0.0f) {
-        ff = casc->config.ff_j * current_sp;
-        if (casc->mode != CASCADE_MODE_TRQ) {
-            ff += casc->config.ff_b * omega;
-        }
+    if (casc->mode != CASCADE_MODE_TRQ &&
+        (casc->config.ff_j != 0.0f || casc->config.ff_b != 0.0f)) {
+        ff = casc->config.ff_j * casc->last_vel_sp
+           + casc->config.ff_b * omega;
     }
 
     /* trq-PID + FF. Фінальне обмеження — єдине місце де обрізається вихід

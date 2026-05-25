@@ -149,31 +149,31 @@ int main(void)
     /* ── Каскадний PID ───────────────────────────────────────────────────── */
     static const Cascade_Config_t casc_cfg = {
         .pos = {
-            .kp      = 6.0f,
+            .kp      = 7.0f,
             .ki      = 0.0f,
-            .kd      = 0.06f,
-            .out_min = -0.2f,
-            .out_max =  0.2f,
+            .kd      = 0.1f,
+            .out_min = -0.3f,
+            .out_max =  0.3f,
             .i_limit =  0.1f,
         },
         .vel = {
-            .kp      = 1.0f,
-            .ki      = 35.0f,
+            .kp      = 8.0f,
+            .ki      = 120.0f,
             .kd      = 0.0f,
             .out_min = -3.5f,
             .out_max =  3.5f,
-            .i_limit =  2.0f,
+            .i_limit =  1.0f,
         },
         .trq = {
-            .kp      = 0.0f,
-            .ki      = 700.0f,
+            .kp      = 8.0f,
+            .ki      = 500.0f,
             .kd      = 0.0f,
             .out_min = -100.0f,
             .out_max =  100.0f,
             .i_limit =  40.0f,
         },
-        .ff_j      = 70.0f,
-        .ff_b      = 70.0f,
+        .ff_j      = 145.0f,
+        .ff_b      = 0.0f,
         .slew_rate = 5000.0f,
     };
     Cascade_Init(&cascade, &casc_cfg, CASCADE_MODE_POS);
