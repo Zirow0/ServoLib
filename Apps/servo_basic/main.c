@@ -52,7 +52,7 @@ static GPIO_Brake_Driver_t          brake;
 static ACS712_Driver_t              current_driver;
 static HWD_ADC_Handle_t             current_adc;
 static Cascade_Controller_t         cascade;
-static App_State_t                  app_state = APP_RUNNING;
+static App_State_t                  app_state = APP_STOPPED;
 
 static const HWD_GPIO_Pin_t led_pin = {
     .port = (void*)LED_GPIO_PORT,
@@ -145,7 +145,6 @@ int main(void)
         .release_time_ms = 30,
     };
     GPIO_Brake_Create(&brake, &brk_cfg);
-    Brake_Release(&brake.interface);
 
     /* ── Каскадний PID ───────────────────────────────────────────────────── */
     static const Cascade_Config_t casc_cfg = {
