@@ -96,7 +96,10 @@ void servo_comm_process_rx(void)
     size_t  plen = packet_decode(raw, raw_len,
                                  &msg_id, payload, sizeof(payload));
 
-    if (plen == 0) return;
+    /* plen == 0 є валідним для повідомлень без payload (STOP, ESTOP).
+     * Помилка декодування — тільки якщо raw_len < 1, але це вже відсіяно
+     * frame_decode вище. Перевіряємо raw_len напряму. */
+    if (raw_len < 1U) return;
 
     uint8_t msg_type = MSG_TYPE(msg_id);
     uint8_t msg_mode = MSG_MODE(msg_id);
