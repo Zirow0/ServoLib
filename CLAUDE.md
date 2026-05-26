@@ -48,7 +48,9 @@ Src/comm/                      ← Async comm шар (hardware-independent)
     ↓
 Src/drv/                       ← Motor, Position sensor, Brake, Current drivers
     ↓
-Inc/hwd/ + Board/STM32F411_OCM3/  ← HWD declarations + libopencm3 implementations
+Inc/hwd/ + Board/              ← HWD declarations + libopencm3 implementations
+    STM32F411_OCM3/            ← основна плата (BlackPill)
+    STM32F411_EncoderHub/      ← плата з кількома енкодерами
 Lib/frame_codec/               ← COBS framing + CRC32 (git submodule)
 Lib/packet_codec/              ← msg_id | payload layer (git submodule)
 ```
@@ -206,9 +208,9 @@ CASCADE_MODE_TRQ:                                    current_sp(А) → trq-PID 
 
 **Feedforward (спрощена модель):**
 ```c
-ff = ff_j * current_sp + ff_b * omega   // в %
-// ff_j [%/А], ff_b [%·с/рад]
-// У CASCADE_MODE_TRQ ff_b не застосовується
+ff = ff_j * vel_sp + ff_b * omega   // в %
+// ff_j [%·с/рад], ff_b [%·с/рад]
+// У CASCADE_MODE_TRQ feedforward не застосовується повністю
 ```
 
 **Slew rate:** `config.slew_rate` [%/с] обмежує зміну команди двигуну. `0` = вимкнено.

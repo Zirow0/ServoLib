@@ -61,7 +61,7 @@ ServoLib - це модульна бібліотека керування DC се
 │   ┌───────────────────────────────────────────┐ │
 │   │ Hardware Callbacks:                       │ │
 │   │ - PWM Motor (pwm.c)                       │ │
-│   │ - AEAT-9922 Sensor (aeat9922.c)           │ │
+│   │ - Incremental Encoder (incremental_encoder.c) │ │
 │   │ - AS5600 Sensor (as5600.c)                │ │
 │   │ - GPIO Brake (gpio_brake.c)               │ │
 │   └────────────┬──────────────────────────────┘ │
@@ -70,8 +70,8 @@ ServoLib - це модульна бібліотека керування DC се
 │   - HWD_PWM, HWD_I2C, HWD_SPI                   │
 │   - HWD_GPIO, HWD_Timer                         │
 ├─────────────────────────────────────────────────┤
-│   Platform Layer (Board/STM32F411/)             │
-│   - Реалізація HWD через STM32 HAL              │
+│   Platform Layer (MCU/STM32F411_libopencm3/)    │
+│   - Реалізація HWD через libopencm3             │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -92,7 +92,7 @@ ServoLib - це модульна бібліотека керування DC се
 
 #### FR-M-001: PWM керування
 - Система ПОВИННА підтримувати PWM керування DC двигунами
-- Частота PWM: 1-100 kHz (типово 1 kHz)
+- Частота PWM: 20 kHz (MOTOR_PWM_FREQ у board_config.h)
 - Роздільна здатність: 1000 кроків (0.1%)
 - Режими: одноканальний (PWM + DIR), двоканальний (PWM_FWD, PWM_BWD)
 
@@ -111,14 +111,15 @@ ServoLib - це модульна бібліотека керування DC се
 
 ### 3.2 Зчитування датчиків
 
-#### FR-S-001: Магнітні енкодери
-- **AEAT-9922** (18-біт, SPI) - основний, поточно активний
-  - Роздільна здатність: 262144 позицій на оберт
-  - Протоколи: SPI4-24bit, SPI4-A 16bit, SPI4-B 24bit
-  - CRC-8 перевірка даних
-- **AS5600** (12-біт, I2C) - доступний, але вимкнений
+#### FR-S-001: Датчики положення
+- **Incremental Encoder** (квадратурний, EXTI X4) — активний
+  - Підтримка до 6 датчиків одночасно (ENC_MAX = 6)
+  - 32-bit необмежений лічильник (multi-turn)
+  - IC-таймер для прямого вимірювання period_us (без диференціювання)
+- **AS5600** (12-біт, I2C) — активний
   - Роздільна здатність: 4096 позицій на оберт
-  - Частота оновлення: до 1 kHz
+  - Частота оновлення: до 1 kHz (I2C IT continuous read)
+- **AEAT-9922** (18-біт, SPI) — **видалено** з кодової бази
 
 #### FR-S-002: Обробка даних (Universal Position Interface)
 - Обчислення швидкості за різницею позицій (wraparound-safe derivative)
@@ -292,12 +293,8 @@ ServoLib - це модульна бібліотека керування DC се
 - **Encoder:** опціонально
 
 #### Датчик положення
-- **AEAT-9922:** 18-біт магнітний енкодер (основний, активний)
-  - **Інтерфейс:** SPI (протоколи SPI4-24bit, SPI4-A, SPI4-B)
-  - **Роздільна здатність:** 262144 позицій/оберт
-  - **Напруга живлення:** 5V
-  - **CRC-8:** для перевірки даних
-- **AS5600:** 12-біт магнітний енкодер (доступний, вимкнений)
+- **Incremental Encoder:** квадратурний (EXTI X4), до 6 шт.
+- **AS5600:** 12-біт магнітний енкодер
   - **Інтерфейс:** I2C (адреса 0x36)
   - **Роздільна здатність:** 4096 позицій/оберт
   - **Напруга живлення:** 3.3V або 5V
@@ -370,7 +367,7 @@ ServoLib - це модульна бібліотека керування DC се
 #include "drv/motor/motor.h"         // Universal motor interface
 #include "drv/motor/pwm.h"           // PWM motor driver
 #include "drv/position/position.h"   // Universal position interface
-#include "drv/position/aeat9922.h"   // AEAT-9922 driver
+#include "drv/position/incremental_encoder.h"  // або as5600.h
 #include "drv/brake/brake.h"         // Universal brake interface
 #include "drv/brake/gpio_brake.h"    // GPIO brake driver
 ```
@@ -540,12 +537,11 @@ typedef enum {
 - [../README.md](../README.md) - Швидкий старт та огляд
 - [structure.md](structure.md) - Детальна структура проекту
 - [BRAKE_DRIVER.md](BRAKE_DRIVER.md) - Документація драйвера гальм
-- [AEAT-9922/CONFIGURATION_GUIDE.md](AEAT-9922/CONFIGURATION_GUIDE.md) - Конфігурація AEAT-9922
+- [AEAT-9922/CONFIGURATION_GUIDE.md](AEAT-9922/CONFIGURATION_GUIDE.md) - Конфігурація AEAT-9922 (**OBSOLETE** — датчик видалено)
 - [../CLAUDE.md](../CLAUDE.md) - Інструкції для Claude Code
 
 ### 11.2 Датшити
 - STM32F411CEU6 Reference Manual
-- AEAT-9922 Datasheet (18-bit Magnetic Encoder)
 - AS5600 Magnetic Encoder Datasheet
 - L298N H-Bridge Driver Datasheet
 
@@ -573,7 +569,7 @@ typedef enum {
 ## Додаток Б: Налаштування CubeMX
 
 ### Налаштування TIM3 (PWM для мотора)
-- **Prescaler:** 99 (для 1 kHz при 100 MHz)
+- **Prescaler:** 4 (для 20 kHz при 100 MHz: 100 MHz / 5 / 1000 = 20 kHz)
 - **Counter Period:** 999
 - **Channel 1 (PA6):** PWM Generation CH1
 - **Channel 2 (PA7):** PWM Generation CH2

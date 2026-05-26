@@ -31,8 +31,6 @@
 │                    ↓ (engage_time_ms)               │
 │                    ENGAGED (гальма активні)         │
 │                                                     │
-│  Brake_EmergencyEngage() → ENGAGED (миттєво)        │
-│                                                     │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -115,9 +113,9 @@ Brake_Update(&brake_driver.interface);  // Викликати регулярно
 ```c
 typedef enum {
     BRAKE_STATE_ENGAGED = 0,     // Гальма активні (стабільний стан)
-    BRAKE_STATE_RELEASING = 1,   // Перехід до відпущення
-    BRAKE_STATE_RELEASED = 2,    // Гальма відпущені (стабільний стан)
-    BRAKE_STATE_ENGAGING = 3     // Перехід до активації
+    BRAKE_STATE_RELEASED = 1,    // Гальма відпущені (стабільний стан)
+    BRAKE_STATE_ENGAGING = 2,    // Перехід до активації
+    BRAKE_STATE_RELEASING = 3    // Перехід до відпущення
 } Brake_State_t;
 ```
 
@@ -127,8 +125,8 @@ typedef struct {
     void* gpio_port;            // GPIO порт (GPIOA, GPIOB, ...)
     uint16_t gpio_pin;          // GPIO пін (GPIO_PIN_0, ...)
     bool active_high;           // Полярність (true = HIGH активує, false = LOW)
-    uint32_t engage_time_ms;    // Час переходу RELEASING → ENGAGED
-    uint32_t release_time_ms;   // Час переходу ENGAGING → RELEASED
+    uint32_t engage_time_ms;    // Час переходу ENGAGING → ENGAGED
+    uint32_t release_time_ms;   // Час переходу RELEASING → RELEASED
 } GPIO_Brake_Config_t;
 ```
 
@@ -239,26 +237,6 @@ while (1) {
 }
 ```
 
-#### Brake_EmergencyEngage
-Аварійна активація гальм (миттєво, без transition).
-
-```c
-Servo_Status_t Brake_EmergencyEngage(Brake_Interface_t* brake);
-```
-
-**Поведінка:**
-- Миттєво переключає на ENGAGED (без ENGAGING transition)
-- Викликає `brake->hw.engage()` callback
-- Використовується при критичних помилках (перевантаження, перегрів)
-
-**Приклад:**
-```c
-// При аварійній ситуації
-Brake_EmergencyEngage(&brake_driver.interface);  // Миттєво блокувати
-
-// Стан ENGAGED без затримки!
-```
-
 #### Brake_GetState
 Отримання поточного стану.
 
@@ -282,17 +260,12 @@ if (state == BRAKE_STATE_RELEASED) {
 ```c
 bool Brake_IsEngaged(const Brake_Interface_t* brake);
 bool Brake_IsReleased(const Brake_Interface_t* brake);
-bool Brake_IsTransitioning(const Brake_Interface_t* brake);
 ```
 
 **Приклад:**
 ```c
 if (Brake_IsReleased(&brake_driver.interface)) {
     // Гальма відпущені, можна рухатися
-}
-
-if (Brake_IsTransitioning(&brake_driver.interface)) {
-    // Гальма у процесі переходу, зачекати
 }
 ```
 
@@ -322,9 +295,11 @@ Servo_Config_t servo_config = {
 };
 
 // 3. Ініціалізація servo з motor та brake interfaces
-Servo_InitWithBrake(&servo_controller, &servo_config,
-                    &motor_driver.interface,
-                    &brake_driver.interface);  // Universal interface!
+Servo_InitFull(&servo_controller, &servo_config,
+               &motor_driver.interface,
+               NULL,                    // position sensor (optional)
+               &brake_driver.interface,
+               NULL);                   // current sensor (optional)
 ```
 
 ### Автоматичне керування
@@ -339,16 +314,16 @@ Servo_SetPosition(&servo_controller, 90.0f);
 // 2. Servo_Update() автоматично викликає Brake_Update()
 // (обробляє transitions між станами)
 
-// 3. При аварійній зупинці - Servo викличе Brake_EmergencyEngage()
+// 3. При аварійній зупинці - Servo викличе Brake_Engage()
 Servo_EmergencyStop(&servo_controller);
-// Стан гальм: МИТТЄВО ENGAGED (без transition)
+// Стан гальм: ENGAGED (через ENGAGING transition)
 ```
 
 **Важливо:** Servo контролер автоматично:
 - Відпускає гальма перед рухом (Brake_Release)
 - Блокує гальма після завершення руху
 - Викликає Brake_Update() у кожному Servo_Update()
-- Використовує EmergencyEngage при критичних помилках
+- Викликає Brake_Engage() при критичних помилках
 
 ## Апаратне підключення
 
@@ -533,7 +508,8 @@ if (Brake_IsReleased(&brake_driver.interface)) {
     // Гальма відпущені, рух дозволено
 }
 
-if (Brake_IsTransitioning(&brake_driver.interface)) {
+Brake_State_t state = Brake_GetState(&brake_driver.interface);
+if (state == BRAKE_STATE_RELEASING || state == BRAKE_STATE_ENGAGING) {
     // Гальма у процесі переходу, зачекати
 }
 ```
@@ -576,7 +552,7 @@ while (1) {
         Brake_Release(&brake_driver.interface);
 
         // Зачекати повного відпускання
-        while (Brake_IsTransitioning(&brake_driver.interface)) {
+        while (!Brake_IsReleased(&brake_driver.interface)) {
             Brake_Update(&brake_driver.interface);
             HAL_Delay(1);
         }

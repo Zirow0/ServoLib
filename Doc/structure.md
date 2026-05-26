@@ -65,10 +65,17 @@ ServoLib/
 │   │   └── servo_protocol_desc.h  # Приватні дескриптори полів
 │   └── util/derivative.c
 │
-├── Board/
-│   └── STM32F411_OCM3/         # libopencm3 платформа (єдине місце з MCU-залежністю)
-│       ├── board_config.h      # Піни, периферія, макроси USE_*
-│       ├── board.c             # Board_Init() — системний клок, периферія
+├── Board/                      # Конфігурація плат (піни, макроси USE_*)
+│   ├── STM32F411_OCM3/         # Основна плата BlackPill
+│   │   ├── board_config.h      # Піни, периферія, макроси USE_*
+│   │   ├── board.c             # Board_Init() — системний клок, периферія
+│   │   └── STM32F411CE.ld      # Лінкер-скрипт
+│   └── STM32F411_EncoderHub/   # 6-канальний концентратор енкодерів
+│       ├── board_config.h
+│       └── board.c
+│
+├── MCU/
+│   └── STM32F411_libopencm3/   # libopencm3 платформа (єдине місце з MCU-залежністю)
 │       ├── hwd_pwm.c           # TIM3 CH1 PWM
 │       ├── hwd_adc.c           # ADC1 DMA scan mode
 │       ├── hwd_i2c.c           # I2C1 IT continuous read
@@ -92,7 +99,8 @@ ServoLib/
 │   └── servo_basic/            # Каскадний PID напряму + async UART DMA comm
 │
 ├── cmake/
-│   ├── targets/STM32F411_OCM3.cmake  # DEVICE, BOARD_DIR, BOARD_SRCS
+│   ├── targets/STM32F411_OCM3.cmake          # DEVICE, BOARD_DIR, BOARD_SRCS
+│   ├── targets/STM32F411_ENCODER_HUB.cmake   # Конфігурація EncoderHub
 │   ├── toolchain/arm-none-eabi.cmake
 │   ├── stm32.cmake             # genlink, MCU_FLAGS, stm32_add_executable
 │   └── ServoLib.cmake          # SERVOLIB_UTIL/MOTOR/POSITION/CURRENT/BRAKE/CTRL/COMM/ALL
@@ -116,11 +124,14 @@ comm/               ← Async протокол (hardware-independent)
     ↓
 drv/                ← Motor, Position, Brake, Current (universal interfaces + callbacks)
     ↓
-hwd/ + Board/       ← HWD declarations + libopencm3 implementations
+hwd/ + MCU/         ← HWD declarations + libopencm3 implementations
+Board/              ← конфігурація плат (board_config.h, board.c)
 Lib/                ← frame_codec, packet_codec (git submodules)
 ```
 
-**Ключовий принцип:** `ctrl/`, `drv/`, `comm/` не мають жодних `#include <libopencm3/...>`. Тільки `Board/` знає про MCU.
+**Ключовий принцип:** `ctrl/`, `drv/`, `comm/` не мають жодних `#include <libopencm3/...>`. Тільки `MCU/` та `Board/` знають про MCU.
+
+> **Виняток:** `Src/drv/position/incremental_encoder.c` напряму включає `board_config.h` та `<libopencm3/stm32/exti.h>` — через залежність EXTI конфігурації від апаратури.
 
 ---
 
