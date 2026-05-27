@@ -216,6 +216,10 @@ Servo_Status_t Cascade_SetMode(Cascade_Controller_t* casc, Cascade_Mode_t mode)
         return SERVO_INVALID;
     }
 
+    if (casc->mode == mode) {
+        return SERVO_OK;
+    }
+
     casc->mode = mode;
     return Cascade_Reset(casc);
 }
