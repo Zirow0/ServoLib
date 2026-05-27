@@ -45,6 +45,7 @@ typedef struct {
  * @brief Внутрішні дані датчика (керується current.c)
  */
 typedef struct {
+    float ukf_buf[UKF_BUFFER_FLOATS(1, 1)];
     ukf_t ukf;
     float overcurrent_threshold_a;
 

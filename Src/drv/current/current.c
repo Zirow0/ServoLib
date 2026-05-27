@@ -72,7 +72,8 @@ Servo_Status_t Current_Sensor_Init(Current_Sensor_Interface_t* sensor,
     float R[1]  = {params->measurement_noise_r};
 
     ukf_init(&sensor->data.ukf, 1, 1,
-             Current_UKF_StateFunc, Current_UKF_MeasurementFunc, NULL);
+             Current_UKF_StateFunc, Current_UKF_MeasurementFunc, NULL,
+             sensor->data.ukf_buf);
     ukf_set_params(&sensor->data.ukf, 0.5f, 2.0f, 0.0f);
     ukf_set_state(&sensor->data.ukf, x0, P0);
     ukf_set_noise(&sensor->data.ukf, Q, R);
