@@ -44,6 +44,7 @@ set(SERVOLIB_POSITION
     ${SL}/drv/position/position.c
     ${SL}/drv/position/incremental_encoder.c
     ${SL}/drv/position/as5600.c
+    ${SL}/drv/position/encoder_ukf.c
 )
 
 # Підсистема датчика струму
