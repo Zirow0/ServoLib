@@ -63,7 +63,7 @@ Servo_Status_t Position_Sensor_Update(Position_Sensor_Interface_t* sensor)
         return SERVO_NOT_INIT;
     }
 
-    Position_Raw_Data_t raw;
+    Position_Raw_Data_t raw = {0};
     Servo_Status_t s = sensor->hw.read_raw(sensor->driver_data, &raw);
     if (s != SERVO_OK) {
         data->last_error = ERR_SENSOR_READ_FAILED;

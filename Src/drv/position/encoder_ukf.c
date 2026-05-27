@@ -53,6 +53,7 @@ Servo_Status_t Encoder_UKF_Init(Encoder_UKF_t *filter,
                  filter->buffer) != UKF_SUCCESS) {
         return SERVO_ERROR;
     }
+    ukf_set_params(&filter->ukf, 0.5f, 2.0f, 0.0f);
 
     const float x0[ENCODER_UKF_N_STATES] = { theta_init, 0.0f, 0.0f };
     const float P0[ENCODER_UKF_N_STATES * ENCODER_UKF_N_STATES] = {
