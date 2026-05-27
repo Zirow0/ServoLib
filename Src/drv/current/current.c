@@ -17,8 +17,8 @@
 
 /* Private defines -----------------------------------------------------------*/
 
-#define CURRENT_CALIB_DURATION_MS   50U    /**< Тривалість калібрування (мс) */
-#define CURRENT_CALIB_MIN_SAMPLES   10U    /**< Мінімум зразків для калібрування */
+#define CURRENT_CALIB_N_SAMPLES     20U    /**< Кількість вимірів для калібрування */
+#define CURRENT_CALIB_SAMPLE_MS     5U     /**< Пауза між вимірами (мс) */
 #define CURRENT_UKF_DT              0.001f /**< Крок часу UKF (1 кГц контурний цикл) */
 
 /* Private functions ---------------------------------------------------------*/
@@ -125,21 +125,21 @@ Servo_Status_t Current_Sensor_Calibrate(Current_Sensor_Interface_t* sensor)
 
     Current_Sensor_Data_t* data = &sensor->data;
 
-    /* Програмне калібрування: усереднення read_raw за CURRENT_CALIB_DURATION_MS.
+    /* Програмне калібрування: CURRENT_CALIB_N_SAMPLES вимірів з паузою між ними.
      * Викликати при нульовому струмі (двигун зупинений, ШІМ вимкнений). */
-    float    sum      = 0.0f;
-    uint32_t count    = 0U;
-    uint32_t start_ms = HWD_Timer_GetMillis();
+    float    sum   = 0.0f;
+    uint32_t count = 0U;
 
-    while ((HWD_Timer_GetMillis() - start_ms) < CURRENT_CALIB_DURATION_MS) {
+    for (uint32_t i = 0U; i < CURRENT_CALIB_N_SAMPLES; i++) {
         Current_Raw_Data_t raw = {0};
         if (sensor->hw.read_raw(sensor->driver_data, &raw) == SERVO_OK && raw.valid) {
             sum += raw.current_a;
             count++;
         }
+        HWD_Timer_DelayMs(CURRENT_CALIB_SAMPLE_MS);
     }
 
-    if (count < CURRENT_CALIB_MIN_SAMPLES) return SERVO_ERROR;
+    if (count == 0U) return SERVO_ERROR;
 
     data->zero_offset_a      = sum / (float)count;
     data->filtered_current_a = 0.0f;

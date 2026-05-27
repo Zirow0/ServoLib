@@ -247,13 +247,15 @@ static inline size_t proto_pack_param(const void   *src_struct,
 
 static inline int proto_unpack_param(void          *dst_struct,
                                      const uint8_t *payload,
-                                     size_t         len)
+                                     size_t         len,
+                                     size_t         struct_size)
 {
     if (len < 3u) return 0;
     uint8_t      offset = payload[0];
     param_type_t type   = (param_type_t)payload[1];
     uint8_t      sz     = param_size(type);
     if (sz == 0u || len < 2u + sz) return 0;
+    if ((size_t)offset + sz > struct_size) return 0;
     memcpy((uint8_t *)dst_struct + offset, &payload[2], sz);
     return 1;
 }

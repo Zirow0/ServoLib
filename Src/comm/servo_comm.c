@@ -111,7 +111,7 @@ void servo_comm_process_rx(void)
                 cmd_ready = 1;
             }
         } else {
-            proto_unpack_param(&pending_cmd, payload, plen);
+            proto_unpack_param(&pending_cmd, payload, plen, sizeof(pending_cmd));
             cmd_ready = 1;
         }
     } else if (msg_type == (uint8_t)MSG_TYPE_CASCADE_CONFIG) {
@@ -121,7 +121,7 @@ void servo_comm_process_rx(void)
                 cascade_cfg_ready = 1;
             }
         } else {
-            proto_unpack_param(&pending_cascade_cfg, payload, plen);
+            proto_unpack_param(&pending_cascade_cfg, payload, plen, sizeof(pending_cascade_cfg));
             cascade_cfg_ready = 1;
         }
     } else if (msg_type == (uint8_t)MSG_TYPE_STOP) {

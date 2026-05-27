@@ -94,6 +94,7 @@ int main(void)
         .measurement_noise_r     = 0.5f,
     };
     ACS712_Create(&current_driver, &acs_cfg, &current_params);
+    HWD_Timer_DelayMs(1000U);
     Current_Sensor_Calibrate(&current_driver.interface);
 
     /* ── PWM канал ───────────────────────────────────────────────────────── */
