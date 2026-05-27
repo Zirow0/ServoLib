@@ -30,6 +30,7 @@ set(SERVOLIB_UTIL
     ${SL}/core.c
     ${SL}/hwd/hwd.c
     ${SL}/util/derivative.c
+    ${SL}/ctrl/time.c
 )
 
 # Підсистема двигуна
@@ -64,7 +65,6 @@ set(SERVOLIB_CTRL
     ${SL}/ctrl/cascade.c
     ${SL}/ctrl/safety.c
     ${SL}/ctrl/traj.c
-    ${SL}/ctrl/time.c
 )
 
 # Async комунікація (frame_codec + packet_codec + servo_comm)

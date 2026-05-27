@@ -19,7 +19,7 @@
 #ifdef USE_SENSOR_INCREMENTAL
 
 #include "../../../Inc/drv/position/incremental_encoder.h"
-#include "../../../Inc/hwd/hwd_timer.h"
+#include "../../../Inc/ctrl/time.h"
 #include <libopencm3/stm32/exti.h>
 #include <string.h>
 
@@ -38,6 +38,7 @@ typedef struct {
     uint32_t                      ic_ch;        /**< 1..4 */
     volatile uint32_t            *ccr_reg;      /**< вказівник на TIM_CCRx, вирахований в HW_Init */
     uint32_t                      last_ccr;
+    uint32_t                      last_pulse_us; /**< абсолютний час попереднього імпульсу (мкс) */
     Incremental_Encoder_Driver_t *driver;
 } EncTimEntry_t;
 
@@ -115,6 +116,8 @@ static void dispatch_exti(uint8_t line)
 
 static void dispatch_tim_ic(uint32_t timer_base)
 {
+    uint32_t now_us = Time_GetMicros();
+
     for (uint8_t i = 0U; i < s_tim_count; i++) {
         EncTimEntry_t *e = &s_tim_map[i];
         if (e->timer_base != timer_base) { continue; }
@@ -124,15 +127,21 @@ static void dispatch_tim_ic(uint32_t timer_base)
         if (!timer_get_flag(timer_base, flag)) { continue; }
         timer_clear_flag(timer_base, flag);
 
-        uint32_t ccr    = *e->ccr_reg;
-        /* uint16_t cast: коректний wrap для 16-bit таймерів (TIM3/TIM4);
-         * для 32-bit (TIM2) обмежує max вимірюваний період до ~65 мс,
-         * що відповідає ~2 RPM при CPR=4000 — прийнятно для servo */
-        uint32_t period = (uint32_t)(uint16_t)(ccr - e->last_ccr);
-        e->last_ccr     = ccr;
-        if (e->driver != NULL && period > 0U) {
-            Incremental_Encoder_IC_Handler(e->driver, period);
+        uint32_t ccr     = *e->ccr_reg;
+        uint32_t elapsed = now_us - e->last_pulse_us;
+
+        /* Приймаємо замір лише якщо:
+         *  - є попередній імпульс (last_pulse_us != 0)
+         *  - elapsed < 65000 мкс: гарантує коректність uint16_t wrap CCR різниці */
+        if (e->last_pulse_us != 0U && elapsed < 65000U) {
+            uint32_t period = (uint32_t)(uint16_t)(ccr - e->last_ccr);
+            if (e->driver != NULL && period > 0U) {
+                Incremental_Encoder_IC_Handler(e->driver, period);
+            }
         }
+
+        e->last_ccr      = ccr;
+        e->last_pulse_us = now_us;
     }
 }
 
@@ -169,11 +178,12 @@ static Servo_Status_t IncEnc_HW_Init(void *driver_data)
                 case 2U: ccr = &TIM_CCR3(hw->timer_base); break;
                 default:  ccr = &TIM_CCR4(hw->timer_base); break;
             }
-            s_tim_map[s_tim_count].timer_base = hw->timer_base;
-            s_tim_map[s_tim_count].ic_ch      = hw->ic_channel;
-            s_tim_map[s_tim_count].ccr_reg    = ccr;
-            s_tim_map[s_tim_count].last_ccr   = 0U;
-            s_tim_map[s_tim_count].driver     = drv;
+            s_tim_map[s_tim_count].timer_base    = hw->timer_base;
+            s_tim_map[s_tim_count].ic_ch         = hw->ic_channel;
+            s_tim_map[s_tim_count].ccr_reg       = ccr;
+            s_tim_map[s_tim_count].last_ccr      = 0U;
+            s_tim_map[s_tim_count].last_pulse_us = 0U;
+            s_tim_map[s_tim_count].driver        = drv;
             s_tim_count++;
         }
 
@@ -252,11 +262,11 @@ static Servo_Status_t IncEnc_HW_ReadRaw(void *driver_data, Position_Raw_Data_t *
 
     /* Абсолютний кут напряму з лічильника ISR — multi-turn вбудований */
     raw->angle_rad    = (float)count / (float)cpr * TWO_PI;
-    raw->timestamp_us = HWD_Timer_GetMicros();
+    raw->timestamp_us = Time_GetMicros();
     raw->valid        = true;
 
     /* Швидкість з IC timer */
-    if (period_us == 0U || (HWD_Timer_GetMillis() - last_ms) > ENC_SPEED_TIMEOUT_MS) {
+    if (period_us == 0U || (Time_GetMillis() - last_ms) > ENC_SPEED_TIMEOUT_MS) {
         raw->has_velocity   = true;
         raw->velocity_rad_s = 0.0f;
     } else {
@@ -310,7 +320,7 @@ void Incremental_Encoder_IC_Handler(Incremental_Encoder_Driver_t *driver,
                                      uint32_t period_us)
 {
     driver->period_us     = period_us;
-    driver->last_pulse_ms = HWD_Timer_GetMillis();
+    driver->last_pulse_ms = Time_GetMillis();
 }
 
 /* ISR handlers --------------------------------------------------------------*/
