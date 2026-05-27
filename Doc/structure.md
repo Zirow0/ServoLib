@@ -25,7 +25,8 @@ ServoLib/
 │   │   ├── position/
 │   │   │   ├── position.h      # Універсальний інтерфейс position sensor
 │   │   │   ├── incremental_encoder.h  # Квадратурний EXTI X4 + IC таймер
-│   │   │   └── as5600.h        # AS5600 12-bit I2C магнітний енкодер
+│   │   │   ├── as5600.h        # AS5600 12-bit I2C магнітний енкодер
+│   │   │   └── encoder_ukf.h   # UKF фільтр [θ,ω,α] для інкрементального енкодера
 │   │   ├── brake/
 │   │   │   ├── brake.h         # Універсальний інтерфейс + state machine
 │   │   │   └── gpio_brake.h    # GPIO драйвер електромагнітних гальм
@@ -54,7 +55,7 @@ ServoLib/
 │   ├── hwd/hwd.c
 │   ├── drv/
 │   │   ├── motor/motor.c, pwm.c
-│   │   ├── position/position.c, incremental_encoder.c, as5600.c
+│   │   ├── position/position.c, incremental_encoder.c, as5600.c, encoder_ukf.c
 │   │   ├── brake/brake.c, gpio_brake.c
 │   │   └── current/current.c, acs712.c
 │   ├── ctrl/
@@ -152,21 +153,24 @@ Driver struct має interface як **перше поле** — безпечни
 
 | Змінна | Вміст |
 |--------|-------|
-| `SERVOLIB_UTIL` | `core.c`, `hwd.c`, `derivative.c` |
+| `SERVOLIB_UTIL` | `core.c`, `hwd.c`, `derivative.c`, `time.c` |
 | `SERVOLIB_MOTOR` | `motor.c`, `pwm.c` |
-| `SERVOLIB_POSITION` | `position.c`, `incremental_encoder.c`, `as5600.c` |
+| `SERVOLIB_POSITION` | `position.c`, `incremental_encoder.c`, `as5600.c`, `encoder_ukf.c` |
 | `SERVOLIB_CURRENT` | `current.c`, `acs712.c` |
 | `SERVOLIB_BRAKE` | `brake.c`, `gpio_brake.c` |
-| `SERVOLIB_CTRL` | `servo.c`, `cascade.c`, `pid.c`, `safety.c`, `traj.c`, `time.c` |
+| `SERVOLIB_CTRL` | `servo.c`, `cascade.c`, `pid.c`, `safety.c`, `traj.c` |
 | `SERVOLIB_COMM` | `servo_comm.c` + frame_codec + packet_codec |
 | `SERVOLIB_ALL` | UTIL + MOTOR + POSITION + CURRENT + BRAKE + CTRL |
 | `SERVOLIB_COMM_INCLUDES` | `Lib/frame_codec/include`, `Lib/packet_codec/include` |
 
 `pid_mgr.c` не входить до жодної групи (legacy файл).
+`SERVOLIB_POSITION` потребує `target_link_libraries(... ukf_mcu)` у CMakeLists застосунку.
 
 ---
 
-## Апаратне підключення (STM32F411CEU6 BlackPill)
+## Апаратне підключення
+
+### STM32F411_OCM3 (BlackPill)
 
 | Функція | Пін | Периферія |
 |---------|-----|-----------|
@@ -180,7 +184,26 @@ Driver struct має interface як **перше поле** — безпечни
 | UART async TX DMA | — | DMA2 Stream7 Ch4 |
 | UART async RX DMA | — | DMA2 Stream2 Ch4 |
 | LED | PC13 | GPIO OUT |
-| Мікросекундний таймер | — | TIM5 (100 MHz / 100 = 1 MHz) |
+| Мікросекундний таймер | — | TIM2 32-bit (100 MHz / 100 = 1 MHz) |
+
+### STM32F411_EncoderHub (6-канальний концентратор)
+
+| Функція | Пін | Периферія |
+|---------|-----|-----------|
+| ENC0 A | PA0 | EXTI0 + TIM2 CH1 IC AF1 |
+| ENC1 A | PA1 | EXTI1 + TIM2 CH2 IC AF1 |
+| ENC2 A | PA2 | EXTI2 + TIM2 CH3 IC AF1 |
+| ENC3 A | PA3 | EXTI3 + TIM2 CH4 IC AF1 |
+| ENC4 A | PA6 | EXTI6 + TIM3 CH1 IC AF2 |
+| ENC5 A | PA8 | EXTI8 + TIM1 CH1 IC AF1 |
+| ENC0-3 B | PB4,PA5,PB7,PB9 | EXTI4,5,7,9 |
+| ENC4-5 B | PB10, PA11 | EXTI10,11 |
+| SPI2 slave | PB12-15 | AF5 |
+| DRDY out | PB0 | GPIO OUT |
+| UART debug TX/RX | PA9/PA10 | USART1 AF7, 115200 |
+| LED | PC13 | GPIO OUT |
+| Мікросекундний таймер | — | TIM2 32-bit (+ IC для ENC0-3) |
+| UKF тригер 10 kHz | — | TIM5 |
 
 ---
 

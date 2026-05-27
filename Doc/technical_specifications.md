@@ -2,10 +2,10 @@
 
 ## Версія
 
-**Версія:** 0.1.0
-**Дата:** 2025
-**Платформа:** STM32F411CEU6 (BlackPill)
-**Автори:** ServoCore Team, Дипломний проект КПІ
+**Версія:** 0.2.0
+**Дата:** 2026-05
+**Платформи:** STM32F411CEU6 (BlackPill OCM3), STM32F411CEU6 (EncoderHub)
+**HAL:** libopencm3 (не STM32 HAL)
 
 ---
 
@@ -17,12 +17,15 @@ ServoLib - це модульна бібліотека керування DC се
 
 - **Шарова архітектура** з чіткою ізоляцією логіки від апаратної частини
 - **Hardware Driver Layer (HWD)** для абстракції мікроконтролера
-- **Підтримка різних типів двигунів** (DC PWM, степпери, BLDC)
+- **Підтримка DC PWM двигунів** (одноканальний PWM+DIR, двоканальний H-bridge)
+- **Каскадний PID** (pos→vel→trq) з feedforward та slew rate
 - **Інтегрована система безпеки** з захистами та обмеженнями
-- **PID регулятори** з anti-windup
 - **Генератор траєкторій** з плавними переходами
 - **Fail-safe електронні гальма** з автоматичним керуванням
-- **Підтримка магнітних енкодерів** (AS5600 та інші)
+- **Підтримка датчиків положення:** інкрементальний EXTI X4 + IC timer, AS5600 12-bit I2C
+- **UKF фільтр** [θ, ω, α] для інкрементального енкодера (encoder_ukf)
+- **Async UART комунікація** (COBS + CRC32 + packet_codec)
+- **EncoderHub:** 6-канальний концентратор енкодерів з передачею по SPI
 
 ### 1.2 Область застосування
 
@@ -112,21 +115,28 @@ ServoLib - це модульна бібліотека керування DC се
 ### 3.2 Зчитування датчиків
 
 #### FR-S-001: Датчики положення
-- **Incremental Encoder** (квадратурний, EXTI X4) — активний
+- **Incremental Encoder** (квадратурний, EXTI X4 + IC timer) — активний
   - Підтримка до 6 датчиків одночасно (ENC_MAX = 6)
-  - 32-bit необмежений лічильник (multi-turn)
-  - IC-таймер для прямого вимірювання period_us (без диференціювання)
+  - 32-bit необмежений лічильник multi-turn у радіанах
+  - IC-таймер вимірює `period_us` між фронтами → пряме обчислення ω без диференціювання
+  - Валідація: відкидається вимір якщо `elapsed ≥ 65000 мкс` або перший імпульс
 - **AS5600** (12-біт, I2C) — активний
   - Роздільна здатність: 4096 позицій на оберт
-  - Частота оновлення: до 1 kHz (I2C IT continuous read)
-- **AEAT-9922** (18-біт, SPI) — **видалено** з кодової бази
+  - Частота оновлення: до 1 kHz (I2C IT continuous read у фоні)
+- **AEAT-9922** — **видалено** з кодової бази
 
-#### FR-S-002: Обробка даних (Universal Position Interface)
-- Обчислення швидкості за різницею позицій (wraparound-safe derivative)
-- Multi-turn tracking (відстеження повних обертів)
-- Prediction (екстраполяція позиції між оновленнями)
-- Конвертація raw → radians → degrees (відбувається в position.c)
-- Валідація даних з датчика (CRC для SPI, checksums для I2C)
+#### FR-S-002: UKF фільтр позиції (encoder_ukf)
+- Стан: `[θ (рад), ω (рад/с), α (рад/с²)]`, вимірювання: `[θ]`
+- Кінематична модель переходу: θ(k+1) = θ(k) + ω·dt + ½α·dt²
+- `Encoder_UKF_Init`, `Encoder_UKF_Update(dt)`, `Encoder_UKF_GetState(θ, ω, α)`
+- Окремий екземпляр `Encoder_UKF_t` для кожного датчика (static alloc)
+- Тригер оновлення: 10 kHz (TIM3 на EncoderHub, control loop на OCM3)
+
+#### FR-S-003: Обробка даних (Universal Position Interface)
+- Multi-turn tracking (відстеження повних обертів всередині драйвера)
+- `HW_ReadRaw()` → `angle_rad` завжди у радіанах
+- `position.c` нормалізує до `[0, 2π)` і зберігає абсолютну позицію
+- Всі публічні API повертають радіани; конвертація в градуси — лише в Apps
 
 ### 3.3 PID регулювання
 
@@ -144,10 +154,10 @@ ServoLib - це модульна бібліотека керування DC се
 ### 3.4 Система безпеки
 
 #### FR-SAF-001: Обмеження
-- Обмеження положення (min/max градуси)
-- Обмеження швидкості (град/с)
-- Обмеження струму (mA)
-- Обмеження температури (°C)
+- Обмеження положення `min_position`/`max_position` (рад)
+- Обмеження швидкості `max_velocity` (рад/с)
+- Обмеження прискорення `max_acceleration` (рад/с²)
+- Аварійний поріг струму `critical_current_a` (А)
 
 #### FR-SAF-002: Захисти
 - Захист від перевантаження по струму
@@ -164,17 +174,15 @@ ServoLib - це модульна бібліотека керування DC се
 ### 3.5 Електронні гальма
 
 #### FR-BR-001: Fail-safe логіка (Hardware Callbacks Pattern)
-- Гальма АКТИВНІ за замовчуванням (без живлення)
-- State machine з transitions: ENGAGED → ENGAGING → RELEASED → RELEASING → ENGAGED
+- Гальма АКТИВНІ за замовчуванням (ініціалізація у стані ENGAGED)
+- State machine з transitions: ENGAGED → RELEASING → RELEASED → ENGAGING → ENGAGED
 - Універсальний інтерфейс підтримує різні типи гальм (electromagnetic, pneumatic, hydraulic)
 - GPIO driver для електромагнітних гальм (gpio_brake.c)
 
 #### FR-BR-002: State Machine
-- **ENGAGED** - гальма повністю активні (стабільний стан)
-- **RELEASING** - перехід до відпущення (затримка release_time_ms)
-- **RELEASED** - гальма повністю відпущені (стабільний стан)
-- **ENGAGING** - перехід до блокування (затримка engage_time_ms)
-- Transitions обробляються автоматично в Brake_Update()
+- **ENGAGED** → `Brake_Release()` → **RELEASING** (затримка release_time_ms) → **RELEASED**
+- **RELEASED** → `Brake_Engage()` → **ENGAGING** (затримка engage_time_ms) → **ENGAGED**
+- Transitions обробляються автоматично в `Brake_Update()` кожен цикл
 
 #### FR-BR-003: Параметри
 - Затримка engage: 30-200 мс (типово 50 мс для electromagnetic)
@@ -190,9 +198,9 @@ ServoLib - це модульна бібліотека керування DC се
 - Параболічна траєкторія
 
 #### FR-TR-002: Параметри руху
-- Максимальна швидкість (град/с)
-- Максимальне прискорення (град/с²)
-- Максимальний ривок (град/с³)
+- Максимальна швидкість (рад/с)
+- Максимальне прискорення (рад/с²)
+- Максимальний ривок (рад/с³)
 - Плавні переходи без стрибків
 
 ### 3.7 Калібрування
@@ -251,10 +259,10 @@ ServoLib - це модульна бібліотека керування DC се
 - Зміна в Board/ - і бібліотека працює на іншому STM32
 - Підтримка різних STM32F4 (F411, F407, F446 тощо)
 
-#### NFR-PORT-002: Сумісність з HAL
-- Використання STM32 HAL як бази для HWD
-- Можливість заміни HAL на LL або bare-metal
-- Відсутність прямих викликів HAL в логіці
+#### NFR-PORT-002: Незалежність від HAL
+- Платформна реалізація — **libopencm3** (не STM32 HAL)
+- `MCU/STM32F411_libopencm3/` — єдине місце з MCU-залежністю
+- `ctrl/`, `drv/`, `comm/` не мають жодних `#include <libopencm3/...>`
 
 ### 4.4 Зручність використання
 
@@ -264,9 +272,8 @@ ServoLib - це модульна бібліотека керування DC се
 - Документовані всі публічні функції (Doxygen)
 
 #### NFR-U-002: Приклади
-- Базові приклади використання
-- Інтеграція з CubeMX
-- Повна документація в README
+- Debug apps для кожного підсистеми (`Apps/debug_*`)
+- Повний приклад у `servo_basic` (каскадний PID + async UART)
 
 #### NFR-U-003: Налагодження
 - Підтримка DEBUG режиму
@@ -308,15 +315,16 @@ ServoLib - це модульна бібліотека керування DC се
 ### 5.2 Програмні вимоги
 
 #### Середовище розробки
-- **IDE:** STM32CubeIDE 1.10+
-- **Toolchain:** ARM GCC
+- **Build system:** CMake 3.16+
+- **Toolchain:** `arm-none-eabi-gcc`
 - **Standard:** C99
-- **HAL:** STM32F4 HAL Library
+- **Платформна бібліотека:** libopencm3
 
 #### Залежності
-- STM32F4xx HAL Driver
-- CMSIS Core
-- Стандартна бібліотека C (без stdlib для embedded)
+- libopencm3 (`LIBOPENCM3_DIR` змінна середовища)
+- ukf_mcu (git submodule, для encoder_ukf та current UKF)
+- frame_codec / packet_codec (git submodules, для async comm)
+- Стандартна бібліотека C (без malloc для embedded)
 
 ---
 
@@ -331,9 +339,9 @@ ServoLib - це модульна бібліотека керування DC се
 
 ### 6.2 Припущення
 
-1. **STM32 HAL ініціалізований** перед викликом ServoLib функцій
-2. **Системний таймер налаштований** (SysTick або TIM)
-3. **Периферія налаштована в CubeMX** (TIM, I2C, GPIO)
+1. **`Board_Init()` виконана** перед викликом ServoLib функцій
+2. **Системний таймер налаштований** (SysTick для мс, TIM2 32-bit для мкс)
+3. **Периферія сконфігурована в `board.c`** (TIM, I2C, GPIO, EXTI)
 4. **Електроживлення стабільне** (без провалів напруги)
 5. **Механічна частина справна** (без люфтів, без заклинювання)
 
@@ -356,8 +364,9 @@ ServoLib - це модульна бібліотека керування DC се
 **GPIO:**
 - PA8 - Керування гальмами
 
-**Таймер для мікросекунд (TIM5):**
-- 32-біт таймер для точних вимірювань часу
+**Таймер для мікросекунд (TIM2, 32-bit):**
+- Free-running 1 MHz (prescaler 99 при 100 MHz)
+- На EncoderHub: одночасно IC CH1-CH4 для ENC0-3
 
 #### 7.1.2 Програмні інтерфейси
 
@@ -537,7 +546,7 @@ typedef enum {
 - [../README.md](../README.md) - Швидкий старт та огляд
 - [structure.md](structure.md) - Детальна структура проекту
 - [BRAKE_DRIVER.md](BRAKE_DRIVER.md) - Документація драйвера гальм
-- [AEAT-9922/CONFIGURATION_GUIDE.md](AEAT-9922/CONFIGURATION_GUIDE.md) - Конфігурація AEAT-9922 (**OBSOLETE** — датчик видалено)
+- [tmp/encoder_hub_pinout.md](tmp/encoder_hub_pinout.md) — Pinout EncoderHub (STM32F411CEU6 UFQFPN48)
 - [../CLAUDE.md](../CLAUDE.md) - Інструкції для Claude Code
 
 ### 11.2 Датшити
@@ -555,8 +564,8 @@ typedef enum {
 
 | Термін | Опис |
 |--------|------|
-| **HWD** | Hardware Driver Layer - шар абстракції апаратного забезпечення |
-| **HAL** | Hardware Abstraction Layer - бібліотека STM32 HAL |
+| **HWD** | Hardware Driver Layer — шар абстракції апаратного забезпечення (Inc/hwd/) |
+| **libopencm3** | Відкрита бібліотека для ARM Cortex-M; заміна STM32 HAL у цьому проекті |
 | **PWM** | Pulse Width Modulation - широтно-імпульсна модуляція |
 | **PID** | Proportional-Integral-Derivative controller - ПІД регулятор |
 | **Fail-safe** | Режим безпечної відмови (гальма активні за замовчуванням) |
@@ -566,34 +575,43 @@ typedef enum {
 
 ---
 
-## Додаток Б: Налаштування CubeMX
+## Додаток Б: Збірка та конфігурація
 
-### Налаштування TIM3 (PWM для мотора)
-- **Prescaler:** 4 (для 20 kHz при 100 MHz: 100 MHz / 5 / 1000 = 20 kHz)
-- **Counter Period:** 999
-- **Channel 1 (PA6):** PWM Generation CH1
-- **Channel 2 (PA7):** PWM Generation CH2
-- **Pulse:** 0 (за замовчуванням)
+### Збірка
 
-### Налаштування I2C1 (для AS5600)
-- **Mode:** I2C
-- **Speed:** 400 kHz (Fast Mode)
-- **Clock:** 100 MHz
-- **SCL (PB6):** I2C1_SCL
-- **SDA (PB7):** I2C1_SDA
+```bash
+export LIBOPENCM3_DIR=/path/to/libopencm3
+./configure.sh    # інтерактивний вибір BOARD / APP / PROGRAMMER
+./build.sh        # cmake --build
+./flash.sh        # openocd flash
+```
 
-### Налаштування TIM5 (таймер для мікросекунд)
-- **Prescaler:** 99 (для 1 MHz)
-- **Counter Period:** 0xFFFFFFFF (максимум 32-біт)
-- **Auto-reload preload:** Enable
+`.preset` — sourceable bash файл зі станом: `BOARD`, `APP`, `PROGRAMMER`, `PROGRAMMER_SERIAL`.
 
-### GPIO налаштування
-- **PA8 (BRAKE_CTRL):** GPIO_Output, Pull-up, Speed Low
-- **Початковий стан:** High (гальма активні)
+### Цілі (Apps/)
+
+| Ціль | Призначення |
+|------|-------------|
+| `debug_encoder` | Тест інкрементального енкодера + UKF |
+| `debug_motor` | Тест PWM двигуна |
+| `debug_brake` | Тест GPIO гальма |
+| `debug_current` | Тест ACS712 датчика струму |
+| `servo_full` | Повний сервопривід (Servo_Controller_t + Safety) |
+| `servo_basic` | Каскадний PID + async UART DMA comm |
+
+### Налаштування TIM2 (мікросекунди + IC для EncoderHub)
+
+- **Prescaler:** 99 → 1 MHz при 100 MHz тактуванні
+- **Counter Period:** 0xFFFFFFFF (32-bit, ~4294 с до переповнення)
+- **OCM3 board:** тільки free-running `HWD_Timer_GetMicros()`
+- **EncoderHub:** додатково IC CH1-4 для ENC0-3 (ідентичний prescaler)
+
+### Налаштування TIM3 (PWM мотора, OCM3)
+
+- **Prescaler:** 4 → 20 MHz → ARR=999 → 20 kHz
+- **Channel 1 (PA6):** PWM Generation CH1 AF2
 
 ---
 
-**Дата останнього оновлення:** 2025
-**Версія документу:** 1.0
-**Автори:** ServoCore Team, Дипломний проект КПІ
-**Ліцензія:** MIT License
+**Дата останнього оновлення:** 2026-05
+**Версія документу:** 2.0
