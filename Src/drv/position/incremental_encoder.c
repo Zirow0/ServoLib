@@ -156,6 +156,7 @@ static Servo_Status_t IncEnc_HW_Init(void *driver_data)
     drv->period_us     = 0U;
     drv->last_pulse_ms = 0U;
     drv->direction     = 1;
+    drv->new_ic_data   = false;
 
     /* ── Реєстрація в dispatch tables ── */
     uint8_t line_a = (uint8_t)__builtin_ctz(hw->gpio_pin_a);
@@ -321,6 +322,25 @@ void Incremental_Encoder_IC_Handler(Incremental_Encoder_Driver_t *driver,
 {
     driver->period_us     = period_us;
     driver->last_pulse_ms = Time_GetMillis();
+    driver->new_ic_data   = true;
+}
+
+bool Incremental_Encoder_ConsumeIC(Incremental_Encoder_Driver_t *driver,
+                                    float *omega_rad_s)
+{
+    if (driver == NULL || !driver->new_ic_data) { return false; }
+    driver->new_ic_data = false;
+    if (omega_rad_s != NULL) {
+        uint32_t period_us = driver->period_us;
+        int8_t   dir       = driver->direction;
+        if (period_us > 0U) {
+            float vel = TWO_PI / ((float)period_us * 1e-6f * (float)driver->cpr);
+            *omega_rad_s = (dir >= 0) ? vel : -vel;
+        } else {
+            *omega_rad_s = 0.0f;
+        }
+    }
+    return true;
 }
 
 /* ISR handlers --------------------------------------------------------------*/

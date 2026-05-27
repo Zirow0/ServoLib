@@ -114,7 +114,15 @@ AEAT-9922 видалено повністю.
 **Incremental encoder:** Software EXTI X4 state machine → `volatile int32_t count` (32-bit, необмежений, підтримує 6+ датчиків). IC timer вимірює `volatile uint32_t period_us` для прямого розрахунку швидкості без диференціювання. Board ISR викликає:
 ```c
 Incremental_Encoder_EXTI_Handler(driver, pin_a, pin_b);  // оновлює count
-Incremental_Encoder_IC_Handler(driver, period_us);        // оновлює period_us
+Incremental_Encoder_IC_Handler(driver, period_us);        // оновлює period_us, new_ic_data=true
+```
+
+Для передачі нового IC-виміру у UKF — атомарний read-and-clear:
+```c
+float omega;
+if (Incremental_Encoder_ConsumeIC(&driver, &omega)) {
+    Encoder_UKF_FeedOmega(&enc_ukf, omega);
+}
 ```
 
 **Critical:** `HW_ReadRaw()` повертає `Position_Raw_Data_t.angle_rad` у **радіанах** — ніколи градуси. `position.c` нормалізує до `[0, 2π)` і рахує `velocity_rad_s`.
@@ -129,7 +137,10 @@ Position_Sensor_SetPosition(sensor, pos_rad);           // встановити 
 
 `Position_Sensor_Init(sensor)` — multi-turn відстежується всередині кожного драйвера (інкрементальний через `count`, AS5600 через `revolution_count` у `HW_ReadRaw`).
 
-**Encoder UKF** (`Inc/drv/position/encoder_ukf.h`): окремий UKF-фільтр для інкрементального енкодера. Стан: [θ (рад), ω (рад/с), α (рад/с²)], вимірювання: [θ].
+**Encoder UKF** (`Inc/drv/position/encoder_ukf.h`): окремий UKF-фільтр для інкрементального енкодера.
+Стан: [θ (рад), ω (рад/с), α (рад/с²)], вимірювання: **[θ, ω]** — θ з лічильника, ω з IC таймера.
+
+ω-вимірювання умовне: коли `FeedOmega` не викликався після попереднього `Update`, `R[1,1]` підвищується до `ENCODER_UKF_R_OMEGA_STALE=1e6` — UKF ефективно ігнорує ω. Це коректно обробляє змінний інтервал IC (23 мкс … 65 мс).
 
 ```c
 Encoder_UKF_t enc_ukf;
@@ -137,7 +148,11 @@ Encoder_UKF_t enc_ukf;
 // config == NULL → DEFAULT значення
 Encoder_UKF_Init(&enc_ukf, NULL, theta_init_rad);
 
-// У control loop:
+// У control loop (10 kHz):
+float omega_ic;
+if (Incremental_Encoder_ConsumeIC(&driver, &omega_ic)) {
+    Encoder_UKF_FeedOmega(&enc_ukf, omega_ic);   // свіжий IC → R[1,1] = r_omega
+}
 Encoder_UKF_Update(&enc_ukf, theta_meas_rad, dt_s);
 
 float theta, omega, alpha;
@@ -147,7 +162,9 @@ Encoder_UKF_GetState(&enc_ukf, &theta, &omega, &alpha);  // NULL — пропу�
 Encoder_UKF_Reset(&enc_ukf, new_theta_rad);
 ```
 
-Параметри `Encoder_UKF_Config_t`: `q_theta`, `q_omega`, `q_alpha` (шум процесу), `r_theta` (шум вимірювання), `p0_theta/omega/alpha` (початкова коваріація). Константи за замовчуванням: `ENCODER_UKF_*_DEFAULT`.
+Параметри `Encoder_UKF_Config_t`: `q_theta`, `q_omega`, `q_alpha` (шум процесу), `r_theta`, `r_omega` (шум вимірювань θ та ω), `p0_theta/omega/alpha` (початкова коваріація). Константи за замовчуванням: `ENCODER_UKF_*_DEFAULT`.
+
+`ukf_init` (EncoderHub API) — 7 аргументів, останній `float* buffer`. Розмір буфера: `UKF_BUFFER_FLOATS(N_STATES, N_MEAS)` — зберігається у `Encoder_UKF_t.buffer`.
 
 ### Motor Driver
 

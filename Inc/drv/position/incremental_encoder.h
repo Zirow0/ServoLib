@@ -58,7 +58,9 @@ typedef struct {
     volatile uint32_t last_pulse_ms;      /**< Час останнього імпульсу (для zero-velocity) */
     volatile int8_t   direction;          /**< +1 або -1 — напрямок з X4 таблиці */
 
-    uint8_t enc_state;                    /**< Поточний стан X4 автомату (last AB) */
+    uint8_t          enc_state;           /**< Поточний стан X4 автомату (last AB) */
+
+    volatile bool    new_ic_data;         /**< встановлюється IC ISR, очищається Incremental_Encoder_ConsumeIC */
 } Incremental_Encoder_Driver_t;
 
 /* Exported functions --------------------------------------------------------*/
@@ -96,6 +98,19 @@ void Incremental_Encoder_EXTI_Handler(Incremental_Encoder_Driver_t* driver,
  */
 void Incremental_Encoder_IC_Handler(Incremental_Encoder_Driver_t* driver,
                                      uint32_t period_us);
+
+/**
+ * @brief Зчитати ω з IC та скинути прапор нових даних
+ *
+ * Атомарна операція read-and-clear для new_ic_data. Призначена для
+ * виклику з control loop перед Encoder_UKF_FeedOmega.
+ *
+ * @param driver        Вказівник на драйвер
+ * @param omega_rad_s   Вихід: ω в рад/с (знак з direction); NULL — ігнорувати
+ * @return              true якщо були нові IC дані з попереднього виклику
+ */
+bool Incremental_Encoder_ConsumeIC(Incremental_Encoder_Driver_t *driver,
+                                    float *omega_rad_s);
 
 #ifdef __cplusplus
 }

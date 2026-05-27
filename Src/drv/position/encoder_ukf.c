@@ -21,7 +21,8 @@ static void state_func(const float *x, float dt, float *xp, void *ud)
 static void meas_func(const float *x, float *z, void *ud)
 {
     (void)ud;
-    z[0] = x[0];  /* вимірюємо θ напряму */
+    z[0] = x[0];  /* θ */
+    z[1] = x[1];  /* ω — кондиціонується через R[1,1] в Update */
 }
 
 /* Exported functions --------------------------------------------------------*/
@@ -40,6 +41,7 @@ Servo_Status_t Encoder_UKF_Init(Encoder_UKF_t *filter,
         cfg.q_omega  = ENCODER_UKF_Q_OMEGA_DEFAULT;
         cfg.q_alpha  = ENCODER_UKF_Q_ALPHA_DEFAULT;
         cfg.r_theta  = ENCODER_UKF_R_THETA_DEFAULT;
+        cfg.r_omega  = ENCODER_UKF_R_OMEGA_DEFAULT;
         cfg.p0_theta = ENCODER_UKF_P0_THETA_DEFAULT;
         cfg.p0_omega = ENCODER_UKF_P0_OMEGA_DEFAULT;
         cfg.p0_alpha = ENCODER_UKF_P0_ALPHA_DEFAULT;
@@ -65,8 +67,16 @@ Servo_Status_t Encoder_UKF_Init(Encoder_UKF_t *filter,
         0.0f,        cfg.q_omega, 0.0f,
         0.0f,        0.0f,        cfg.q_alpha,
     };
-    const float R[ENCODER_UKF_N_MEAS * ENCODER_UKF_N_MEAS] = { cfg.r_theta };
+    /* R[1,1] ініціюється як STALE — буде перемикатися в Update */
+    const float R[ENCODER_UKF_N_MEAS * ENCODER_UKF_N_MEAS] = {
+        cfg.r_theta, 0.0f,
+        0.0f,        ENCODER_UKF_R_OMEGA_STALE,
+    };
     ukf_set_noise(&filter->ukf, Q, R);
+
+    filter->r_omega     = cfg.r_omega;
+    filter->omega_ic    = 0.0f;
+    filter->omega_fresh = false;
 
     return SERVO_OK;
 }
@@ -77,10 +87,22 @@ Servo_Status_t Encoder_UKF_Update(Encoder_UKF_t *filter, float theta_meas, float
 
     if (ukf_predict(&filter->ukf, dt) != UKF_SUCCESS) { return SERVO_ERROR; }
 
-    const float z[ENCODER_UKF_N_MEAS] = { theta_meas };
-    if (ukf_update(&filter->ukf, z) != UKF_SUCCESS)   { return SERVO_ERROR; }
+    /* Перемикаємо R[1,1]: мале при свіжому IC вимірі, велике — ігноруємо */
+    ukf_matrix_set(&filter->ukf.R, 1U, 1U,
+                   filter->omega_fresh ? filter->r_omega : ENCODER_UKF_R_OMEGA_STALE);
 
+    const float z[ENCODER_UKF_N_MEAS] = { theta_meas, filter->omega_ic };
+    if (ukf_update(&filter->ukf, z) != UKF_SUCCESS) { return SERVO_ERROR; }
+
+    filter->omega_fresh = false;
     return SERVO_OK;
+}
+
+void Encoder_UKF_FeedOmega(Encoder_UKF_t *filter, float omega_rad_s)
+{
+    if (filter == NULL) { return; }
+    filter->omega_ic    = omega_rad_s;
+    filter->omega_fresh = true;
 }
 
 void Encoder_UKF_GetState(const Encoder_UKF_t *filter,
@@ -107,4 +129,7 @@ void Encoder_UKF_Reset(Encoder_UKF_t *filter, float theta_init)
         0.0f,                         0.0f,                         ENCODER_UKF_P0_ALPHA_DEFAULT,
     };
     ukf_set_state(&filter->ukf, x0, P0);
+
+    filter->omega_ic    = 0.0f;
+    filter->omega_fresh = false;
 }
