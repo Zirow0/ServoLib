@@ -19,6 +19,7 @@ extern "C" {
 /* Includes ------------------------------------------------------------------*/
 #include "../../core.h"
 #include "position.h"
+#include "encoder_ukf.h"
 
 /* Exported types ------------------------------------------------------------*/
 
@@ -60,7 +61,10 @@ typedef struct {
 
     uint8_t          enc_state;           /**< Поточний стан X4 автомату (last AB) */
 
-    volatile bool    new_ic_data;         /**< встановлюється IC ISR, очищається Incremental_Encoder_ConsumeIC */
+    volatile bool    new_ic_data;         /**< встановлюється IC ISR, очищається ConsumeIC */
+
+    Encoder_UKF_t    enc_ukf;             /**< UKF фільтр [θ, ω, α] */
+    uint32_t         ukf_last_us;         /**< Час попереднього UKF Update (мкс) */
 } Incremental_Encoder_Driver_t;
 
 /* Exported functions --------------------------------------------------------*/

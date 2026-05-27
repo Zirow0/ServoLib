@@ -99,35 +99,36 @@ typedef struct __attribute__((packed)) {
     /* Сенсори — вхід контролера */
     float    position_rad;      /* 4   θ,  рад                              */
     float    velocity_rad_s;    /* 8   ω,  рад/с                            */
-    float    current_a;         /* 12  I,  А                                */
+    float    accel_rad_s2;      /* 12  α,  рад/с²                           */
+    float    current_a;         /* 16  I,  А                                */
 
     /* Цілі та сигнальний ланцюг */
-    float    target;            /* 16  активний setpoint (рад/рад·с/А)      */
-    float    vel_sp;            /* 20  вихід pos-PID → вхід vel-PID, рад/с  */
-    float    current_sp;        /* 24  вихід vel-PID → вхід trq-PID, А      */
-    float    ff;                /* 28  внесок feedforward, %                */
-    float    power;             /* 32  команда двигуну після slew, %        */
+    float    target;            /* 20  активний setpoint (рад/рад·с/А)      */
+    float    vel_sp;            /* 24  вихід pos-PID → вхід vel-PID, рад/с  */
+    float    current_sp;        /* 28  вихід vel-PID → вхід trq-PID, А      */
+    float    ff;                /* 32  внесок feedforward, %                */
+    float    power;             /* 36  команда двигуну після slew, %        */
 
     /* pos-PID складові */
-    float    pos_p;             /* 36  P-term, рад/с                        */
-    float    pos_i;             /* 40  I-term, рад/с                        */
-    float    pos_d;             /* 44  D-term, рад/с                        */
+    float    pos_p;             /* 40  P-term, рад/с                        */
+    float    pos_i;             /* 44  I-term, рад/с                        */
+    float    pos_d;             /* 48  D-term, рад/с                        */
 
     /* vel-PID складові */
-    float    vel_p;             /* 48  P-term, А                            */
-    float    vel_i;             /* 52  I-term, А                            */
-    float    vel_d;             /* 56  D-term, А                            */
-    float    vel_integral;      /* 60  стан інтегратора (anti-windup), А    */
+    float    vel_p;             /* 52  P-term, А                            */
+    float    vel_i;             /* 56  I-term, А                            */
+    float    vel_d;             /* 60  D-term, А                            */
+    float    vel_integral;      /* 64  стан інтегратора (anti-windup), А    */
 
     /* trq-PID складові */
-    float    trq_p;             /* 64  P-term, %                            */
-    float    trq_i;             /* 68  I-term, %                            */
-    float    trq_d;             /* 72  D-term, %                            */
-    float    trq_integral;      /* 76  стан інтегратора (anti-windup), %    */
+    float    trq_p;             /* 68  P-term, %                            */
+    float    trq_i;             /* 72  I-term, %                            */
+    float    trq_d;             /* 76  D-term, %                            */
+    float    trq_integral;      /* 80  стан інтегратора (anti-windup), %    */
 
     /* Режим */
-    uint8_t  mode;              /* 80  Cascade_Mode_t: 0=POS,1=VEL,2=TRQ   */
-} cascade_telemetry_t;          /* 81 байт                                  */
+    uint8_t  mode;              /* 84  Cascade_Mode_t: 0=POS,1=VEL,2=TRQ   */
+} cascade_telemetry_t;          /* 85 байт                                  */
 
 /* ================================================================
  * Конфігурація каскадного PID: хост → STM32 (та STM32 → хост)
@@ -181,25 +182,26 @@ typedef struct __attribute__((packed)) {
 #define CASC_TELEM_TS           0   /* timestamp_ms    */
 #define CASC_TELEM_POS          1   /* position_rad    */
 #define CASC_TELEM_VEL          2   /* velocity_rad_s  */
-#define CASC_TELEM_CUR          3   /* current_a       */
-#define CASC_TELEM_TARGET       4   /* target          */
-#define CASC_TELEM_VEL_SP       5   /* vel_sp          */
-#define CASC_TELEM_CURRENT_SP   6   /* current_sp      */
-#define CASC_TELEM_FF           7   /* ff              */
-#define CASC_TELEM_POWER        8   /* power           */
-#define CASC_TELEM_POS_P        9   /* pos_p           */
-#define CASC_TELEM_POS_I       10   /* pos_i           */
-#define CASC_TELEM_POS_D       11   /* pos_d           */
-#define CASC_TELEM_VEL_P       12   /* vel_p           */
-#define CASC_TELEM_VEL_I       13   /* vel_i           */
-#define CASC_TELEM_VEL_D       14   /* vel_d           */
-#define CASC_TELEM_VEL_INT     15   /* vel_integral    */
-#define CASC_TELEM_TRQ_P       16   /* trq_p           */
-#define CASC_TELEM_TRQ_I       17   /* trq_i           */
-#define CASC_TELEM_TRQ_D       18   /* trq_d           */
-#define CASC_TELEM_TRQ_INT     19   /* trq_integral    */
-#define CASC_TELEM_MODE        20   /* mode            */
-#define CASC_TELEM_FIELD_COUNT 21
+#define CASC_TELEM_ACCEL        3   /* accel_rad_s2    */
+#define CASC_TELEM_CUR          4   /* current_a       */
+#define CASC_TELEM_TARGET       5   /* target          */
+#define CASC_TELEM_VEL_SP       6   /* vel_sp          */
+#define CASC_TELEM_CURRENT_SP   7   /* current_sp      */
+#define CASC_TELEM_FF           8   /* ff              */
+#define CASC_TELEM_POWER        9   /* power           */
+#define CASC_TELEM_POS_P       10   /* pos_p           */
+#define CASC_TELEM_POS_I       11   /* pos_i           */
+#define CASC_TELEM_POS_D       12   /* pos_d           */
+#define CASC_TELEM_VEL_P       13   /* vel_p           */
+#define CASC_TELEM_VEL_I       14   /* vel_i           */
+#define CASC_TELEM_VEL_D       15   /* vel_d           */
+#define CASC_TELEM_VEL_INT     16   /* vel_integral    */
+#define CASC_TELEM_TRQ_P       17   /* trq_p           */
+#define CASC_TELEM_TRQ_I       18   /* trq_i           */
+#define CASC_TELEM_TRQ_D       19   /* trq_d           */
+#define CASC_TELEM_TRQ_INT     20   /* trq_integral    */
+#define CASC_TELEM_MODE        21   /* mode            */
+#define CASC_TELEM_FIELD_COUNT 22
 
 /* ================================================================
  * Індекси полів cascade_config_t для single-param режиму

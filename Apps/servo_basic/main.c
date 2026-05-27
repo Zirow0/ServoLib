@@ -276,12 +276,14 @@ int main(void)
         Brake_Update(&brake.interface);
         Position_Sensor_Update(&encoder.interface);
 
-        float pos_rad   = 0.0f;
-        float vel_rad_s = 0.0f;
-        float current_a = 0.0f;
+        float pos_rad      = 0.0f;
+        float vel_rad_s    = 0.0f;
+        float accel_rad_s2 = 0.0f;
+        float current_a    = 0.0f;
 
         Position_Sensor_GetPosition(&encoder.interface, &pos_rad);
         Position_Sensor_GetVelocity(&encoder.interface, &vel_rad_s);
+        Position_Sensor_GetAcceleration(&encoder.interface, &accel_rad_s2);
         Current_Sensor_GetCurrent(&current_driver.interface, &current_a);
 
         /* ── Стан зупинки: очікуємо нульової швидкості → гальмо ────────── */
@@ -319,6 +321,7 @@ int main(void)
                 .timestamp_ms   = now_ms,
                 .position_rad   = pos_rad,
                 .velocity_rad_s = vel_rad_s,
+                .accel_rad_s2   = accel_rad_s2,
                 .current_a      = current_a,
                 .target         = target,
                 .vel_sp         = cascade.last_vel_sp,

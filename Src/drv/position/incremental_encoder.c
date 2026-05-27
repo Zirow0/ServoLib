@@ -19,6 +19,7 @@
 #ifdef USE_SENSOR_INCREMENTAL
 
 #include "../../../Inc/drv/position/incremental_encoder.h"
+#include "../../../Inc/drv/position/encoder_ukf.h"
 #include "../../../Inc/ctrl/time.h"
 #include <libopencm3/stm32/exti.h>
 #include <string.h>
@@ -255,27 +256,35 @@ static Servo_Status_t IncEnc_HW_ReadRaw(void *driver_data, Position_Raw_Data_t *
     Incremental_Encoder_Driver_t *drv = (Incremental_Encoder_Driver_t *)driver_data;
     const int32_t cpr = (int32_t)drv->cpr;
 
-    /* Читання volatile — атомарне для 32-bit на Cortex-M4 */
-    int32_t  count     = drv->count;
-    uint32_t period_us = drv->period_us;
-    uint32_t last_ms   = drv->last_pulse_ms;
-    int8_t   dir       = drv->direction;
-
-    /* Абсолютний кут напряму з лічильника ISR — multi-turn вбудований */
-    raw->angle_rad    = (float)count / (float)cpr * TWO_PI;
     raw->timestamp_us = Time_GetMicros();
     raw->valid        = true;
 
-    /* Швидкість з IC timer */
-    if (period_us == 0U || (Time_GetMillis() - last_ms) > ENC_SPEED_TIMEOUT_MS) {
-        raw->has_velocity   = true;
-        raw->velocity_rad_s = 0.0f;
+    /* Абсолютний кут напряму з лічильника ISR — multi-turn вбудований */
+    float theta_meas = (float)drv->count / (float)cpr * TWO_PI;
+
+    /* dt для UKF */
+    float dt_s;
+    if (drv->ukf_last_us == 0U) {
+        dt_s = 0.001f;
     } else {
-        /* один тік каналу A = 1/CPR оберту → TWO_PI/CPR радіанів */
-        float vel = TWO_PI / ((float)period_us * 1e-6f * (float)drv->cpr);
-        raw->has_velocity   = true;
-        raw->velocity_rad_s = (dir >= 0) ? vel : -vel;
+        dt_s = (float)(raw->timestamp_us - drv->ukf_last_us) * 1e-6f;
+        if (dt_s < 1e-6f) { dt_s = 1e-6f; }
     }
+    drv->ukf_last_us = raw->timestamp_us;
+
+    /* Нове IC-вимірювання → UKF */
+    float omega_ic;
+    if (Incremental_Encoder_ConsumeIC(drv, &omega_ic)) {
+        Encoder_UKF_FeedOmega(&drv->enc_ukf, omega_ic);
+    }
+
+    /* UKF predict + update */
+    Encoder_UKF_Update(&drv->enc_ukf, theta_meas, dt_s);
+
+    /* Відфільтрований стан [θ, ω, α] */
+    Encoder_UKF_GetState(&drv->enc_ukf, &raw->angle_rad, &raw->velocity_rad_s, &raw->accel_rad_s2);
+    raw->has_velocity = true;
+    raw->has_accel    = true;
 
     return SERVO_OK;
 }
@@ -298,6 +307,8 @@ Servo_Status_t Incremental_Encoder_Create(Incremental_Encoder_Driver_t *driver,
     driver->interface.hw.init     = IncEnc_HW_Init;
     driver->interface.hw.read_raw = IncEnc_HW_ReadRaw;
     driver->interface.driver_data = driver;
+
+    Encoder_UKF_Init(&driver->enc_ukf, NULL, 0.0f);
 
     return SERVO_OK;
 }

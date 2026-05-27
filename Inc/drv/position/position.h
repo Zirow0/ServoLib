@@ -31,6 +31,8 @@ typedef struct {
     uint32_t timestamp_us;    /**< Мікросекунди (для velocity через derivative) */
     bool     has_velocity;    /**< true — драйвер надає velocity напряму (IC timer) */
     float    velocity_rad_s;  /**< Швидкість рад/с (якщо has_velocity = true) */
+    bool     has_accel;       /**< true — драйвер надає accel напряму (UKF) */
+    float    accel_rad_s2;    /**< Прискорення рад/с² (якщо has_accel = true) */
     bool     valid;           /**< Валідність даних */
 } Position_Raw_Data_t;
 
@@ -40,6 +42,7 @@ typedef struct {
 typedef struct {
     float    position_rad;          /**< Поточний кут 0..2π (нормалізований) */
     float    velocity_rad_s;        /**< Кутова швидкість рад/с */
+    float    accel_rad_s2;          /**< Кутове прискорення рад/с² */
     float    absolute_position_rad; /**< Абсолютний кут з урахуванням angle_offset_rad */
     float    angle_offset_rad;      /**< Зсув нульової точки (встановлюється SetPosition) */
 
@@ -100,6 +103,12 @@ Servo_Status_t Position_Sensor_GetPosition(Position_Sensor_Interface_t* sensor,
  */
 Servo_Status_t Position_Sensor_GetVelocity(Position_Sensor_Interface_t* sensor,
                                            float* velocity_rad_s);
+
+/**
+ * @brief Отримання кутового прискорення (рад/с²)
+ */
+Servo_Status_t Position_Sensor_GetAcceleration(Position_Sensor_Interface_t* sensor,
+                                               float* accel_rad_s2);
 
 /**
  * @brief Отримання абсолютної позиції з урахуванням multi-turn (рад, необмежена)

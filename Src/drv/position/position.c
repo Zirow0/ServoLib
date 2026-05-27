@@ -90,6 +90,11 @@ Servo_Status_t Position_Sensor_Update(Position_Sensor_Interface_t* sensor)
         );
     }
 
+    /* Acceleration */
+    if (raw.has_accel) {
+        data->accel_rad_s2 = raw.accel_rad_s2;
+    }
+
     data->absolute_position_rad = abs_rad;
     data->position_rad          = current_rad;
     data->last_position_rad     = current_rad;
@@ -115,6 +120,16 @@ Servo_Status_t Position_Sensor_GetVelocity(Position_Sensor_Interface_t* sensor,
     if (!sensor->data.is_initialized)             return SERVO_NOT_INIT;
 
     *velocity_rad_s = sensor->data.velocity_rad_s;
+    return SERVO_OK;
+}
+
+Servo_Status_t Position_Sensor_GetAcceleration(Position_Sensor_Interface_t* sensor,
+                                               float* accel_rad_s2)
+{
+    if (sensor == NULL || accel_rad_s2 == NULL) return SERVO_INVALID;
+    if (!sensor->data.is_initialized)           return SERVO_NOT_INIT;
+
+    *accel_rad_s2 = sensor->data.accel_rad_s2;
     return SERVO_OK;
 }
 

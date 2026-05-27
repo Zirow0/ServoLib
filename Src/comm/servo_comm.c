@@ -10,14 +10,14 @@
  * Розміри буферів
  *
  * Найбільші структури:
+ *   cascade_telemetry_t = 85 байт → packet_raw=86, frame=92
  *   cascade_config_t    = 84 байт → packet_raw=85, frame=91
- *   cascade_telemetry_t = 81 байт → packet_raw=82, frame=88
  *   servo_telemetry_t   = 21 байт → packet_raw=22, frame=28
  *
- * COMM_MAX_PAYLOAD — найбільший payload (cascade_config_t)
+ * COMM_MAX_PAYLOAD — найбільший payload (cascade_telemetry_t)
  * COMM_TX_BUF_SIZE у board_config.h повинен бути ≥ COMM_FRAME_BUF_SIZE
  * ================================================================ */
-#define COMM_MAX_PAYLOAD    sizeof(cascade_config_t)
+#define COMM_MAX_PAYLOAD    sizeof(cascade_telemetry_t)
 #define COMM_RAW_BUF_SIZE   (1U + COMM_MAX_PAYLOAD)
 #define COMM_FRAME_BUF_SIZE FRAME_ENCODED_SIZE(COMM_RAW_BUF_SIZE)
 
