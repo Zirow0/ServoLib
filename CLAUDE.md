@@ -129,6 +129,26 @@ Position_Sensor_SetPosition(sensor, pos_rad);           // встановити 
 
 `Position_Sensor_Init(sensor)` — multi-turn відстежується всередині кожного драйвера (інкрементальний через `count`, AS5600 через `revolution_count` у `HW_ReadRaw`).
 
+**Encoder UKF** (`Inc/drv/position/encoder_ukf.h`): окремий UKF-фільтр для інкрементального енкодера. Стан: [θ (рад), ω (рад/с), α (рад/с²)], вимірювання: [θ].
+
+```c
+Encoder_UKF_t enc_ukf;
+
+// config == NULL → DEFAULT значення
+Encoder_UKF_Init(&enc_ukf, NULL, theta_init_rad);
+
+// У control loop:
+Encoder_UKF_Update(&enc_ukf, theta_meas_rad, dt_s);
+
+float theta, omega, alpha;
+Encoder_UKF_GetState(&enc_ukf, &theta, &omega, &alpha);  // NULL — пропустити поле
+
+// Після калібрування:
+Encoder_UKF_Reset(&enc_ukf, new_theta_rad);
+```
+
+Параметри `Encoder_UKF_Config_t`: `q_theta`, `q_omega`, `q_alpha` (шум процесу), `r_theta` (шум вимірювання), `p0_theta/omega/alpha` (початкова коваріація). Константи за замовчуванням: `ENCODER_UKF_*_DEFAULT`.
+
 ### Motor Driver
 
 PWM мотор підтримує два режими:
@@ -189,6 +209,17 @@ Current_Sensor_ResetPeak(&driver.interface);                 // скинути �
 - `process_noise_q` — стартова точка: у 10-20x менше за `measurement_noise_r`
 - Якщо фільтр запізнюється на стрибки — збільшити `process_noise_q`
 - Якщо на виході ще є шум — збільшити `measurement_noise_r`
+
+**ukf_mcu: зовнішній буфер (нова вимога API).** `ukf_init` тепер вимагає явний `float* buffer`. Буфер розміром `UKF_BUFFER_FLOATS(n_states, n_meas)` float-елементів — зберігати у тій самій структурі поруч з `ukf_t`:
+```c
+typedef struct {
+    float ukf_buf[UKF_BUFFER_FLOATS(1, 1)];
+    ukf_t ukf;
+    // ...
+} MyData_t;
+
+ukf_init(&data->ukf, 1, 1, state_fn, meas_fn, NULL, data->ukf_buf);
+```
 
 **CMake:** застосунки з `SERVOLIB_CURRENT` потребують `target_link_libraries(... ukf_mcu)`.
 
