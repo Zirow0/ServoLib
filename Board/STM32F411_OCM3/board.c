@@ -101,6 +101,11 @@ static void micros_timer_setup(void)
     timer_set_prescaler(MICROS_TIMER, MICROS_TIMER_PRESCALER);
     timer_set_period(MICROS_TIMER, 0xFFFFFFFFU);
 
+    /* Примусово завантажити PSC у активний регістр.
+     * Без UG новий PSC набирає силу лише при першому переповненні (~43 с),
+     * і до того таймер рахує на 100 МГц замість 1 МГц. */
+    TIM_EGR(MICROS_TIMER) = TIM_EGR_UG;
+
     timer_enable_counter(MICROS_TIMER);
 }
 

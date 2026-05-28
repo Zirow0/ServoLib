@@ -70,29 +70,57 @@ static float s_accel_rad_s2 = 0.0f;
 static float s_current_a    = 0.0f;
 
 /* ================================================================
+ * Діагностика частоти (лічильники скидаються раз на секунду)
+ * ================================================================ */
+static volatile uint32_t s_sensor_count  = 0;
+static volatile uint32_t s_control_count = 0;
+static volatile uint32_t s_telem_count   = 0;
+
+/* Фактичний крок часу між виконаннями on_control (мкс) — для перевірки 1 кГц */
+static volatile uint32_t s_control_dt_us = 0;
+/* Фактичний крок часу між виконаннями on_sensor (мкс) — для перевірки 10 кГц */
+static volatile uint32_t s_sensor_dt_us  = 0;
+
+/* ================================================================
  * Програмні таймери
  * ================================================================ */
 static Cb_Timer_t sensor_timer;   /* 10 кГц */
 static Cb_Timer_t control_timer;  /* 1 кГц  */
 static Cb_Timer_t telem_timer;    /* 100 Гц */
+static Cb_Timer_t diag_timer;     /* 1 Гц  — скидає лічильники, верифікує Hz */
 
 /* ================================================================
  * Callback-и таймерів
  * ================================================================ */
 static void on_sensor(void)
 {
-    Current_Sensor_Update(&current_driver.interface, 0.0001f);
-    Brake_Update(&brake.interface);
-    Position_Sensor_Update(&encoder.interface);
+    static uint32_t last_us = 0;
+    uint32_t now = Time_GetMicros();
+    if (last_us != 0U) { s_sensor_dt_us = now - last_us; }
+    last_us = now;
+    s_sensor_count++;
 
-    Position_Sensor_GetPosition(&encoder.interface,     &s_pos_rad);
-    Position_Sensor_GetVelocity(&encoder.interface,     &s_vel_rad_s);
-    Position_Sensor_GetAcceleration(&encoder.interface, &s_accel_rad_s2);
+    /* Лише струм — 1-стан UKF, ~5–10 мкс */
+    Current_Sensor_Update(&current_driver.interface, 0.0001f);
     Current_Sensor_GetCurrent(&current_driver.interface, &s_current_a);
 }
 
 static void on_control(void)
 {
+    static uint32_t last_us = 0;
+    uint32_t now = Time_GetMicros();
+    if (last_us != 0U) { s_control_dt_us = now - last_us; }
+    last_us = now;
+    s_control_count++;
+
+    /* Енкодер UKF (3-стан) — ~100–300 мкс, достатньо бюджету при 1 кГц */
+    Position_Sensor_Update(&encoder.interface);
+    Position_Sensor_GetPosition(&encoder.interface,     &s_pos_rad);
+    Position_Sensor_GetVelocity(&encoder.interface,     &s_vel_rad_s);
+    Position_Sensor_GetAcceleration(&encoder.interface, &s_accel_rad_s2);
+
+    Brake_Update(&brake.interface);
+
     if (app_state == APP_STOPPING &&
         fabsf(s_vel_rad_s) < STOP_VEL_THRESHOLD_RAD_S)
     {
@@ -104,13 +132,15 @@ static void on_control(void)
 
     if (app_state == APP_RUNNING || app_state == APP_STOPPING) {
         float power = Cascade_Compute(&cascade, s_pos_rad, s_vel_rad_s,
-                                      s_current_a, Time_GetMicros());
+                                      s_current_a, now);
         Motor_SetPower(&motor.interface, power);
     }
 }
 
 static void on_telem(void)
 {
+    s_telem_count++;
+
     float target = 0.0f;
     switch (cascade.mode) {
         case CASCADE_MODE_POS: target = cascade.target_pos;     break;
@@ -146,6 +176,23 @@ static void on_telem(void)
     servo_comm_send_cascade(&telem);
 
     HWD_GPIO_TogglePin(&led_pin);
+}
+
+/* Раз на секунду — читає лічильники і перевіряє відповідність частот.
+ * Фактичні значення зберігаються у статичних змінних нижче і доступні
+ * через ST-Link live watch для верифікації без зміни протоколу. */
+static volatile uint32_t s_diag_sensor_hz  = 0;  /* фактична частота on_sensor, Гц */
+static volatile uint32_t s_diag_control_hz = 0;  /* фактична частота on_control, Гц */
+static volatile uint32_t s_diag_telem_hz   = 0;  /* фактична частота on_telem, Гц */
+
+static void on_diag(void)
+{
+    s_diag_sensor_hz  = s_sensor_count;
+    s_diag_control_hz = s_control_count;
+    s_diag_telem_hz   = s_telem_count;
+    s_sensor_count    = 0;
+    s_control_count   = 0;
+    s_telem_count     = 0;
 }
 
 /* ================================================================
@@ -287,9 +334,10 @@ int main(void)
     servo_comm_seed_cascade_config(&seed);
 
     /* ── Ініціалізація таймерів ──────────────────────────────────────────── */
-    Time_CbTimerInit(&sensor_timer,  on_sensor,  100U);    /* 10 кГц */
-    Time_CbTimerInit(&control_timer, on_control, 1000U);   /* 1 кГц  */
-    Time_CbTimerInit(&telem_timer,   on_telem,   10000U);  /* 100 Гц */
+    Time_CbTimerInit(&sensor_timer,  on_sensor,  100U);      /* 10 кГц */
+    Time_CbTimerInit(&control_timer, on_control, 1000U);     /* 1 кГц  */
+    Time_CbTimerInit(&telem_timer,   on_telem,   10000U);    /* 100 Гц */
+    Time_CbTimerInit(&diag_timer,    on_diag,    1000000U);  /* 1 Гц   */
 
     while (1) {
         /* ── RX: декодування та прийом команд (тільки тут — CRC32 safe) ── */
@@ -366,5 +414,6 @@ int main(void)
         Time_CbTimerTick(&sensor_timer);
         Time_CbTimerTick(&control_timer);
         Time_CbTimerTick(&telem_timer);
+        Time_CbTimerTick(&diag_timer);
     }
 }
