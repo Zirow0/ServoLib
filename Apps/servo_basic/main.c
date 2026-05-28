@@ -1,12 +1,12 @@
 #include "board_config.h"
 #include "ctrl/cascade.h"
+#include "ctrl/time.h"
 #include "drv/motor/pwm.h"
 #include "drv/position/incremental_encoder.h"
 #include "drv/brake/gpio_brake.h"
 #include "drv/current/acs712.h"
 #include "hwd/hwd_pwm.h"
 #include "hwd/hwd_adc.h"
-#include "hwd/hwd_timer.h"
 #include "hwd/hwd_gpio.h"
 
 #include "comm/servo_comm.h"
@@ -41,7 +41,7 @@ static bool comm_send(const uint8_t *data, size_t len)
 /* ================================================================
  * Апаратні об'єкти
  * ================================================================ */
-#define STOP_VEL_THRESHOLD_RAD_S  0.05f  /* рад/с — поріг для накладання гальма */
+#define STOP_VEL_THRESHOLD_RAD_S  0.05f
 
 typedef enum { APP_RUNNING, APP_STOPPING, APP_STOPPED, APP_ESTOP } App_State_t;
 
@@ -61,6 +61,96 @@ static const HWD_GPIO_Pin_t led_pin = {
     .pull = HWD_GPIO_NOPULL,
 };
 
+/* ================================================================
+ * Спільний стан між callback-ами
+ * ================================================================ */
+static float s_pos_rad      = 0.0f;
+static float s_vel_rad_s    = 0.0f;
+static float s_accel_rad_s2 = 0.0f;
+static float s_current_a    = 0.0f;
+
+/* ================================================================
+ * Програмні таймери
+ * ================================================================ */
+static Cb_Timer_t sensor_timer;   /* 10 кГц */
+static Cb_Timer_t control_timer;  /* 1 кГц  */
+static Cb_Timer_t telem_timer;    /* 100 Гц */
+
+/* ================================================================
+ * Callback-и таймерів
+ * ================================================================ */
+static void on_sensor(void)
+{
+    Current_Sensor_Update(&current_driver.interface, 0.0001f);
+    Brake_Update(&brake.interface);
+    Position_Sensor_Update(&encoder.interface);
+
+    Position_Sensor_GetPosition(&encoder.interface,     &s_pos_rad);
+    Position_Sensor_GetVelocity(&encoder.interface,     &s_vel_rad_s);
+    Position_Sensor_GetAcceleration(&encoder.interface, &s_accel_rad_s2);
+    Current_Sensor_GetCurrent(&current_driver.interface, &s_current_a);
+}
+
+static void on_control(void)
+{
+    if (app_state == APP_STOPPING &&
+        fabsf(s_vel_rad_s) < STOP_VEL_THRESHOLD_RAD_S)
+    {
+        Motor_Stop(&motor.interface);
+        Brake_Engage(&brake.interface);
+        Cascade_Reset(&cascade);
+        app_state = APP_STOPPED;
+    }
+
+    if (app_state == APP_RUNNING || app_state == APP_STOPPING) {
+        float power = Cascade_Compute(&cascade, s_pos_rad, s_vel_rad_s,
+                                      s_current_a, Time_GetMicros());
+        Motor_SetPower(&motor.interface, power);
+    }
+}
+
+static void on_telem(void)
+{
+    float target = 0.0f;
+    switch (cascade.mode) {
+        case CASCADE_MODE_POS: target = cascade.target_pos;     break;
+        case CASCADE_MODE_VEL: target = cascade.target_vel;     break;
+        case CASCADE_MODE_TRQ: target = cascade.target_current; break;
+        default: break;
+    }
+
+    cascade_telemetry_t telem = {
+        .timestamp_ms   = Time_GetMillis(),
+        .position_rad   = s_pos_rad,
+        .velocity_rad_s = s_vel_rad_s,
+        .accel_rad_s2   = s_accel_rad_s2,
+        .current_a      = s_current_a,
+        .target         = target,
+        .vel_sp         = cascade.last_vel_sp,
+        .current_sp     = cascade.last_current_sp,
+        .ff             = cascade.last_ff,
+        .power          = cascade.last_power,
+        .pos_p          = cascade.pos_pid.p_term,
+        .pos_i          = cascade.pos_pid.i_term,
+        .pos_d          = cascade.pos_pid.d_term,
+        .vel_p          = cascade.vel_pid.p_term,
+        .vel_i          = cascade.vel_pid.i_term,
+        .vel_d          = cascade.vel_pid.d_term,
+        .vel_integral   = cascade.vel_pid.integral,
+        .trq_p          = cascade.trq_pid.p_term,
+        .trq_i          = cascade.trq_pid.i_term,
+        .trq_d          = cascade.trq_pid.d_term,
+        .trq_integral   = cascade.trq_pid.integral,
+        .mode           = (uint8_t)cascade.mode,
+    };
+    servo_comm_send_cascade(&telem);
+
+    HWD_GPIO_TogglePin(&led_pin);
+}
+
+/* ================================================================
+ * Main
+ * ================================================================ */
 int main(void)
 {
     Board_Init();
@@ -94,7 +184,7 @@ int main(void)
         .measurement_noise_r     = 0.5f,
     };
     ACS712_Create(&current_driver, &acs_cfg, &current_params);
-    HWD_Timer_DelayMs(1000U);
+    Time_DelayMs(1000U);
     Current_Sensor_Calibrate(&current_driver.interface);
 
     /* ── PWM канал ───────────────────────────────────────────────────────── */
@@ -180,8 +270,6 @@ int main(void)
     Cascade_Init(&cascade, &casc_cfg, CASCADE_MODE_POS);
     cascade.target_pos = 0.0f;
 
-    /* Seed wire-config з тих самих значень що й casc_cfg — гарантує
-     * коректне param-mode оновлення (один коефіцієнт не затирає решту). */
     const cascade_config_t seed = {
         .pos_kp      = casc_cfg.pos.kp,      .pos_ki      = casc_cfg.pos.ki,
         .pos_kd      = casc_cfg.pos.kd,      .pos_out_min = casc_cfg.pos.out_min,
@@ -198,11 +286,16 @@ int main(void)
     };
     servo_comm_seed_cascade_config(&seed);
 
+    /* ── Ініціалізація таймерів ──────────────────────────────────────────── */
+    Time_CbTimerInit(&sensor_timer,  on_sensor,  100U);    /* 10 кГц */
+    Time_CbTimerInit(&control_timer, on_control, 1000U);   /* 1 кГц  */
+    Time_CbTimerInit(&telem_timer,   on_telem,   10000U);  /* 100 Гц */
+
     while (1) {
         /* ── RX: декодування та прийом команд (тільки тут — CRC32 safe) ── */
         servo_comm_process_rx();
 
-        /* Аварійна зупинка: найвищий пріоритет — вимикаємо мотор та гальмо негайно */
+        /* Аварійна зупинка: найвищий пріоритет */
         if (servo_comm_get_estop()) {
             Motor_EmergencyStop(&motor.interface);
             Brake_Engage(&brake.interface);
@@ -210,15 +303,14 @@ int main(void)
             app_state = APP_ESTOP;
         }
 
-        /* Команда зупинки: перейти у VEL mode з target=0, чекати нульової швидкості */
+        /* Команда зупинки */
         if (app_state != APP_ESTOP && servo_comm_get_stop()) {
             Cascade_SetMode(&cascade, CASCADE_MODE_VEL);
             cascade.target_vel = 0.0f;
             app_state = APP_STOPPING;
         }
 
-        /* Команда руху: зміна режиму та setpoint.
-         * Відновлення з STOPPED, але не з APP_ESTOP — потребує апаратного скиду. */
+        /* Команда руху */
         servo_command_t cmd;
         if (app_state != APP_ESTOP && servo_comm_get_command(&cmd)) {
             if (app_state == APP_STOPPED) {
@@ -234,7 +326,7 @@ int main(void)
             }
         }
 
-        /* Конфігурація: оновити PID параметри online */
+        /* Конфігурація PID online */
         cascade_config_t wire_cfg;
         if (servo_comm_get_cascade_config(&wire_cfg)) {
             const Cascade_Config_t new_cfg = {
@@ -267,85 +359,12 @@ int main(void)
                 .slew_rate = wire_cfg.slew_rate,
             };
             Cascade_ApplyConfig(&cascade, &new_cfg);
-            /* Відправити конфіг назад хосту як підтвердження */
             servo_comm_send_cascade_config(&wire_cfg);
         }
 
-        /* ── Оновлення датчиків ──────────────────────────────────────────── */
-        Current_Sensor_Update(&current_driver.interface, 0.001f);
-        Brake_Update(&brake.interface);
-        Position_Sensor_Update(&encoder.interface);
-
-        float pos_rad      = 0.0f;
-        float vel_rad_s    = 0.0f;
-        float accel_rad_s2 = 0.0f;
-        float current_a    = 0.0f;
-
-        Position_Sensor_GetPosition(&encoder.interface, &pos_rad);
-        Position_Sensor_GetVelocity(&encoder.interface, &vel_rad_s);
-        Position_Sensor_GetAcceleration(&encoder.interface, &accel_rad_s2);
-        Current_Sensor_GetCurrent(&current_driver.interface, &current_a);
-
-        /* ── Стан зупинки: очікуємо нульової швидкості → гальмо ────────── */
-        if (app_state == APP_STOPPING) {
-            if (fabsf(vel_rad_s) < STOP_VEL_THRESHOLD_RAD_S) {
-                Motor_Stop(&motor.interface);
-                Brake_Engage(&brake.interface);
-                Cascade_Reset(&cascade);
-                app_state = APP_STOPPED;
-            }
-        }
-
-        /* ── Каскадний PID → команда двигуну ────────────────────────────── */
-        uint32_t now_us = HWD_Timer_GetMicros();
-        if (app_state == APP_RUNNING || app_state == APP_STOPPING) {
-            float power = Cascade_Compute(&cascade, pos_rad, vel_rad_s, current_a, now_us);
-            Motor_SetPower(&motor.interface, power);
-        }
-
-        /* ── TX: каскадна телеметрія 100 Гц ─────────────────────────────── */
-        static uint32_t last_telem = 0;
-        uint32_t now_ms = HWD_Timer_GetMillis();
-        if (now_ms - last_telem >= 10U) {
-            last_telem = now_ms;
-
-            float target = 0.0f;
-            switch (cascade.mode) {
-                case CASCADE_MODE_POS: target = cascade.target_pos;     break;
-                case CASCADE_MODE_VEL: target = cascade.target_vel;     break;
-                case CASCADE_MODE_TRQ: target = cascade.target_current; break;
-                default: break;
-            }
-
-            cascade_telemetry_t telem = {
-                .timestamp_ms   = now_ms,
-                .position_rad   = pos_rad,
-                .velocity_rad_s = vel_rad_s,
-                .accel_rad_s2   = accel_rad_s2,
-                .current_a      = current_a,
-                .target         = target,
-                .vel_sp         = cascade.last_vel_sp,
-                .current_sp     = cascade.last_current_sp,
-                .ff             = cascade.last_ff,
-                .power          = cascade.last_power,
-                .pos_p          = cascade.pos_pid.p_term,
-                .pos_i          = cascade.pos_pid.i_term,
-                .pos_d          = cascade.pos_pid.d_term,
-                .vel_p          = cascade.vel_pid.p_term,
-                .vel_i          = cascade.vel_pid.i_term,
-                .vel_d          = cascade.vel_pid.d_term,
-                .vel_integral   = cascade.vel_pid.integral,
-                .trq_p          = cascade.trq_pid.p_term,
-                .trq_i          = cascade.trq_pid.i_term,
-                .trq_d          = cascade.trq_pid.d_term,
-                .trq_integral   = cascade.trq_pid.integral,
-                .mode           = (uint8_t)cascade.mode,
-            };
-            servo_comm_send_cascade(&telem);
-
-            HWD_GPIO_TogglePin(&led_pin);
-        }
-
-        HWD_Timer_DelayMs(1);
+        /* ── Виклик таймерів ─────────────────────────────────────────────── */
+        Time_CbTimerTick(&sensor_timer);
+        Time_CbTimerTick(&control_timer);
+        Time_CbTimerTick(&telem_timer);
     }
 }

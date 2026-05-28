@@ -31,6 +31,23 @@ typedef struct {
 } Periodic_Timer_t;
 
 /**
+ * @brief Тип callback-функції для Cb_Timer_t
+ */
+typedef void (*Time_Callback_t)(void);
+
+/**
+ * @brief Таймер з callback — мікросекундна роздільна здатність
+ *
+ * Викликає зареєстровану функцію щоразу коли минає period_us мікросекунд.
+ * Акумулює last_us через += period_us, що виключає дрейф частоти.
+ */
+typedef struct {
+    Time_Callback_t callback;   /**< Функція що викликається по таймеру */
+    uint32_t        period_us;  /**< Інтервал виклику (мкс) */
+    uint32_t        last_us;    /**< Час останнього виклику (мкс) */
+} Cb_Timer_t;
+
+/**
  * @brief Структура вимірювання часу виконання
  */
 typedef struct {
@@ -161,6 +178,25 @@ uint32_t Time_FreqToPeriod(float frequency);
  * @return float Частота в Гц
  */
 float Time_PeriodToFreq(uint32_t period_ms);
+
+/**
+ * @brief Ініціалізація callback-таймера
+ *
+ * @param t         Вказівник на Cb_Timer_t
+ * @param callback  Функція що буде викликатися
+ * @param period_us Інтервал виклику у мікросекундах
+ */
+void Time_CbTimerInit(Cb_Timer_t* t, Time_Callback_t callback, uint32_t period_us);
+
+/**
+ * @brief Перевірка та виклик callback-таймера
+ *
+ * Викликати у головному циклі. Якщо з моменту попереднього виклику
+ * минуло period_us мікросекунд — викликає callback і акумулює last_us.
+ *
+ * @param t Вказівник на Cb_Timer_t
+ */
+void Time_CbTimerTick(Cb_Timer_t* t);
 
 #ifdef __cplusplus
 }

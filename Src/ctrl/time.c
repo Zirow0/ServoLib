@@ -35,7 +35,7 @@ bool Time_IsElapsed(Periodic_Timer_t* timer)
     uint32_t elapsed = current_time - timer->last_time_ms;
 
     if (elapsed >= timer->period_ms) {
-        timer->last_time_ms = current_time;
+        timer->last_time_ms += timer->period_ms;
         timer->execution_count++;
         return true;
     }
@@ -183,4 +183,22 @@ float Time_PeriodToFreq(uint32_t period_ms)
     }
 
     return 1000.0f / (float)period_ms;
+}
+
+void Time_CbTimerInit(Cb_Timer_t* t, Time_Callback_t callback, uint32_t period_us)
+{
+    t->callback  = callback;
+    t->period_us = period_us;
+    t->last_us   = HWD_Timer_GetMicros();
+}
+
+void Time_CbTimerTick(Cb_Timer_t* t)
+{
+    uint32_t now = HWD_Timer_GetMicros();
+    if (now - t->last_us >= t->period_us) {
+        t->last_us += t->period_us;
+        if (t->callback != NULL) {
+            t->callback();
+        }
+    }
 }
