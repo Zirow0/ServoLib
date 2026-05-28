@@ -150,7 +150,7 @@ Encoder_UKF_t enc_ukf;
 // config == NULL → DEFAULT значення
 Encoder_UKF_Init(&enc_ukf, NULL, theta_init_rad);
 
-// У control loop (10 kHz):
+// У control loop (1 кГц):
 float omega_ic;
 if (Incremental_Encoder_ConsumeIC(&driver, &omega_ic)) {
     Encoder_UKF_FeedOmega(&enc_ukf, omega_ic);   // свіжий IC → R[1,1] = r_omega
@@ -211,8 +211,8 @@ const Current_Params_t current_params = {
 ACS712_Create(&driver, &acs_cfg, &current_params);  // factory
 Current_Sensor_Calibrate(&driver.interface);         // при нульовому струмі
 
-// У control loop (оновлення UKF):
-Current_Sensor_Update(&driver.interface);
+// У control loop (оновлення UKF, напр. 5 кГц → dt_s = 0.0002f):
+Current_Sensor_Update(&driver.interface, dt_s);
 // Servo_Update() сам читає струм через GetCurrent — не потрібно викликати у servo loop
 Current_Sensor_GetCurrent(&driver.interface, &current_a);
 
@@ -274,6 +274,34 @@ ff = ff_j * vel_sp + ff_b * omega   // в %
 **`pid_mgr.c` не входить до `SERVOLIB_CTRL`** — замінено `cascade.c`. Файли `Inc/ctrl/pid_mgr.h` та `Src/ctrl/pid_mgr.c` залишені в репозиторії, але жодна ціль їх не компілює.
 
 **`Cascade_ApplyConfig(casc, config)`** — оновлює PID коефіцієнти та ліміти без скидання інтеграторів. Безпечно викликати під час роботи для online тюнінгу.
+
+## Control Loop Timing (`Cb_Timer_t`)
+
+`Inc/ctrl/time.h` надає таймер з callback-функцією — основний інструмент для multi-rate циклів без `DelayMs`.
+
+```c
+// Ініціалізація (period_us — мікросекунди):
+Cb_Timer_t sensor_timer;
+Time_CbTimerInit(&sensor_timer, on_sensor, 200U);    // 5 кГц
+
+// Головний цикл — виклик для кожного таймера:
+while (1) {
+    Time_CbTimerTick(&sensor_timer);
+    Time_CbTimerTick(&control_timer);
+    Time_CbTimerTick(&telem_timer);
+}
+```
+
+`Time_CbTimerTick` акумулює `last_us += period_us` — виключає дрейф частоти (не `= current_time`). Аналогічно виправлено `Time_IsElapsed` (`last_time_ms += period_ms`).
+
+**Стандартні частоти у `servo_basic`:**
+
+| Таймер | period_us | Частота | Що робить |
+|--------|-----------|---------|-----------|
+| `sensor_timer` | 200 | 5 кГц | `Current_Sensor_Update` (струмовий UKF, ~5–10 мкс) |
+| `control_timer` | 1000 | 1 кГц | `Position_Sensor_Update` (encoder UKF, ~100–300 мкс) + `Cascade_Compute` |
+| `telem_timer` | 10000 | 100 Гц | `servo_comm_send_cascade` |
+| `diag_timer` | 1 000 000 | 1 Гц | верифікація частот через ST-Link live watch |
 
 ## Safety
 
@@ -421,7 +449,7 @@ Hardware pin assignments are in `Board/STM32F411_OCM3/board_config.h`. Driver se
 
 ## Technical Specifications
 
-- Control loop: 1 kHz
+- Control loop: multi-rate — 5 kHz sensors, 1 kHz control (encoder UKF + cascade), 100 Hz telemetry
 - PWM frequency: 20 kHz, 1000 steps resolution
 - Emergency stop response: <10ms
 - Memory: static allocation only — no `malloc`/`free`

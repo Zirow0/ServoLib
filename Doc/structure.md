@@ -41,7 +41,7 @@ ServoLib/
 │   │   ├── pid_mgr.h           # Менеджер PID (legacy, не компілюється)
 │   │   ├── safety.h            # Система безпеки (межі, струм, watchdog)
 │   │   ├── traj.h              # Генератор траєкторій
-│   │   └── time.h              # Periodic_Timer_t (таймінги control loop)
+│   │   └── time.h              # Periodic_Timer_t, Cb_Timer_t (multi-rate control loop)
 │   │
 │   ├── comm/                   # Комунікаційний протокол
 │   │   ├── servo_protocol.h    # Wire-структури + msg_id + field constants

@@ -91,7 +91,7 @@ VEL режим:                           vel-PID(рад/с) → current_sp → 
 TRQ режим:                                             current_sp → trq-PID → %
 ```
 
-Feedforward: `ff = ff_j * current_sp + ff_b * ω` (%)
+Feedforward: `ff = ff_j * vel_sp + ff_b * ω` (%)
 
 - **Slew rate limiter** — обмежує `Δ%/с` команди двигуну
 - **Anti-windup** — через `i_limit` або clamp відносно `out_min/max`
@@ -116,7 +116,7 @@ Feedforward: `ff = ff_j * current_sp + ff_b * ω` (%)
 
 ### Датчик струму
 
-- **ACS712T** (ефект Хола) — 5A/20A/30A варіанти, EMA фільтр
+- **ACS712T** (ефект Хола) — 5A/20A/30A варіанти, UKF фільтр (5 кГц оновлення)
 - ADC1 scan+continuous + DMA2 circular (без CPU участі)
 
 ### Безпека (`ctrl/safety`)
@@ -230,7 +230,8 @@ ServoLib/
 | MCU                        | STM32F411CEU6 (BlackPill)    |
 | Тактова частота            | 100 MHz (HSE 25 MHz + PLL)   |
 | Частота PWM                | 20 kHz, 1000 кроків          |
-| Частота контуру керування  | 1 kHz                        |
+| Частота датчика струму     | 5 kHz (current UKF)          |
+| Частота контуру керування  | 1 kHz (encoder UKF + cascade)|
 | Частота телеметрії         | 100 Hz (DMA UART)            |
 | Аварійна зупинка           | < 10 мс                      |
 | Стандарт коду              | C99, статична пам'ять        |

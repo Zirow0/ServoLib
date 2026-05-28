@@ -126,11 +126,12 @@ ServoLib - це модульна бібліотека керування DC се
 - **AEAT-9922** — **видалено** з кодової бази
 
 #### FR-S-002: UKF фільтр позиції (encoder_ukf)
-- Стан: `[θ (рад), ω (рад/с), α (рад/с²)]`, вимірювання: `[θ]`
+- Стан: `[θ (рад), ω (рад/с), α (рад/с²)]`, вимірювання: **`[θ, ω]`** — θ з лічильника EXTI, ω з IC таймера
+- Обидва канали умовні: θ-вимір надходить лише при зміні count (`FeedTheta`), ω-вимір — при кожному IC (`FeedOmega`). Між вимірами R[i,i]=STALE (1e6) — UKF покладається на кінематику.
 - Кінематична модель переходу: θ(k+1) = θ(k) + ω·dt + ½α·dt²
-- `Encoder_UKF_Init`, `Encoder_UKF_Update(dt)`, `Encoder_UKF_GetState(θ, ω, α)`
+- `Encoder_UKF_Init`, `Encoder_UKF_FeedTheta`, `Encoder_UKF_FeedOmega`, `Encoder_UKF_Update(dt)`, `Encoder_UKF_GetState(θ, ω, α)`
 - Окремий екземпляр `Encoder_UKF_t` для кожного датчика (static alloc)
-- Тригер оновлення: 10 kHz (TIM3 на EncoderHub, control loop на OCM3)
+- Тригер оновлення: **1 кГц на OCM3** (`on_control`); 10 кГц (TIM3/TIM5) на EncoderHub
 
 #### FR-S-003: Обробка даних (Universal Position Interface)
 - Multi-turn tracking (відстеження повних обертів всередині драйвера)
@@ -222,8 +223,9 @@ ServoLib - це модульна бібліотека керування DC се
 ### 4.1 Продуктивність
 
 #### NFR-P-001: Частота оновлення
-- Контур керування: 1000 Hz (1 мс період)
-- Зчитування датчика: до 1000 Hz
+- Датчик струму (current UKF): 5000 Hz (200 мкс)
+- Контур керування (encoder UKF + cascade): 1000 Hz (1 мс)
+- Телеметрія (async UART DMA): 100 Hz
 - Оновлення PWM: до 100 kHz
 
 #### NFR-P-002: Час відгуку
