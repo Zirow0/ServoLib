@@ -334,7 +334,7 @@ int main(void)
     servo_comm_seed_cascade_config(&seed);
 
     /* ── Ініціалізація таймерів ──────────────────────────────────────────── */
-    Time_CbTimerInit(&sensor_timer,  on_sensor,  100U);      /* 10 кГц */
+    Time_CbTimerInit(&sensor_timer,  on_sensor,  200U);     /* 5 кГц   */
     Time_CbTimerInit(&control_timer, on_control, 1000U);     /* 1 кГц  */
     Time_CbTimerInit(&telem_timer,   on_telem,   10000U);    /* 100 Гц */
     Time_CbTimerInit(&diag_timer,    on_diag,    1000000U);  /* 1 Гц   */
