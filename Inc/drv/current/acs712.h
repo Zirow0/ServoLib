@@ -80,7 +80,7 @@ typedef struct {
  *
  * Після створення:
  *   - Current_Sensor_Calibrate(&driver.interface) при нульовому струмі
- *   - Current_Sensor_Update(&driver.interface) у контурному циклі
+ *   - Current_Sensor_Update(&driver.interface, dt_s) у контурному циклі
  *
  * @param driver Вказівник на структуру драйвера
  * @param config Конфігурація датчика та базового шару

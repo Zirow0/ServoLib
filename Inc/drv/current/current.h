@@ -5,7 +5,7 @@
  * Послідовність ініціалізації:
  *   1. XxxDriver_Create(&driver, &config)
  *   2. Current_Sensor_Calibrate(&driver.interface) — при нульовому струмі
- *   3. while(1) { Current_Sensor_Update(&driver.interface); }
+ *   3. while(1) { Current_Sensor_Update(&driver.interface, dt_s); }
  */
 
 #ifndef SERVOCORE_DRV_CURRENT_H
@@ -103,13 +103,14 @@ Servo_Status_t Current_Sensor_Init(Current_Sensor_Interface_t* sensor,
 /**
  * @brief Оновлення датчика струму
  *
- * Викликати у контурному циклі (1 кГц).
- * Послідовність: read_raw → корекція нуля → EMA → пік → захист.
+ * Послідовність: read_raw → корекція нуля → UKF predict/update → пік → захист.
+ * Викликати з реальним кроком часу між викликами.
  *
  * @param sensor Вказівник на інтерфейс
+ * @param dt_s   Крок часу від попереднього виклику (с)
  * @return Servo_Status_t Статус виконання
  */
-Servo_Status_t Current_Sensor_Update(Current_Sensor_Interface_t* sensor);
+Servo_Status_t Current_Sensor_Update(Current_Sensor_Interface_t* sensor, float dt_s);
 
 /**
  * @brief Калібрування нульового зміщення

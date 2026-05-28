@@ -185,7 +185,7 @@ int main(void)
     char buf[64];
 
     while (1) {
-        Current_Sensor_Update(&current_driver.interface);  /* оновлення ADC EMA */
+        Current_Sensor_Update(&current_driver.interface, 0.001f);
         Servo_Update(&servo);
 
         /* Вивід стану раз на 100 мс */

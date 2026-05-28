@@ -272,7 +272,7 @@ int main(void)
         }
 
         /* ── Оновлення датчиків ──────────────────────────────────────────── */
-        Current_Sensor_Update(&current_driver.interface);
+        Current_Sensor_Update(&current_driver.interface, 0.001f);
         Brake_Update(&brake.interface);
         Position_Sensor_Update(&encoder.interface);
 

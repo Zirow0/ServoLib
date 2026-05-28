@@ -19,7 +19,6 @@
 
 #define CURRENT_CALIB_N_SAMPLES     20U    /**< Кількість вимірів для калібрування */
 #define CURRENT_CALIB_SAMPLE_MS     5U     /**< Пауза між вимірами (мс) */
-#define CURRENT_UKF_DT              0.001f /**< Крок часу UKF (1 кГц контурний цикл) */
 
 /* Private functions ---------------------------------------------------------*/
 
@@ -81,7 +80,7 @@ Servo_Status_t Current_Sensor_Init(Current_Sensor_Interface_t* sensor,
     return SERVO_OK;
 }
 
-Servo_Status_t Current_Sensor_Update(Current_Sensor_Interface_t* sensor)
+Servo_Status_t Current_Sensor_Update(Current_Sensor_Interface_t* sensor, float dt_s)
 {
     if (!Current_Sensor_IsValid(sensor)) return SERVO_INVALID;
 
@@ -98,7 +97,7 @@ Servo_Status_t Current_Sensor_Update(Current_Sensor_Interface_t* sensor)
     float current = raw.current_a - data->zero_offset_a;
 
     /* UKF фільтрація */
-    ukf_predict(&data->ukf, CURRENT_UKF_DT);
+    ukf_predict(&data->ukf, dt_s);
     ukf_update(&data->ukf, &current);
 
     float ukf_state[1];
