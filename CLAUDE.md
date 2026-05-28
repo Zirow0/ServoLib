@@ -140,7 +140,9 @@ Position_Sensor_SetPosition(sensor, pos_rad);           // встановити 
 **Encoder UKF** (`Inc/drv/position/encoder_ukf.h`): окремий UKF-фільтр для інкрементального енкодера.
 Стан: [θ (рад), ω (рад/с), α (рад/с²)], вимірювання: **[θ, ω]** — θ з лічильника, ω з IC таймера.
 
-ω-вимірювання умовне: коли `FeedOmega` не викликався після попереднього `Update`, `R[1,1]` підвищується до `ENCODER_UKF_R_OMEGA_STALE=1e6` — UKF ефективно ігнорує ω. Це коректно обробляє змінний інтервал IC (23 мкс … 65 мс).
+**Умовні вимірювання (обидва канали):**
+- θ: `FeedTheta` викликається лише при зміні `count` (або після `ENC_SPEED_TIMEOUT_MS` зупинки). Між кроками R[0,0]=STALE — UKF ігнорує θ, спираючись на кінематику + IC ω. Усуває стрибки ω/α при дискретних кроках на малій швидкості.
+- ω: `FeedOmega` викликається при кожному новому IC-вимірі. Між IC R[1,1]=STALE.
 
 ```c
 Encoder_UKF_t enc_ukf;
@@ -153,6 +155,7 @@ float omega_ic;
 if (Incremental_Encoder_ConsumeIC(&driver, &omega_ic)) {
     Encoder_UKF_FeedOmega(&enc_ukf, omega_ic);   // свіжий IC → R[1,1] = r_omega
 }
+// FeedTheta викликається лише при зміні count — не тут, а всередині IncEnc_HW_ReadRaw
 Encoder_UKF_Update(&enc_ukf, theta_meas_rad, dt_s);
 
 float theta, omega, alpha;

@@ -65,6 +65,7 @@ typedef struct {
 
     Encoder_UKF_t    enc_ukf;             /**< UKF фільтр [θ, ω, α] */
     uint32_t         ukf_last_us;         /**< Час попереднього UKF Update (мкс) */
+    int32_t          last_count;          /**< count на момент останнього FeedTheta */
 } Incremental_Encoder_Driver_t;
 
 /* Exported functions --------------------------------------------------------*/

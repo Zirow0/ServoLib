@@ -68,16 +68,17 @@ Servo_Status_t Encoder_UKF_Init(Encoder_UKF_t *filter,
         0.0f,        cfg.q_omega, 0.0f,
         0.0f,        0.0f,        cfg.q_alpha,
     };
-    /* R[1,1] ініціюється як STALE — буде перемикатися в Update */
+    /* R[0,0] і R[1,1] ініціюються як STALE — перемикаються в Update */
     const float R[ENCODER_UKF_N_MEAS * ENCODER_UKF_N_MEAS] = {
-        cfg.r_theta, 0.0f,
-        0.0f,        ENCODER_UKF_R_OMEGA_STALE,
+        ENCODER_UKF_R_THETA_STALE, 0.0f,
+        0.0f,                      ENCODER_UKF_R_OMEGA_STALE,
     };
     ukf_set_noise(&filter->ukf, Q, R);
 
     filter->r_omega     = cfg.r_omega;
     filter->omega_ic    = 0.0f;
     filter->omega_fresh = false;
+    filter->theta_fresh = false;
 
     return SERVO_OK;
 }
@@ -88,6 +89,10 @@ Servo_Status_t Encoder_UKF_Update(Encoder_UKF_t *filter, float theta_meas, float
 
     if (ukf_predict(&filter->ukf, dt) != UKF_SUCCESS) { return SERVO_ERROR; }
 
+    /* Перемикаємо R[0,0]: мале при свіжому θ (зміна count), велике — ігноруємо */
+    ukf_matrix_set(&filter->ukf.R, 0U, 0U,
+                   filter->theta_fresh ? ENCODER_UKF_R_THETA_DEFAULT : ENCODER_UKF_R_THETA_STALE);
+
     /* Перемикаємо R[1,1]: мале при свіжому IC вимірі, велике — ігноруємо */
     ukf_matrix_set(&filter->ukf.R, 1U, 1U,
                    filter->omega_fresh ? filter->r_omega : ENCODER_UKF_R_OMEGA_STALE);
@@ -95,8 +100,15 @@ Servo_Status_t Encoder_UKF_Update(Encoder_UKF_t *filter, float theta_meas, float
     const float z[ENCODER_UKF_N_MEAS] = { theta_meas, filter->omega_ic };
     if (ukf_update(&filter->ukf, z) != UKF_SUCCESS) { return SERVO_ERROR; }
 
+    filter->theta_fresh = false;
     filter->omega_fresh = false;
     return SERVO_OK;
+}
+
+void Encoder_UKF_FeedTheta(Encoder_UKF_t *filter)
+{
+    if (filter == NULL) { return; }
+    filter->theta_fresh = true;
 }
 
 void Encoder_UKF_FeedOmega(Encoder_UKF_t *filter, float omega_rad_s)
@@ -133,4 +145,5 @@ void Encoder_UKF_Reset(Encoder_UKF_t *filter, float theta_init)
 
     filter->omega_ic    = 0.0f;
     filter->omega_fresh = false;
+    filter->theta_fresh = false;
 }

@@ -158,6 +158,7 @@ static Servo_Status_t IncEnc_HW_Init(void *driver_data)
     drv->last_pulse_ms = 0U;
     drv->direction     = 1;
     drv->new_ic_data   = false;
+    drv->last_count    = 0;
 
     /* ── Реєстрація в dispatch tables ── */
     uint8_t line_a = (uint8_t)__builtin_ctz(hw->gpio_pin_a);
@@ -276,6 +277,20 @@ static Servo_Status_t IncEnc_HW_ReadRaw(void *driver_data, Position_Raw_Data_t *
     float omega_ic;
     if (Incremental_Encoder_ConsumeIC(drv, &omega_ic)) {
         Encoder_UKF_FeedOmega(&drv->enc_ukf, omega_ic);
+    }
+
+    /* θ-вимірювання лише при зміні count або після зупинки мотора:
+     * між кроками UKF спирається на кінематичну модель + IC ω,
+     * уникаючи антикорекції від стабільного стрінгового вимірювання */
+    int32_t current_count = drv->count;
+    if (current_count != drv->last_count) {
+        Encoder_UKF_FeedTheta(&drv->enc_ukf);
+        drv->last_count = current_count;
+    } else if (drv->hw.timer_base == 0U ||
+               drv->last_pulse_ms == 0U ||
+               (Time_GetMillis() - drv->last_pulse_ms) >= ENC_SPEED_TIMEOUT_MS) {
+        /* IC не налаштований, або мотор зупинився — фіксуємо позицію */
+        Encoder_UKF_FeedTheta(&drv->enc_ukf);
     }
 
     /* UKF predict + update */

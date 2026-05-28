@@ -36,6 +36,7 @@ extern "C" {
 #define ENCODER_UKF_R_THETA_DEFAULT      1e-4f   /**< шум вимірювання θ (рад²) */
 #define ENCODER_UKF_R_OMEGA_DEFAULT      0.1f    /**< шум вимірювання ω з IC ((рад/с)²) */
 #define ENCODER_UKF_R_OMEGA_STALE        1e6f    /**< R[1,1] коли немає свіжого IC виміру */
+#define ENCODER_UKF_R_THETA_STALE        1e6f    /**< R[0,0] коли лічильник не змінився */
 #define ENCODER_UKF_P0_THETA_DEFAULT     0.1f    /**< початкова невизначеність: θ */
 #define ENCODER_UKF_P0_OMEGA_DEFAULT     1.0f    /**< початкова невизначеність: ω */
 #define ENCODER_UKF_P0_ALPHA_DEFAULT     10.0f   /**< початкова невизначеність: α */
@@ -68,6 +69,7 @@ typedef struct {
     float  r_omega;      /**< R[1,1] при свіжому IC вимірі (кешується з конфігурації) */
     float  omega_ic;     /**< останній ω з IC (рад/с); 0 до першого FeedOmega */
     bool   omega_fresh;  /**< true якщо FeedOmega викликався після останнього Update */
+    bool   theta_fresh;  /**< true якщо FeedTheta викликався після останнього Update */
 } Encoder_UKF_t;
 
 /* API -----------------------------------------------------------------------*/
@@ -104,6 +106,18 @@ Servo_Status_t Encoder_UKF_Update(Encoder_UKF_t *filter, float theta_meas, float
  */
 void Encoder_UKF_GetState(const Encoder_UKF_t *filter,
                            float *theta, float *omega, float *alpha);
+
+/**
+ * @brief Передати нове θ-вимірювання з лічильника EXTI
+ *
+ * Викликати коли encoder count змінився.
+ * Встановлює theta_fresh = true — наступний Encoder_UKF_Update
+ * використає це значення з повним вагою R[0,0] = r_theta.
+ * Без виклику цієї функції Update ігнорує θ (R[0,0] = STALE).
+ *
+ * @param filter  Вказівник на екземпляр
+ */
+void Encoder_UKF_FeedTheta(Encoder_UKF_t *filter);
 
 /**
  * @brief Передати нове ω-вимірювання з IC таймера
