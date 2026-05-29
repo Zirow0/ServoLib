@@ -109,17 +109,11 @@ Servo_Status_t Servo_Update(Servo_Controller_t* servo)
 
     uint32_t now_us = Time_GetMicros();
 
-    float accel_rad_s2 = 0.0f;
-    if (servo->sensor != NULL) {
-        Position_Sensor_GetAcceleration(servo->sensor, &accel_rad_s2);
-    }
-
     if (servo->state.mode == SERVO_MODE_POSITION) {
         servo->cascade.target_pos = servo->state.target_position;
         float power = Cascade_Compute(&servo->cascade,
                                        servo->state.position,
                                        servo->state.velocity,
-                                       accel_rad_s2,
                                        current_a,
                                        now_us);
         Motor_SetPower(servo->motor, power);
@@ -130,7 +124,6 @@ Servo_Status_t Servo_Update(Servo_Controller_t* servo)
         float power = Cascade_Compute(&servo->cascade,
                                        servo->state.position,
                                        servo->state.velocity,
-                                       accel_rad_s2,
                                        current_a,
                                        now_us);
         Motor_SetPower(servo->motor, power);
@@ -140,7 +133,6 @@ Servo_Status_t Servo_Update(Servo_Controller_t* servo)
         float power = Cascade_Compute(&servo->cascade,
                                        servo->state.position,
                                        servo->state.velocity,
-                                       accel_rad_s2,
                                        current_a,
                                        now_us);
         Motor_SetPower(servo->motor, power);

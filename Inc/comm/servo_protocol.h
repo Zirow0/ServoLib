@@ -160,8 +160,8 @@ typedef struct __attribute__((packed)) {
     float trq_i_limit;  /* 68  % (0 = auto)              */
 
     /* Feedforward та slew */
-    float ff_j;         /* 72  %/А   (FF інерції)        */
-    float ff_b;         /* 76  %·с/рад (FF тертя)        */
+    float ff_j;         /* 72  %/А       (ff_r:   R/V_supply×100) */
+    float ff_b;         /* 76  %·с/рад   (ff_bemf: Ke/V_supply×100) */
     float slew_rate;    /* 80  %/с (0 = вимкнено)        */
 } cascade_config_t;     /* 84 байт                       */
 

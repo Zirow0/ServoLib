@@ -74,7 +74,6 @@ Servo_Status_t Cascade_Init(Cascade_Controller_t* casc,
 float Cascade_Compute(Cascade_Controller_t* casc,
                       float theta,
                       float omega,
-                      float alpha_rad_s2,
                       float current_a,
                       uint32_t time_us)
 {
@@ -135,31 +134,42 @@ float Cascade_Compute(Cascade_Controller_t* casc,
         }
     }
 
-    /* Feedforward (фізична модель):
-     *   ff_j * alpha — компенсація інерції [А/(рад/с²)]
-     *   ff_b * omega — компенсація в'язкого тертя [А/(рад/с)]
-     * FF додається до current_sp у домені струму і clamp-ується межами vel-контуру
-     * → trq-PID ніколи не отримує setpoint вище vel.out_max.
+    /* Feedforward (модель двигуна: V = R·I + Ke·ω):
+     *   ff_r    * current_sp — компенсація падіння напруги на обмотці [%/А]
+     *   ff_bemf * omega      — компенсація зустрічної ЕРС [%·с/рад]
+     * current_sp вже обмежений vel.out_max → FF природно bounded.
      * У режимі TRQ feedforward не застосовується. */
-    float ff_amps = 0.0f;
+    float ff = 0.0f;
     if (casc->mode != CASCADE_MODE_TRQ &&
-        (casc->config.ff_j != 0.0f || casc->config.ff_b != 0.0f)) {
-        ff_amps = casc->config.ff_j * alpha_rad_s2
-                + casc->config.ff_b * omega;
+        (casc->config.ff_r != 0.0f || casc->config.ff_bemf != 0.0f)) {
+        ff = casc->config.ff_r    * current_sp
+           + casc->config.ff_bemf * omega;
     }
-    casc->last_ff = ff_amps;
+    casc->last_ff = ff;
 
-    float current_sp_ff = CascadeClamp(current_sp + ff_amps,
-                                        casc->config.vel.out_min,
-                                        casc->config.vel.out_max);
-
-    /* trq-PID відпрацьовує FF-скоригований setpoint.
-     * Фінальне обмеження виходу — єдине місце де обрізається команда двигуну. */
-    PID_Compute(&casc->trq_pid, current_sp_ff, current_a, time_us);
-    float raw_power = PID_GetOutput(&casc->trq_pid);
+    /* trq-PID коригує лише похибку моделі (варіації R, індуктивність тощо).
+     * Фінальне обмеження — єдине місце де обрізається команда двигуну.
+     * Back-calculation anti-windup: якщо FF + pid_out насичується,
+     * інтегратор не накопичує надлишок. */
+    PID_Compute(&casc->trq_pid, current_sp, current_a, time_us);
+    float raw_power = PID_GetOutput(&casc->trq_pid) + ff;
     float power = CascadeClamp(raw_power,
                                 casc->config.trq.out_min,
                                 casc->config.trq.out_max);
+    if (raw_power != power) {
+        float excess = raw_power - power;
+        float i_min, i_max;
+        if (casc->trq_pid.params.i_limit > 0.0f) {
+            i_min = -casc->trq_pid.params.i_limit;
+            i_max =  casc->trq_pid.params.i_limit;
+        } else {
+            i_min = casc->config.trq.out_min - casc->trq_pid.p_term;
+            i_max = casc->config.trq.out_max - casc->trq_pid.p_term;
+        }
+        casc->trq_pid.integral = CascadeClamp(
+            casc->trq_pid.integral - excess, i_min, i_max);
+        casc->trq_pid.i_term = casc->trq_pid.integral;
+    }
 
     /* Slew rate limiter.
      * dt = час від попереднього кроку (рахується через prev_time_us,

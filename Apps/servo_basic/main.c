@@ -132,7 +132,7 @@ static void on_control(void)
 
     if (app_state == APP_RUNNING || app_state == APP_STOPPING) {
         float power = Cascade_Compute(&cascade, s_pos_rad, s_vel_rad_s,
-                                      s_accel_rad_s2, s_current_a, now);
+                                      s_current_a, now);
         Motor_SetPower(&motor.interface, power);
     }
 }
@@ -310,8 +310,8 @@ int main(void)
             .out_max =  100.0f,
             .i_limit =  40.0f,
         },
-        .ff_j      = 0.0f,   /* А/(рад/с²) — потребує тюнінгу */
-        .ff_b      = 0.0f,
+        .ff_r      = 10.0f,  /* %/А = R/V_supply×100 = 2.4/24×100 */
+        .ff_bemf   = 0.0f,   /* %·с/рад = Ke/V_supply×100, тюнінг на стенді */
         .slew_rate = 5000.0f,
     };
     Cascade_Init(&cascade, &casc_cfg, CASCADE_MODE_POS);
@@ -327,8 +327,8 @@ int main(void)
         .trq_kp      = casc_cfg.trq.kp,      .trq_ki      = casc_cfg.trq.ki,
         .trq_kd      = casc_cfg.trq.kd,      .trq_out_min = casc_cfg.trq.out_min,
         .trq_out_max = casc_cfg.trq.out_max,  .trq_i_limit = casc_cfg.trq.i_limit,
-        .ff_j        = casc_cfg.ff_j,
-        .ff_b        = casc_cfg.ff_b,
+        .ff_j        = casc_cfg.ff_r,
+        .ff_b        = casc_cfg.ff_bemf,
         .slew_rate   = casc_cfg.slew_rate,
     };
     servo_comm_seed_cascade_config(&seed);
@@ -402,8 +402,8 @@ int main(void)
                     .out_max = wire_cfg.trq_out_max,
                     .i_limit = wire_cfg.trq_i_limit,
                 },
-                .ff_j      = wire_cfg.ff_j,
-                .ff_b      = wire_cfg.ff_b,
+                .ff_r      = wire_cfg.ff_j,
+                .ff_bemf   = wire_cfg.ff_b,
                 .slew_rate = wire_cfg.slew_rate,
             };
             Cascade_ApplyConfig(&cascade, &new_cfg);
