@@ -12,10 +12,10 @@
  *   CASCADE_MODE_VEL — pos-контур вимкнено, vel+trq активні
  *   CASCADE_MODE_TRQ — лише trq-контур (pos і vel вимкнені)
  *
- * Feedforward (спрощена модель):
- *   ff = ff_j * vel_sp + ff_b * omega
- *   де ff_j [%·с/рад], ff_b [%·с/рад] — коефіцієнти, що тюнуються.
- *   Базується на командних/кінематичних сигналах, не на зворотному зв'язку.
+ * Feedforward (фізична модель):
+ *   ff_amps = ff_j * alpha + ff_b * omega
+ *   де ff_j [А/(рад/с²)] — інерційна компенсація, ff_b [А·с/рад] — компенсація тертя.
+ *   FF додається до current_sp і обмежується межами vel-контуру (vel.out_min/max).
  *   У режимі TRQ feedforward не застосовується.
  *
  * Slew rate limiter:
@@ -71,8 +71,8 @@ typedef struct {
     Cascade_PID_Params_t vel;  /**< Контур швидкості, вихід А */
     Cascade_PID_Params_t trq;  /**< Контур струму, вихід % */
 
-    float ff_j;       /**< FF швидкості [%·с/рад]: % команди на 1 рад/с цільової швидкості */
-    float ff_b;       /**< FF тертя [%·с/рад]: % команди на 1 рад/с поточної швидкості */
+    float ff_j;       /**< FF інерції [А/(рад/с²)]: струм на одиницю прискорення */
+    float ff_b;       /**< FF тертя [А·с/рад]: струм на одиницю швидкості */
     float slew_rate;  /**< Макс. швидкість зміни команди [%/с], 0 = вимкнено */
 } Cascade_Config_t;
 
@@ -99,7 +99,7 @@ typedef struct {
     /* Телеметрія */
     float last_vel_sp;     /**< Останній setpoint швидкості (рад/с) */
     float last_current_sp; /**< Останній setpoint струму (А) */
-    float last_ff;         /**< Останній внесок feedforward (%) */
+    float last_ff;         /**< Останній внесок feedforward (А) */
     float last_power;      /**< Остання команда двигуну (%) */
 } Cascade_Controller_t;
 
@@ -122,14 +122,16 @@ Servo_Status_t Cascade_Init(Cascade_Controller_t* casc,
  *
  * @param casc      Вказівник на контролер
  * @param theta     Поточне положення (рад)
- * @param omega     Поточна кутова швидкість (рад/с)
- * @param current_a Поточний струм двигуна (А)
- * @param time_us   Поточний час (мкс)
- * @return float    Команда двигуну (%)
+ * @param omega        Поточна кутова швидкість (рад/с)
+ * @param alpha_rad_s2 Поточне кутове прискорення (рад/с²) — для FF компенсації інерції
+ * @param current_a    Поточний струм двигуна (А)
+ * @param time_us      Поточний час (мкс)
+ * @return float       Команда двигуну (%)
  */
 float Cascade_Compute(Cascade_Controller_t* casc,
                       float theta,
                       float omega,
+                      float alpha_rad_s2,
                       float current_a,
                       uint32_t time_us);
 

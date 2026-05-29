@@ -132,7 +132,7 @@ static void on_control(void)
 
     if (app_state == APP_RUNNING || app_state == APP_STOPPING) {
         float power = Cascade_Compute(&cascade, s_pos_rad, s_vel_rad_s,
-                                      s_current_a, now);
+                                      s_accel_rad_s2, s_current_a, now);
         Motor_SetPower(&motor.interface, power);
     }
 }
@@ -310,7 +310,7 @@ int main(void)
             .out_max =  100.0f,
             .i_limit =  40.0f,
         },
-        .ff_j      = 160.0f,
+        .ff_j      = 0.0f,   /* А/(рад/с²) — потребує тюнінгу */
         .ff_b      = 0.0f,
         .slew_rate = 5000.0f,
     };
