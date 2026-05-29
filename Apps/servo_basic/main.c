@@ -255,7 +255,7 @@ int main(void)
 
     Motor_Params_t mot_params = {
         .max_power        = 99.9f,
-        .min_power        = 4.0f,
+        .min_power        = 1.0f,
         .invert_direction = false,
     };
     Motor_Init(&motor.interface, &mot_params);
@@ -287,7 +287,7 @@ int main(void)
     /* ── Каскадний PID ───────────────────────────────────────────────────── */
     static const Cascade_Config_t casc_cfg = {
         .pos = {
-            .kp      = 7.0f,
+            .kp      = 6.5f,
             .ki      = 0.0f,
             .kd      = 0.1f,
             .out_min = -0.2f,
@@ -295,23 +295,23 @@ int main(void)
             .i_limit =  0.1f,
         },
         .vel = {
-            .kp      = 6.0f,
-            .ki      = 150.0f,
+            .kp      = 8.0f,
+            .ki      = 73.0f,
             .kd      = 0.0f,
-            .out_min = -8.0f,
-            .out_max =  8.0f,
-            .i_limit =  6.0f,
+            .out_min = -4.0f,
+            .out_max =  4.0f,
+            .i_limit =  3.0f,
         },
         .trq = {
-            .kp      = 11.0f,
-            .ki      = 120.0f,
+            .kp      = 0.0f,
+            .ki      = 100.0f,
             .kd      = 0.0f,
             .out_min = -100.0f,
             .out_max =  100.0f,
             .i_limit =  40.0f,
         },
-        .ff_r      = 10.0f,  /* %/А = R/V_supply×100 = 2.4/24×100 */
-        .ff_bemf   = 0.0f,   /* %·с/рад = Ke/V_supply×100, тюнінг на стенді */
+        .ff_r      = 11.15f, /* %/А — емпірично; R_eff = 11.15×24/100 = 2.68 Ом ≈ R_вим */
+        .ff_bemf   = 120.0f, /* %·с/рад — емпірично; Ke = 120×24/100 = 28.8 В/(рад/с) */
         .slew_rate = 5000.0f,
     };
     Cascade_Init(&cascade, &casc_cfg, CASCADE_MODE_POS);
