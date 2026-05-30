@@ -25,10 +25,10 @@ int main(void)
     static const HWD_ADC_Config_t adc_cfg = {
         .adc_base  = CURRENT_ADC_PERIPH,
         .rcc_adc   = CURRENT_ADC_RCC,
-        .rcc_gpio  = CURRENT_ADC_GPIO_RCC,
-        .gpio_port = CURRENT_ADC_GPIO_PORT,
-        .gpio_pin  = CURRENT_ADC_GPIO_PIN,
-        .channel   = CURRENT_ADC_CHANNEL,
+        .rcc_gpio  = CURRENT0_ADC_GPIO_RCC,
+        .gpio_port = CURRENT0_ADC_GPIO_PORT,
+        .gpio_pin  = CURRENT0_ADC_GPIO_PIN,
+        .channel   = CURRENT0_ADC_CHANNEL,
         .vref_v    = CURRENT_ADC_VREF_V,
     };
     HWD_ADC_Init(&current_adc, &adc_cfg);

@@ -41,28 +41,28 @@ static void gpio_misc_setup(void)
     gpio_mode_setup(LED_GPIO_PORT, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, LED_PIN);
     gpio_set_output_options(LED_GPIO_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_2MHZ, LED_PIN);
 
-    /* Brake — PA8, вихід push-pull, за замовчуванням LOW (гальмо увімкнено) */
-    gpio_mode_setup(BRAKE_CTRL_GPIO_PORT, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, BRAKE_CTRL_PIN);
-    gpio_set_output_options(BRAKE_CTRL_GPIO_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_2MHZ, BRAKE_CTRL_PIN);
-    gpio_clear(BRAKE_CTRL_GPIO_PORT, BRAKE_CTRL_PIN);
+    /* Brake 0 — PA8, вихід push-pull, за замовчуванням LOW (гальмо увімкнено) */
+    gpio_mode_setup(BRAKE0_GPIO_PORT, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, BRAKE0_PIN);
+    gpio_set_output_options(BRAKE0_GPIO_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_2MHZ, BRAKE0_PIN);
+    gpio_clear(BRAKE0_GPIO_PORT, BRAKE0_PIN);
 
 #ifdef USE_MOTOR_PWM
-    /* Motor DIR — PA7, вихід push-pull, за замовчуванням LOW */
-    gpio_mode_setup(MOTOR_DIR_GPIO_PORT, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, MOTOR_DIR_PIN);
-    gpio_set_output_options(MOTOR_DIR_GPIO_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_25MHZ, MOTOR_DIR_PIN);
-    gpio_clear(MOTOR_DIR_GPIO_PORT, MOTOR_DIR_PIN);
+    /* Motor 0 DIR — PA7, вихід push-pull, за замовчуванням LOW */
+    gpio_mode_setup(MOTOR0_DIR_GPIO_PORT, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, MOTOR0_DIR_PIN);
+    gpio_set_output_options(MOTOR0_DIR_GPIO_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_25MHZ, MOTOR0_DIR_PIN);
+    gpio_clear(MOTOR0_DIR_GPIO_PORT, MOTOR0_DIR_PIN);
 #endif
 }
 
 #ifdef USE_MOTOR_PWM
 static void pwm_gpio_setup(void)
 {
-    gpio_mode_setup(MOTOR_PWM_GPIO_PORT, GPIO_MODE_AF, GPIO_PUPD_NONE,
-                    MOTOR_PWM_GPIO_CH1);
-    gpio_set_output_options(MOTOR_PWM_GPIO_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_25MHZ,
-                            MOTOR_PWM_GPIO_CH1);
-    gpio_set_af(MOTOR_PWM_GPIO_PORT, MOTOR_PWM_GPIO_AF,
-                MOTOR_PWM_GPIO_CH1);
+    gpio_mode_setup(MOTOR0_PWM_GPIO_PORT, GPIO_MODE_AF, GPIO_PUPD_NONE,
+                    MOTOR0_PWM_GPIO_PIN);
+    gpio_set_output_options(MOTOR0_PWM_GPIO_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_25MHZ,
+                            MOTOR0_PWM_GPIO_PIN);
+    gpio_set_af(MOTOR0_PWM_GPIO_PORT, MOTOR0_PWM_GPIO_AF,
+                MOTOR0_PWM_GPIO_PIN);
 }
 #endif /* USE_MOTOR_PWM */
 
@@ -124,7 +124,7 @@ Servo_Status_t Board_Init(void)
 
 #ifdef USE_MOTOR_PWM
     pwm_gpio_setup();
-    rcc_periph_clock_enable(MOTOR_PWM_TIMER_RCC);
+    rcc_periph_clock_enable(MOTOR0_PWM_TIMER_RCC);
 #endif
 
     micros_timer_setup();

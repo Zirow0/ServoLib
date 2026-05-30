@@ -34,8 +34,8 @@ int main(void)
     HWD_UART_WriteString("ServoLib brake debug\r\n");
 
     GPIO_Brake_Config_t brk_cfg = {
-        .gpio_port       = (void*)BRAKE_CTRL_GPIO_PORT,
-        .gpio_pin        = BRAKE_CTRL_PIN,
+        .gpio_port       = (void*)BRAKE0_GPIO_PORT,
+        .gpio_pin        = BRAKE0_PIN,
         .active_high     = false,
         .engage_time_ms  = 50,
         .release_time_ms = 30,

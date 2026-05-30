@@ -48,8 +48,8 @@ int main(void)
     HWD_PWM_Config_t fwd_cfg = {
         .frequency  = MOTOR_PWM_FREQ,
         .resolution = MOTOR_PWM_PERIOD,
-        .hw_handle  = (void*)MOTOR_PWM_TIMER,
-        .hw_channel = MOTOR_PWM_OC_FWD,
+        .hw_handle  = (void*)MOTOR0_PWM_TIMER,
+        .hw_channel = MOTOR0_PWM_OC,
     };
     HWD_PWM_Init(&pwm_fwd, &fwd_cfg);
 
@@ -58,8 +58,8 @@ int main(void)
         .type     = PWM_MOTOR_TYPE_SINGLE_PWM_DIR,
         .pwm_fwd  = &pwm_fwd,
         .pwm_bwd  = NULL,
-        .gpio_dir = (void*)MOTOR_DIR_GPIO_PORT,
-        .gpio_pin = MOTOR_DIR_PIN,
+        .gpio_dir = (void*)MOTOR0_DIR_GPIO_PORT,
+        .gpio_pin = MOTOR0_DIR_PIN,
     };
     PWM_Motor_Create(&motor, &mot_cfg);
 

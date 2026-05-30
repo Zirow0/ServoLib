@@ -287,8 +287,8 @@ int main(void)
     /* ── ACS712 ────────────────────────────────────────────────────────────── */
     static const HWD_ADC_Config_t adc_cfg = {
         .adc_base  = CURRENT_ADC_PERIPH,  .rcc_adc   = CURRENT_ADC_RCC,
-        .rcc_gpio  = CURRENT_ADC_GPIO_RCC,.gpio_port = CURRENT_ADC_GPIO_PORT,
-        .gpio_pin  = CURRENT_ADC_GPIO_PIN,.channel   = CURRENT_ADC_CHANNEL,
+        .rcc_gpio  = CURRENT0_ADC_GPIO_RCC,.gpio_port = CURRENT0_ADC_GPIO_PORT,
+        .gpio_pin  = CURRENT0_ADC_GPIO_PIN,.channel   = CURRENT0_ADC_CHANNEL,
         .vref_v    = CURRENT_ADC_VREF_V,
     };
     HWD_ADC_Init(&current_adc, &adc_cfg);
@@ -309,14 +309,14 @@ int main(void)
     /* ── PWM + Motor ───────────────────────────────────────────────────────── */
     HWD_PWM_Config_t fwd_cfg = {
         .frequency  = MOTOR_PWM_FREQ, .resolution = MOTOR_PWM_PERIOD,
-        .hw_handle  = (void*)MOTOR_PWM_TIMER, .hw_channel = MOTOR_PWM_OC_FWD,
+        .hw_handle  = (void*)MOTOR0_PWM_TIMER, .hw_channel = MOTOR0_PWM_OC,
     };
     HWD_PWM_Init(&pwm_fwd, &fwd_cfg);
 
     PWM_Motor_Config_t mot_cfg = {
         .type = PWM_MOTOR_TYPE_SINGLE_PWM_DIR,
         .pwm_fwd = &pwm_fwd, .pwm_bwd = NULL,
-        .gpio_dir = (void*)MOTOR_DIR_GPIO_PORT, .gpio_pin = MOTOR_DIR_PIN,
+        .gpio_dir = (void*)MOTOR0_DIR_GPIO_PORT, .gpio_pin = MOTOR0_DIR_PIN,
     };
     PWM_Motor_Create(&motor, &mot_cfg);
 
@@ -338,7 +338,7 @@ int main(void)
 
     /* ── Brake ─────────────────────────────────────────────────────────────── */
     GPIO_Brake_Config_t brk_cfg = {
-        .gpio_port = (void*)BRAKE_CTRL_GPIO_PORT, .gpio_pin = BRAKE_CTRL_PIN,
+        .gpio_port = (void*)BRAKE0_GPIO_PORT, .gpio_pin = BRAKE0_PIN,
         .active_high = false, .engage_time_ms = 50, .release_time_ms = 30,
     };
     GPIO_Brake_Create(&brake, &brk_cfg);

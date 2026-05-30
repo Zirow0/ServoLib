@@ -45,19 +45,19 @@ extern "C" {
 #define SYSTEM_CORE_CLOCK   100000000U  /* 100 MHz (HSE 25 MHz + PLL) */
 #define APB1_TIMER_CLOCK    100000000U  /* ×2 від APB1=50 MHz */
 
-/* PWM (TIM3 CH1 → PA6, AF2) ------------------------------------------------*/
-#define MOTOR_PWM_TIMER         TIM3
-#define MOTOR_PWM_TIMER_RCC     RCC_TIM3
-#define MOTOR_PWM_OC_FWD        TIM_OC1
+/* PWM: спільні параметри ---------------------------------------------------*/
 #define MOTOR_PWM_FREQ          20000U
 #define MOTOR_PWM_PERIOD        999U
-#define MOTOR_PWM_GPIO_PORT     GPIOA
-#define MOTOR_PWM_GPIO_CH1      GPIO6
-#define MOTOR_PWM_GPIO_AF       GPIO_AF2
 
-/* DIR (PA7) -----------------------------------------------------------------*/
-#define MOTOR_DIR_GPIO_PORT     GPIOA
-#define MOTOR_DIR_PIN           GPIO7
+/* Мотор 0: TIM3 CH1 → PA6 (AF2), DIR → PA7 --------------------------------*/
+#define MOTOR0_PWM_TIMER        TIM3
+#define MOTOR0_PWM_TIMER_RCC    RCC_TIM3
+#define MOTOR0_PWM_OC           TIM_OC1
+#define MOTOR0_PWM_GPIO_PORT    GPIOA
+#define MOTOR0_PWM_GPIO_PIN     GPIO6
+#define MOTOR0_PWM_GPIO_AF      GPIO_AF2
+#define MOTOR0_DIR_GPIO_PORT    GPIOA
+#define MOTOR0_DIR_PIN          GPIO7
 
 /* Incremental Encoder -------------------------------------------------------*/
 /* ENC0: A=PB6 (EXTI6 + TIM4_CH1 IC), B=PB4 (EXTI4)                         */
@@ -79,9 +79,9 @@ extern "C" {
 #define MICROS_TIMER_RCC        RCC_TIM5
 #define MICROS_TIMER_PRESCALER  (100U - 1U)  /* 100 MHz / 100 = 1 MHz */
 
-/* GPIO ----------------------------------------------------------------------*/
-#define BRAKE_CTRL_GPIO_PORT    GPIOA
-#define BRAKE_CTRL_PIN          GPIO8
+/* Гальмо 0: PA8, LOW = гальмо увімкнено (fail-safe) ------------------------*/
+#define BRAKE0_GPIO_PORT        GPIOA
+#define BRAKE0_PIN              GPIO8
 
 #define LED_GPIO_PORT           GPIOC
 #define LED_PIN                 GPIO13
@@ -103,11 +103,12 @@ extern "C" {
 #include <libopencm3/stm32/adc.h>
 #define CURRENT_ADC_PERIPH      ADC1
 #define CURRENT_ADC_RCC         RCC_ADC1
-#define CURRENT_ADC_GPIO_PORT   GPIOA
-#define CURRENT_ADC_GPIO_RCC    RCC_GPIOA
-#define CURRENT_ADC_GPIO_PIN    GPIO4
-#define CURRENT_ADC_CHANNEL     4U
 #define CURRENT_ADC_VREF_V      3.3f
+
+#define CURRENT0_ADC_GPIO_PORT  GPIOA
+#define CURRENT0_ADC_GPIO_RCC   RCC_GPIOA
+#define CURRENT0_ADC_GPIO_PIN   GPIO4
+#define CURRENT0_ADC_CHANNEL    4U
 #endif
 
 /* I2C (I2C1 → PB6/PB7, AF4) -----------------------------------------------*/
