@@ -5,8 +5,7 @@
 #include <libopencm3/stm32/usart.h>
 
 /* Exported data -------------------------------------------------------------*/
-volatile bool     g_estop_active = false;
-volatile uint32_t g_uptime_ms    = 0U;
+volatile bool g_estop_active = false;
 
 /* Private functions ---------------------------------------------------------*/
 
@@ -222,12 +221,6 @@ void exti15_10_isr(void)
         exti_reset_request(ESTOP_EXTI);
         g_estop_active = true;
     }
-}
-
-/* SysTick: 1 kHz ms лічильник */
-void sys_tick_handler(void)
-{
-    g_uptime_ms++;
 }
 
 /* Public API -----------------------------------------------------------------*/
