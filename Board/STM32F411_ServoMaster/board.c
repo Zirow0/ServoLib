@@ -134,8 +134,6 @@ static void spi2_master_setup(void)
                             EHUB_SPI_NSS_PIN);
     gpio_set(EHUB_SPI_NSS_PORT, EHUB_SPI_NSS_PIN);
 
-    spi_reset(EHUB_SPI);
-
     spi_init_master(EHUB_SPI,
                     EHUB_SPI_BAUDRATE,
                     SPI_CR1_CPOL_CLK_TO_0_WHEN_IDLE,
@@ -204,12 +202,14 @@ static void micros_timer_setup(void)
     timer_enable_counter(MICROS_TIMER);
 }
 
+#ifndef USE_FREERTOS
 static void systick_setup(void)
 {
     systick_set_frequency(SYSTICK_FREQ, SYSTEM_CORE_CLOCK);
     systick_counter_enable();
     systick_interrupt_enable();
 }
+#endif
 
 /* ISRs -----------------------------------------------------------------------*/
 

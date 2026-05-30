@@ -29,6 +29,7 @@
 #include "hwd/hwd_adc.h"
 #include "hwd/hwd_gpio.h"
 #include "hwd/hwd_spi.h"
+#include "hwd/hwd_timer.h"
 #include "comm/servo_comm.h"
 #include "hwd_uart_async.h"
 
@@ -230,7 +231,7 @@ static void task_control(void *arg)
     while (1) {
         vTaskDelayUntil(&last_wake, 1U);
 
-        uint32_t now = Time_GetMicros();
+        uint32_t now = HWD_Timer_GetMicros();
 
         /* ── Апаратний E-STOP (PC15) ──────────────────────────────────────── */
         if (Board_IsEstopActive()) {
@@ -454,7 +455,7 @@ int main(void)
     HWD_ADC_StartScan();
 
     /* ── Калібрування нульового зміщення ACS712 (при нульовому струмі) ──── */
-    Time_DelayMs(500U);
+    HWD_Timer_DelayMs(500U);
     for (uint8_t i = 0U; i < AXIS_COUNT; i++) {
         Current_Sensor_Calibrate(&axes[i].current.interface);
     }
