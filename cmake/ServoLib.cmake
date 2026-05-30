@@ -1,23 +1,11 @@
-# ─── Зовнішні залежності (FetchContent) ───────────────────────────────────────
+# ─── Зовнішні залежності ──────────────────────────────────────────────────────
+# Пріоритет: Lib/<name>/ (submodule/symlink) → FetchContent (fallback)
 
-include(FetchContent)
+include(${CMAKE_CURRENT_LIST_DIR}/deps/cmake_dep.cmake)
 
-FetchContent_Declare(frame_codec
-    GIT_REPOSITORY git@github.com:Zirow0/frame_codec.git
-    GIT_TAG        master
-    GIT_SHALLOW    TRUE
-)
-FetchContent_Declare(packet_codec
-    GIT_REPOSITORY git@github.com:Zirow0/packet_codec.git
-    GIT_TAG        master
-    GIT_SHALLOW    TRUE
-)
-FetchContent_Declare(ukf_mcu
-    GIT_REPOSITORY git@github.com:Zirow0/ukf_mcu.git
-    GIT_TAG        master
-    GIT_SHALLOW    TRUE
-)
-FetchContent_MakeAvailable(frame_codec packet_codec ukf_mcu)
+fetch_or_local(frame_codec  git@github.com:Zirow0/frame_codec.git  master)
+fetch_or_local(packet_codec git@github.com:Zirow0/packet_codec.git master)
+fetch_or_local(ukf_mcu      git@github.com:Zirow0/ukf_mcu.git      master)
 
 # ─── ServoLib source groups ───────────────────────────────────────────────────
 # Кожна група — мінімальний набір файлів для конкретної підсистеми.

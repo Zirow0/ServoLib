@@ -8,14 +8,7 @@
 
 # ─── libopencm3 ───────────────────────────────────────────────────────────────
 
-if(DEFINED ENV{LIBOPENCM3_DIR})
-    set(OCM3_DIR "$ENV{LIBOPENCM3_DIR}")
-else()
-    message(FATAL_ERROR
-        "LIBOPENCM3_DIR не встановлено.\n"
-        "Запустіть у nix-shell або встановіть вручну:\n"
-        "  export LIBOPENCM3_DIR=/path/to/libopencm3")
-endif()
+include(${CMAKE_CURRENT_LIST_DIR}/deps/libopencm3.cmake)
 
 # ─── genlink.py: автовизначення параметрів чипу ───────────────────────────────
 
