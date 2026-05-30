@@ -18,32 +18,32 @@
 
 /* Private variables ---------------------------------------------------------*/
 
-/**
- * @brief Лічильник мілісекунд з моменту старту.
- *
- * Інкрементується в sys_tick_handler() кожну 1 мс.
- * volatile — запобігає оптимізації компілятора при busy-wait.
- */
+/* g_uptime_ms: при USE_FREERTOS завжди 0 — задовольняє extern у board_config.h,
+ * але додатки мають використовувати HWD_Timer_GetMillis() / xTaskGetTickCount(). */
 volatile uint32_t g_uptime_ms = 0;
 
 /* SysTick interrupt handler -------------------------------------------------*/
 
-/**
- * @brief Обробник переривання SysTick.
- *
- * Викликається автоматично кожну 1 мс (налаштовується в Board_Init).
- * Ім'я зафіксоване в libopencm3 як weak symbol у vector table.
- */
+#ifndef USE_FREERTOS
+/* При USE_FREERTOS sys_tick_handler визначається FreeRTOS port.c
+ * через макрос xPortSysTickHandler у FreeRTOSConfig.h. */
 void sys_tick_handler(void)
 {
     g_uptime_ms++;
 }
+#endif /* USE_FREERTOS */
 
 /* Exported functions --------------------------------------------------------*/
 
 uint32_t HWD_Timer_GetMillis(void)
 {
+#ifdef USE_FREERTOS
+    /* xTaskGetTickCount() → ms (tick rate = 1 кГц, portTICK_PERIOD_MS = 1) */
+    extern uint32_t xTaskGetTickCount(void);
+    return xTaskGetTickCount();
+#else
     return g_uptime_ms;
+#endif
 }
 
 uint32_t HWD_Timer_GetMicros(void)
@@ -54,12 +54,15 @@ uint32_t HWD_Timer_GetMicros(void)
 
 void HWD_Timer_DelayMs(uint32_t ms)
 {
+#ifdef USE_FREERTOS
+    /* TIM5-based busy-wait: безпечно до vTaskStartScheduler() (init фаза).
+     * Після старту планувальника викликається лише з init — допустимо. */
+    uint32_t start = HWD_Timer_GetMicros();
+    while ((HWD_Timer_GetMicros() - start) < (ms * 1000U)) {}
+#else
     uint32_t start = g_uptime_ms;
-
-    /* Правильна обробка переповнення uint32_t */
-    while ((g_uptime_ms - start) < ms) {
-        /* busy-wait */
-    }
+    while ((g_uptime_ms - start) < ms) {}
+#endif
 }
 
 void HWD_Timer_DelayUs(uint32_t us)

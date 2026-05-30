@@ -128,7 +128,12 @@ Servo_Status_t Board_Init(void)
 #endif
 
     micros_timer_setup();
+#ifndef USE_FREERTOS
+    /* При USE_FREERTOS SysTick конфігурує vPortSetupTimerInterrupt()
+     * всередині vTaskStartScheduler(). Передчасна ініціалізація викличе
+     * sys_tick_handler FreeRTOS до запуску планувальника. */
     systick_setup();
+#endif
 
 #if defined(USE_HWD_UART) && !defined(USE_COMM_ASYNC)
     uart_setup();
