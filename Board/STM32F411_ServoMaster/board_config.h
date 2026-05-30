@@ -58,6 +58,7 @@ extern "C" {
 #define USE_SENSOR_CURRENT
 #define USE_SENSOR_ACS712
 #define USE_HWD_SPI
+#define USE_HWD_UART
 
 /* ── Системний клок ─────────────────────────────────────────────────────────*/
 #define SYSTEM_CORE_CLOCK   100000000U  /* HSE 25 MHz + PLL → 100 MHz       */
