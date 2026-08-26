@@ -20,7 +20,7 @@ Driver Layer (drv/)          — Motor, Position, Brake, Current
 HWD Layer (hwd/)             — PWM, SPI, I2C, GPIO, Timer, UART
     ↓
 Platform Layer (Board/)      — STM32F411_OCM3 (libopencm3)
-External Libs (Lib/)         — frame_codec, packet_codec
+External Libs (Lib/)         — frame_codec, packet_codec, ukf_mcu
 ```
 
 Логіка (`ctrl/`, `drv/`, `comm/`) не залежить від платформи. Для портування — лише змінити `Board/`.
@@ -91,7 +91,7 @@ VEL режим:                           vel-PID(рад/с) → current_sp → 
 TRQ режим:                                             current_sp → trq-PID → %
 ```
 
-Feedforward: `ff = ff_j * vel_sp + ff_b * ω` (%)
+Feedforward: `ff = ff_r * current_sp + ff_bemf * ω` (%), де `ff_r [%/А]`, `ff_bemf [%·с/рад]`
 
 - **Slew rate limiter** — обмежує `Δ%/с` команди двигуну
 - **Anti-windup** — через `i_limit` або clamp відносно `out_min/max`
@@ -147,7 +147,7 @@ UART DMA RX (circular) → IDLE IRQ → staging buf → frame_decode → packet_
 |-----------|--------|--------|-------------|
 | `servo_telemetry_t` | 21 Б | STM32→хост | Базова телеметрія: θ, ω, I, target, mode |
 | `servo_command_t` | 5 Б | хост→STM32 | Зміна режиму та setpoint |
-| `cascade_telemetry_t` | 81 Б | STM32→хост | Повний знімок PID: сигнальний ланцюг + P/I/D терми + інтегратори |
+| `cascade_telemetry_t` | 85 Б | STM32→хост | Повний знімок PID: сенсори (θ, ω, α, I) + сигнальний ланцюг + P/I/D терми + інтегратори |
 | `cascade_config_t` | 84 Б | хост↔STM32 | Параметри каскаду: kp/ki/kd/limits для 3 контурів + FF + slew |
 
 Підтримується **struct mode** (повна структура) та **param mode** (`[offset][type][value]` — один параметр).
@@ -189,7 +189,8 @@ ServoLib/
 │   └── comm/                   # servo_comm.c, servo_protocol_desc.h
 ├── Lib/                        # Зовнішні бібліотеки (git submodules)
 │   ├── frame_codec/            # COBS framing + CRC32
-│   └── packet_codec/           # msg_id | payload layer
+│   ├── packet_codec/           # msg_id | payload layer
+│   └── ukf_mcu/                # UKF фільтр (encoder + current)
 ├── Board/
 │   └── STM32F411_OCM3/         # libopencm3 платформа
 │       ├── board_config.h

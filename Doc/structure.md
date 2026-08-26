@@ -67,29 +67,26 @@ ServoLib/
 │   └── util/derivative.c
 │
 ├── Board/                      # Конфігурація плат (піни, макроси USE_*)
-│   ├── STM32F411_OCM3/         # Основна плата BlackPill
+│   ├── STM32F411_OCM3/         # Основна плата BlackPill (єдине місце з MCU-залежністю)
 │   │   ├── board_config.h      # Піни, периферія, макроси USE_*
 │   │   ├── board.c             # Board_Init() — системний клок, периферія
-│   │   └── STM32F411CE.ld      # Лінкер-скрипт
+│   │   ├── hwd_pwm.c           # TIM3 CH1 PWM
+│   │   ├── hwd_adc.c           # ADC1 DMA scan mode
+│   │   ├── hwd_i2c.c           # I2C1 IT continuous read
+│   │   ├── hwd_spi.c           # SPI
+│   │   ├── hwd_timer.c         # TIM5 мкс + SysTick мс
+│   │   ├── hwd_gpio.c          # GPIO
+│   │   ├── hwd_uart.c          # USART1 блокуючий (debug apps)
+│   │   ├── hwd_uart_async.h/c  # USART1 DMA (USE_COMM_ASYNC)
+│   │   └── hwd_crc32.c         # Апаратний CRC32 (weak override)
 │   └── STM32F411_EncoderHub/   # 6-канальний концентратор енкодерів
 │       ├── board_config.h
 │       └── board.c
 │
-├── MCU/
-│   └── STM32F411_libopencm3/   # libopencm3 платформа (єдине місце з MCU-залежністю)
-│       ├── hwd_pwm.c           # TIM3 CH1 PWM
-│       ├── hwd_adc.c           # ADC1 DMA scan mode
-│       ├── hwd_i2c.c           # I2C1 IT continuous read
-│       ├── hwd_spi.c           # SPI
-│       ├── hwd_timer.c         # TIM5 мкс + SysTick мс
-│       ├── hwd_gpio.c          # GPIO
-│       ├── hwd_uart.c          # USART1 блокуючий (debug apps)
-│       ├── hwd_uart_async.h/c  # USART1 DMA (USE_COMM_ASYNC)
-│       └── hwd_crc32.c         # Апаратний CRC32 (weak override)
-│
-├── Lib/                        # Git submodules
+├── Lib/                        # Git submodules / FetchContent
 │   ├── frame_codec/            # COBS framing + CRC32/MPEG-2
-│   └── packet_codec/           # msg_id | payload layer
+│   ├── packet_codec/           # msg_id | payload layer
+│   └── ukf_mcu/                # UKF фільтр (encoder_ukf + current UKF)
 │
 ├── Apps/                       # Цілі для збірки
 │   ├── debug_encoder/          # Тест інкрементального енкодера
@@ -125,12 +122,11 @@ comm/               ← Async протокол (hardware-independent)
     ↓
 drv/                ← Motor, Position, Brake, Current (universal interfaces + callbacks)
     ↓
-hwd/ + MCU/         ← HWD declarations + libopencm3 implementations
-Board/              ← конфігурація плат (board_config.h, board.c)
-Lib/                ← frame_codec, packet_codec (git submodules)
+hwd/ + Board/       ← HWD declarations + libopencm3 implementations (board_config.h, hwd_*.c)
+Lib/                ← frame_codec, packet_codec, ukf_mcu (git submodules / FetchContent)
 ```
 
-**Ключовий принцип:** `ctrl/`, `drv/`, `comm/` не мають жодних `#include <libopencm3/...>`. Тільки `MCU/` та `Board/` знають про MCU.
+**Ключовий принцип:** `ctrl/`, `drv/`, `comm/` не мають жодних `#include <libopencm3/...>`. Тільки `Board/` знає про MCU.
 
 > **Виняток:** `Src/drv/position/incremental_encoder.c` напряму включає `board_config.h` та `<libopencm3/stm32/exti.h>` — через залежність EXTI конфігурації від апаратури.
 
@@ -159,9 +155,8 @@ Driver struct має interface як **перше поле** — безпечни
 | `SERVOLIB_CURRENT` | `current.c`, `acs712.c` |
 | `SERVOLIB_BRAKE` | `brake.c`, `gpio_brake.c` |
 | `SERVOLIB_CTRL` | `servo.c`, `cascade.c`, `pid.c`, `safety.c`, `traj.c` |
-| `SERVOLIB_COMM` | `servo_comm.c` + frame_codec + packet_codec |
+| `SERVOLIB_COMM` | `servo_comm.c` (frame_codec і packet_codec — через `target_link_libraries`) |
 | `SERVOLIB_ALL` | UTIL + MOTOR + POSITION + CURRENT + BRAKE + CTRL |
-| `SERVOLIB_COMM_INCLUDES` | `Lib/frame_codec/include`, `Lib/packet_codec/include` |
 
 `pid_mgr.c` не входить до жодної групи (legacy файл).
 `SERVOLIB_POSITION` потребує `target_link_libraries(... ukf_mcu)` у CMakeLists застосунку.

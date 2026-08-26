@@ -84,6 +84,16 @@ Servo_Init(&servo, &config, &motor->interface);
 `Servo_InitWithBrake()` **не існує** — використовувати `Servo_InitFull()`.
 `Servo_InitFull` приймає **6 параметрів**: servo, config, motor, sensor, brake, current (усі крім motor — опціональні NULL).
 
+**Додаткові функції:**
+```c
+float          Servo_GetPosition(servo);             // поточне положення (рад)
+float          Servo_GetVelocity(servo);             // поточна швидкість (рад/с)
+Servo_State_t  Servo_GetState(servo);                // поточний стан (Servo_State_t)
+bool           Servo_IsAtTarget(servo);              // досягнуто цілі (поріг POSITION_ERROR_THRESHOLD)
+Servo_Status_t Servo_CalibrateZero(servo);          // встановити поточне положення як нуль
+Servo_Status_t Servo_EnableTrajectory(servo, bool); // увімк/вимк генератор траєкторій
+```
+
 ### Режими керування (`Servo_Mode_t`)
 
 | Режим | Активні контури | Функція |
@@ -129,10 +139,12 @@ if (Incremental_Encoder_ConsumeIC(&driver, &omega)) {
 
 **Публічний API position (всі в радіанах):**
 ```c
-Position_Sensor_GetPosition(sensor, &pos_rad);          // 0..2π рад
-Position_Sensor_GetVelocity(sensor, &vel_rad_s);        // рад/с
-Position_Sensor_GetAbsolutePosition(sensor, &abs_rad);  // необмежений рад
-Position_Sensor_SetPosition(sensor, pos_rad);           // встановити нуль
+Position_Sensor_Update(sensor);                                    // виклик у control loop (1 кГц)
+Position_Sensor_GetPosition(sensor, &pos_rad);                    // 0..2π рад
+Position_Sensor_GetVelocity(sensor, &vel_rad_s);                  // рад/с
+Position_Sensor_GetAcceleration(sensor, &accel_rad_s2);           // рад/с²
+Position_Sensor_GetAbsolutePosition(sensor, &abs_rad);            // необмежений рад
+Position_Sensor_SetPosition(sensor, pos_rad);                     // встановити нуль
 ```
 
 `Position_Sensor_Init(sensor)` — multi-turn відстежується всередині кожного драйвера (інкрементальний через `count`, AS5600 через `revolution_count` у `HW_ReadRaw`).
@@ -257,12 +269,15 @@ CASCADE_MODE_VEL:                  vel-PID(рад/с) → current_sp(А) → trq
 CASCADE_MODE_TRQ:                                    current_sp(А) → trq-PID → %
 ```
 
-**Feedforward (спрощена модель):**
+**Feedforward (модель двигуна):**
 ```c
-ff = ff_j * vel_sp + ff_b * omega   // в %
-// ff_j [%·с/рад], ff_b [%·с/рад]
-// У CASCADE_MODE_TRQ feedforward не застосовується повністю
+ff = ff_r * current_sp + ff_bemf * omega   // в %
+// ff_r    [%/А]     = R/V_supply×100  — компенсація падіння напруги на обмотці
+// ff_bemf [%·с/рад] = Ke/V_supply×100 — компенсація зустрічної ЕРС
+// current_sp обмежений vel.out_max → FF природно обмежений
+// У CASCADE_MODE_TRQ feedforward не застосовується
 ```
+У `Cascade_Config_t` поля мають назви `ff_r` та `ff_bemf`. У wire-форматі (`cascade_config_t`) вони відображаються як `ff_j` (→ `ff_r`) та `ff_b` (→ `ff_bemf`).
 
 **Slew rate:** `config.slew_rate` [%/с] обмежує зміну команди двигуну. `0` = вимкнено.
 
@@ -352,12 +367,14 @@ servo_comm_seed_cascade_config(&initial_wire_cfg); // ініціалізуват
 |-----------|--------|--------|--------|
 | `servo_telemetry_t` | 21 Б | STM32→хост | `0x02` struct / `0x03` param |
 | `servo_command_t` | 5 Б | хост→STM32 | `0x04` struct / `0x05` param |
-| `cascade_telemetry_t` | 81 Б | STM32→хост | `0x06` struct / `0x07` param |
+| `cascade_telemetry_t` | 85 Б | STM32→хост | `0x06` struct / `0x07` param |
 | `cascade_config_t` | 84 Б | хост↔STM32 | `0x08` struct / `0x09` param |
+| (stop) | 0 Б | хост→STM32 | `0x0A` struct |
+| (estop) | 0 Б | хост→STM32 | `0x0C` struct |
 
-**`cascade_telemetry_t`** — повний знімок каскадного PID: сенсори (θ, ω, I), сигнальний ланцюг (target→vel_sp→current_sp→ff→power), P/I/D терми для всіх трьох контурів. Поле `integral` (стан anti-windup) є лише у **vel** та **trq** контурів — у pos контуру `integral` в wire-структурі відсутній.
+**`cascade_telemetry_t`** — повний знімок каскадного PID: сенсори (θ, ω, α, I), сигнальний ланцюг (target→vel_sp→current_sp→ff→power), P/I/D терми для всіх трьох контурів. Поле `integral` (стан anti-windup) є лише у **vel** та **trq** контурів — у pos контуру `integral` в wire-структурі відсутній.
 
-**`cascade_config_t`** — wire-формат налаштувань: kp/ki/kd/out_min/out_max/i_limit для pos, vel, trq + ff_j, ff_b, slew_rate. Підтримує struct mode (повна заміна) та param mode (один коефіцієнт).
+**`cascade_config_t`** — wire-формат налаштувань: kp/ki/kd/out_min/out_max/i_limit для pos, vel, trq + ff_j (→ `ff_r`), ff_b (→ `ff_bemf`), slew_rate. Підтримує struct mode (повна заміна) та param mode (один коефіцієнт).
 
 ### Single-param режим
 
@@ -397,7 +414,7 @@ bool servo_comm_get_cascade_config(cascade_config_t *cfg_out);
 #define COMM_RX_DMA            DMA2  // Stream2 Ch4
 #define COMM_TX_DMA            DMA2  // Stream7 Ch4
 #define COMM_RX_BUF_SIZE       128U  // > max incoming frame (cascade_config = 91 B)
-#define COMM_TX_BUF_SIZE       96U   // ≥ FRAME_ENCODED_SIZE(1+84) = 91
+#define COMM_TX_BUF_SIZE       96U   // ≥ FRAME_ENCODED_SIZE(1+85) = 92
 #define COMM_TX_QUEUE_LEN      4U
 #endif
 ```
@@ -410,11 +427,11 @@ bool servo_comm_get_cascade_config(cascade_config_t *cfg_out);
 stm32_add_executable(<app> ... ${SERVOLIB_COMM}
     ${BOARD_DIR}/hwd_uart_async.c
     ${BOARD_DIR}/hwd_crc32.c)
-target_include_directories(<app> PRIVATE ${CMAKE_SOURCE_DIR}/Src ${SERVOLIB_COMM_INCLUDES})
+target_include_directories(<app> PRIVATE ${CMAKE_SOURCE_DIR}/Src)
 target_compile_definitions(<app> PRIVATE USE_COMM_ASYNC)
 ```
 
-`SERVOLIB_COMM` та `SERVOLIB_COMM_INCLUDES` визначені у `cmake/ServoLib.cmake`.
+`SERVOLIB_COMM` визначено у `cmake/ServoLib.cmake`.
 
 ## HWD Layer
 

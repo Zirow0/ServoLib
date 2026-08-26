@@ -233,7 +233,7 @@ Servo_Status_t Brake_Update(Brake_Interface_t* brake);
 // У головному циклі (1 kHz)
 while (1) {
     Brake_Update(&brake_driver.interface);
-    HAL_Delay(1);
+    HWD_Timer_DelayMs(1);
 }
 ```
 
@@ -554,14 +554,14 @@ while (1) {
         // Зачекати повного відпускання
         while (!Brake_IsReleased(&brake_driver.interface)) {
             Brake_Update(&brake_driver.interface);
-            HAL_Delay(1);
+            HWD_Timer_DelayMs(1);
         }
 
         // Тепер можна рухатися
         Motor_SetPower(&motor, 50.0f);
     }
 
-    HAL_Delay(1);
+    HWD_Timer_DelayMs(1);
 }
 ```
 

@@ -73,7 +73,7 @@ ServoLib - це модульна бібліотека керування DC се
 │   - HWD_PWM, HWD_I2C, HWD_SPI                   │
 │   - HWD_GPIO, HWD_Timer                         │
 ├─────────────────────────────────────────────────┤
-│   Platform Layer (MCU/STM32F411_libopencm3/)    │
+│   Platform Layer (Board/STM32F411_OCM3/)        │
 │   - Реалізація HWD через libopencm3             │
 └─────────────────────────────────────────────────┘
 ```
@@ -263,7 +263,7 @@ ServoLib - це модульна бібліотека керування DC се
 
 #### NFR-PORT-002: Незалежність від HAL
 - Платформна реалізація — **libopencm3** (не STM32 HAL)
-- `MCU/STM32F411_libopencm3/` — єдине місце з MCU-залежністю
+- `Board/STM32F411_OCM3/` — єдине місце з MCU-залежністю (hwd_*.c + board.c)
 - `ctrl/`, `drv/`, `comm/` не мають жодних `#include <libopencm3/...>`
 
 ### 4.4 Зручність використання
@@ -366,9 +366,9 @@ ServoLib - це модульна бібліотека керування DC се
 **GPIO:**
 - PA8 - Керування гальмами
 
-**Таймер для мікросекунд (TIM2, 32-bit):**
-- Free-running 1 MHz (prescaler 99 при 100 MHz)
-- На EncoderHub: одночасно IC CH1-CH4 для ENC0-3
+**Таймер для мікросекунд:**
+- **OCM3:** TIM5, free-running 1 MHz (prescaler 99 при 100 MHz)
+- **EncoderHub:** TIM2, одночасно free-running та IC CH1-CH4 для ENC0-3
 
 #### 7.1.2 Програмні інтерфейси
 
@@ -417,10 +417,9 @@ typedef struct {
 
 // Hardware callbacks
 typedef struct {
-    Servo_Status_t (*init)(void* driver_data);
-    Servo_Status_t (*set_power)(void* driver_data, const Motor_Command_t* cmd);
+    Servo_Status_t (*init)(void* driver_data, const Motor_Params_t* params);
+    Servo_Status_t (*set_power)(void* driver_data, float processed_power);
     Servo_Status_t (*stop)(void* driver_data);
-    Servo_Status_t (*update)(void* driver_data);
 } Motor_Hardware_Callbacks_t;
 ```
 
@@ -437,8 +436,7 @@ typedef struct {
 // Hardware callbacks
 typedef struct {
     Servo_Status_t (*init)(void* driver_data);
-    Servo_Status_t (*read_raw)(void* driver_data, Position_Raw_Data_t* raw_data);
-    Servo_Status_t (*calibrate)(void* driver_data);
+    Servo_Status_t (*read_raw)(void* driver_data, Position_Raw_Data_t* raw);
 } Position_Sensor_HW_Callbacks_t;
 ```
 
@@ -457,7 +455,6 @@ typedef struct {
     Servo_Status_t (*init)(void* driver_data);
     Servo_Status_t (*engage)(void* driver_data);
     Servo_Status_t (*release)(void* driver_data);
-    Servo_Status_t (*deinit)(void* driver_data);
 } Brake_Hardware_Callbacks_t;
 ```
 
